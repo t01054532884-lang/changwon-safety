@@ -826,12 +826,30 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown(
+    """
+    <style>
+    .block-container {
+        max-width: 100% !important;
+        padding-top: 1rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        padding-bottom: 1rem !important;
+    }
+    [data-testid="stAppViewContainer"] {
+        overflow-x: hidden;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.title("창원시 안전지도")
 st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
 
 map_views = {
-    "창원시 중심": {"location": [35.2279, 128.6811], "zoom": 11},
+    "창원시 중심": {"location": [35.1800, 128.6200], "zoom": 10},
     "김해시 중심": {"location": [35.2500, 128.8800], "zoom": 11},
     "통영시 중심": {"location": [34.8500, 128.4300], "zoom": 10},
     "세 도시 비교": {"location": [34.9000, 128.6000], "zoom": 8},
@@ -846,6 +864,12 @@ map_view = map_views[selected_map_view]
 map_object = folium.Map(
     location=map_view["location"],
     zoom_start=map_view["zoom"],
+    min_zoom=8,
+    min_lat=34.45,
+    max_lat=36.00,
+    min_lon=127.35,
+    max_lon=129.50,
+    max_bounds=True,
     tiles="OpenStreetMap",
     control_scale=True,
     prefer_canvas=True,
@@ -1280,7 +1304,7 @@ folium.LayerControl(collapsed=False).add_to(map_object)
 st_folium(
     map_object,
     width=None,
-    height=700,
+    height=820,
     key=f"changwon-safety-map-{selected_map_view}",
     returned_objects=[],
 )
