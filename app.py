@@ -12,7 +12,9 @@ from streamlit_folium import st_folium
 BASE_DIR = Path(__file__).resolve().parent
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.csv"
 CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
-STREETLIGHT_FILE = BASE_DIR / "data" / "streetlights.csv"
+GIMHAE_BOUNDARY_FILE = BASE_DIR / "data" / "gimhae_boundary.geojson"
+TONGYEONG_BOUNDARY_FILE = BASE_DIR / "data" / "tongyeong_boundary.geojson"
+PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 
 
 @st.cache_data(show_spinner=False)
@@ -43,24 +45,25 @@ def load_geojson(file_path: Path) -> dict:
 
 
 @st.cache_data(show_spinner=False)
-def load_streetlight_data(file_path: Path) -> pd.DataFrame:
-    """가로등 CSV를 읽고 창원시 범위의 유효한 좌표만 반환합니다."""
-    dataframe = pd.read_csv(file_path, encoding="cp949")
+def load_pedestrian_light_data(file_path: Path) -> dict:
+    """공개 관리시스템에서 받은 비차도 조명 좌표를 읽습니다."""
+    payload = json.loads(file_path.read_text(encoding="utf-8"))
+    records = []
 
-    required_columns = {"표찰번호", "주소", "경도", "위도"}
-    missing_columns = required_columns.difference(dataframe.columns)
-    if missing_columns:
-        missing = ", ".join(sorted(missing_columns))
-        raise ValueError(f"가로등 CSV에 필요한 열이 없습니다: {missing}")
+    for record in payload.get("records", []):
+        try:
+            latitude = float(record["latitude"])
+            longitude = float(record["longitude"])
+        except (KeyError, TypeError, ValueError):
+            continue
 
-    dataframe["latitude"] = pd.to_numeric(dataframe["위도"], errors="coerce")
-    dataframe["longitude"] = pd.to_numeric(dataframe["경도"], errors="coerce")
+        if not (34.8 <= latitude <= 35.6 and 128.1 <= longitude <= 129.0):
+            continue
 
-    valid_coordinates = (
-        dataframe["latitude"].between(34.8, 35.6)
-        & dataframe["longitude"].between(128.1, 129.0)
-    )
-    return dataframe.loc[valid_coordinates].copy()
+        records.append(record)
+
+    payload["records"] = records
+    return payload
 
 
 def add_boundary_layer(
@@ -133,18 +136,45 @@ st.title("창원시 안전지도")
 st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
 
+map_views = {
+    "창원시 중심": {"location": [35.2279, 128.6811], "zoom": 11},
+    "김해시 중심": {"location": [35.2500, 128.8800], "zoom": 11},
+    "통영시 중심": {"location": [34.8500, 128.4300], "zoom": 10},
+    "세 도시 비교": {"location": [34.9000, 128.6000], "zoom": 8},
+}
+selected_map_view = st.selectbox(
+    "지도 중심",
+    options=list(map_views),
+    index=0,
+)
+map_view = map_views[selected_map_view]
+
 map_object = folium.Map(
-    location=[35.2279, 128.6811],
-    zoom_start=11,
+    location=map_view["location"],
+    zoom_start=map_view["zoom"],
     tiles="OpenStreetMap",
     control_scale=True,
+    prefer_canvas=True,
 )
+show_changwon_facilities = selected_map_view == "창원시 중심"
 
 add_boundary_layer(
     map_object=map_object,
     file_path=CHANGWON_BOUNDARY_FILE,
     layer_name="창원시 행정경계",
     line_color="#7C3AED",
+)
+add_boundary_layer(
+    map_object=map_object,
+    file_path=GIMHAE_BOUNDARY_FILE,
+    layer_name="김해시 행정경계",
+    line_color="#16A34A",
+)
+add_boundary_layer(
+    map_object=map_object,
+    file_path=TONGYEONG_BOUNDARY_FILE,
+    layer_name="통영시 행정경계",
+    line_color="#DC2626",
 )
 
 map_object.get_root().html.add_child(
@@ -225,60 +255,88 @@ map_object.get_root().html.add_child(
     )
 )
 
-streetlight_data = pd.DataFrame()
-if STREETLIGHT_FILE.exists():
+pedestrian_light_payload = {"records": []}
+if show_changwon_facilities and PEDESTRIAN_LIGHT_FILE.exists():
     try:
-        streetlight_data = load_streetlight_data(STREETLIGHT_FILE)
+        pedestrian_light_payload = load_pedestrian_light_data(
+            PEDESTRIAN_LIGHT_FILE
+        )
     except Exception as error:
-        st.error(f"가로등 데이터를 읽지 못했습니다: {error}")
+        st.error(f"보행조명 데이터를 읽지 못했습니다: {error}")
 
-if not streetlight_data.empty:
-    streetlight_markers = streetlight_data[
-        ["latitude", "longitude", "표찰번호", "주소"]
-    ].values.tolist()
+pedestrian_lights = pedestrian_light_payload["records"]
+if pedestrian_lights:
+    coverage = "·".join(pedestrian_light_payload.get("coverage", []))
+    st.caption(
+        f"보행조명 데이터 제공 범위: {coverage} 공개 관리시스템 "
+        "(차도 가로등 제외)"
+    )
+
+    streetlight_markers = [
+        [
+            record["latitude"],
+            record["longitude"],
+            record.get("manage_no") or "정보 없음",
+            record.get("location") or "정보 없음",
+            record.get("light_type") or "보행조명",
+            record.get("district") or "",
+        ]
+        for record in pedestrian_lights
+    ]
 
     streetlight_callback = """
     function(row) {
-        var icon = L.divIcon({
-            html: '<div class="streetlight-symbol">' +
-                  '<span class="streetlight-glow"></span>' +
-                  '<span class="streetlight-head"></span>' +
-                  '<span class="streetlight-arm"></span>' +
-                  '<span class="streetlight-post"></span></div>',
-            className: 'streetlight-div-icon',
-            iconSize: [18, 28],
-            iconAnchor: [8, 26],
-            popupAnchor: [1, -24]
-        });
+        if (!window.changwonPedestrianLightIcon) {
+            window.changwonPedestrianLightIcon = L.divIcon({
+                html: '<div class="streetlight-symbol">' +
+                      '<span class="streetlight-glow"></span>' +
+                      '<span class="streetlight-head"></span>' +
+                      '<span class="streetlight-arm"></span>' +
+                      '<span class="streetlight-post"></span></div>',
+                className: 'streetlight-div-icon',
+                iconSize: [18, 28],
+                iconAnchor: [8, 26],
+                popupAnchor: [1, -24]
+            });
+        }
 
         var marker = L.marker([row[0], row[1]], {
-            icon: icon,
-            title: '가로등 ' + row[2]
+            icon: window.changwonPedestrianLightIcon,
+            title: row[4] + ' ' + row[2]
         });
 
-        var popup = document.createElement('div');
-        popup.style.width = '260px';
-        popup.style.fontSize = '14px';
-        popup.style.lineHeight = '1.55';
+        marker.on('click', function() {
+            if (!marker.getPopup()) {
+                var popup = document.createElement('div');
+                popup.style.width = '260px';
+                popup.style.fontSize = '14px';
+                popup.style.lineHeight = '1.55';
 
-        var heading = document.createElement('b');
-        heading.textContent = '가로등';
-        popup.appendChild(heading);
-        popup.appendChild(document.createElement('br'));
+                var heading = document.createElement('b');
+                heading.textContent = row[4];
+                popup.appendChild(heading);
+                popup.appendChild(document.createElement('br'));
 
-        var numberLabel = document.createElement('b');
-        numberLabel.textContent = '표찰번호: ';
-        popup.appendChild(numberLabel);
-        popup.appendChild(document.createTextNode(row[2] || '정보 없음'));
-        popup.appendChild(document.createElement('br'));
+                var numberLabel = document.createElement('b');
+                numberLabel.textContent = '관리번호: ';
+                popup.appendChild(numberLabel);
+                popup.appendChild(document.createTextNode(row[2] || '정보 없음'));
+                popup.appendChild(document.createElement('br'));
 
-        var addressLabel = document.createElement('b');
-        addressLabel.textContent = '주소: ';
-        popup.appendChild(addressLabel);
-        popup.appendChild(document.createTextNode(row[3] || '정보 없음'));
+                var addressLabel = document.createElement('b');
+                addressLabel.textContent = '주소: ';
+                popup.appendChild(addressLabel);
+                popup.appendChild(document.createTextNode(row[3] || '정보 없음'));
+                popup.appendChild(document.createElement('br'));
 
-        marker.bindPopup(popup);
-        marker.bindTooltip('가로등 ' + (row[2] || ''));
+                var districtLabel = document.createElement('b');
+                districtLabel.textContent = '제공 구: ';
+                popup.appendChild(districtLabel);
+                popup.appendChild(document.createTextNode(row[5] || '정보 없음'));
+                marker.bindPopup(popup);
+            }
+            marker.openPopup();
+        });
         return marker;
     }
     """
@@ -298,7 +356,7 @@ if not streetlight_data.empty:
     FastMarkerCluster(
         data=streetlight_markers,
         callback=streetlight_callback,
-        name="가로등",
+        name="보행조명(차도 가로등 제외)",
         overlay=True,
         control=True,
         show=True,
@@ -310,7 +368,9 @@ if not streetlight_data.empty:
         },
     ).add_to(map_object)
 
-if not CCTV_FILE.exists():
+if not show_changwon_facilities:
+    pass
+elif not CCTV_FILE.exists():
     st.warning(
         "아직 CCTV 좌표 파일이 없습니다. 먼저 `python geocode_cctv.py`를 "
         "실행해 `data/cctv_coordinates.csv`를 만들어 주세요."
@@ -333,7 +393,7 @@ else:
         first_column, second_column, third_column = st.columns(3)
         first_column.metric("표시 CCTV", f"{total_count:,}대")
         second_column.metric("좌표 위치", f"{unique_location_count:,}곳")
-        third_column.metric("표시 가로등", f"{len(streetlight_data):,}개")
+        third_column.metric("표시 보행조명", f"{len(pedestrian_lights):,}개")
 
         coverage_group = folium.FeatureGroup(
             name="CCTV 촬영범위 약 100m",
@@ -420,6 +480,6 @@ st_folium(
     map_object,
     width=None,
     height=700,
-    key="changwon-safety-map",
+    key=f"changwon-safety-map-{selected_map_view}",
     returned_objects=[],
 )
