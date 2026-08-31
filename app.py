@@ -125,4 +125,5 @@ st_folium(
     width=None,
     height=700,
     key="changwon-safety-map",
+    returned_objects=[],
 )
