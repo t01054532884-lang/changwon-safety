@@ -5,13 +5,14 @@ from pathlib import Path
 import folium
 import pandas as pd
 import streamlit as st
-from folium.plugins import MarkerCluster
+from folium.plugins import FastMarkerCluster, MarkerCluster
 from streamlit_folium import st_folium
 
 
 BASE_DIR = Path(__file__).resolve().parent
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.csv"
 CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
+STREETLIGHT_FILE = BASE_DIR / "data" / "streetlights.csv"
 
 
 @st.cache_data(show_spinner=False)
@@ -39,6 +40,27 @@ def load_cctv_data(file_path: Path) -> pd.DataFrame:
 def load_geojson(file_path: Path) -> dict:
     """행정경계 GeoJSON을 읽습니다."""
     return json.loads(file_path.read_text(encoding="utf-8"))
+
+
+@st.cache_data(show_spinner=False)
+def load_streetlight_data(file_path: Path) -> pd.DataFrame:
+    """가로등 CSV를 읽고 창원시 범위의 유효한 좌표만 반환합니다."""
+    dataframe = pd.read_csv(file_path, encoding="cp949")
+
+    required_columns = {"표찰번호", "주소", "경도", "위도"}
+    missing_columns = required_columns.difference(dataframe.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"가로등 CSV에 필요한 열이 없습니다: {missing}")
+
+    dataframe["latitude"] = pd.to_numeric(dataframe["위도"], errors="coerce")
+    dataframe["longitude"] = pd.to_numeric(dataframe["경도"], errors="coerce")
+
+    valid_coordinates = (
+        dataframe["latitude"].between(34.8, 35.6)
+        & dataframe["longitude"].between(128.1, 129.0)
+    )
+    return dataframe.loc[valid_coordinates].copy()
 
 
 def add_boundary_layer(
@@ -135,10 +157,158 @@ map_object.get_root().html.add_child(
             border-radius: 50%;
             box-shadow: 0 0 0 3px rgba(254, 202, 202, 0.75);
         }
+        .streetlight-cluster {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #FACC15;
+            border: 3px solid #A16207;
+            border-radius: 50%;
+            color: #422006;
+            font-size: 12px;
+            font-weight: 800;
+            box-shadow: 0 0 0 3px rgba(254, 240, 138, 0.7);
+        }
+        .streetlight-div-icon {
+            background: transparent !important;
+            border: 0 !important;
+        }
+        .streetlight-symbol {
+            position: relative;
+            width: 18px;
+            height: 28px;
+            filter: drop-shadow(0 1px 1px rgba(66, 32, 6, 0.55));
+        }
+        .streetlight-glow {
+            position: absolute;
+            top: 0;
+            left: 3px;
+            width: 16px;
+            height: 15px;
+            border-radius: 50%;
+            background: rgba(250, 204, 21, 0.5);
+            filter: blur(2px);
+        }
+        .streetlight-head {
+            position: absolute;
+            top: 3px;
+            left: 5px;
+            width: 12px;
+            height: 7px;
+            border: 2px solid #78350F;
+            border-radius: 55% 55% 45% 45%;
+            background: #FDE047;
+            transform: rotate(-8deg);
+        }
+        .streetlight-arm {
+            position: absolute;
+            top: 8px;
+            left: 7px;
+            width: 8px;
+            height: 3px;
+            border-radius: 2px;
+            background: #78350F;
+            transform: rotate(-25deg);
+            transform-origin: left center;
+        }
+        .streetlight-post {
+            position: absolute;
+            top: 9px;
+            left: 7px;
+            width: 3px;
+            height: 17px;
+            border-radius: 2px;
+            background: #78350F;
+        }
         </style>
         """
     )
 )
+
+streetlight_data = pd.DataFrame()
+if STREETLIGHT_FILE.exists():
+    try:
+        streetlight_data = load_streetlight_data(STREETLIGHT_FILE)
+    except Exception as error:
+        st.error(f"가로등 데이터를 읽지 못했습니다: {error}")
+
+if not streetlight_data.empty:
+    streetlight_markers = streetlight_data[
+        ["latitude", "longitude", "표찰번호", "주소"]
+    ].values.tolist()
+
+    streetlight_callback = """
+    function(row) {
+        var icon = L.divIcon({
+            html: '<div class="streetlight-symbol">' +
+                  '<span class="streetlight-glow"></span>' +
+                  '<span class="streetlight-head"></span>' +
+                  '<span class="streetlight-arm"></span>' +
+                  '<span class="streetlight-post"></span></div>',
+            className: 'streetlight-div-icon',
+            iconSize: [18, 28],
+            iconAnchor: [8, 26],
+            popupAnchor: [1, -24]
+        });
+
+        var marker = L.marker([row[0], row[1]], {
+            icon: icon,
+            title: '가로등 ' + row[2]
+        });
+
+        var popup = document.createElement('div');
+        popup.style.width = '260px';
+        popup.style.fontSize = '14px';
+        popup.style.lineHeight = '1.55';
+
+        var heading = document.createElement('b');
+        heading.textContent = '가로등';
+        popup.appendChild(heading);
+        popup.appendChild(document.createElement('br'));
+
+        var numberLabel = document.createElement('b');
+        numberLabel.textContent = '표찰번호: ';
+        popup.appendChild(numberLabel);
+        popup.appendChild(document.createTextNode(row[2] || '정보 없음'));
+        popup.appendChild(document.createElement('br'));
+
+        var addressLabel = document.createElement('b');
+        addressLabel.textContent = '주소: ';
+        popup.appendChild(addressLabel);
+        popup.appendChild(document.createTextNode(row[3] || '정보 없음'));
+
+        marker.bindPopup(popup);
+        marker.bindTooltip('가로등 ' + (row[2] || ''));
+        return marker;
+    }
+    """
+
+    streetlight_cluster_icon = """
+    function(cluster) {
+        var count = cluster.getChildCount();
+        var size = count < 100 ? 32 : count < 1000 ? 38 : 44;
+        return L.divIcon({
+            html: '<span>' + count.toLocaleString() + '</span>',
+            className: 'streetlight-cluster',
+            iconSize: new L.Point(size, size)
+        });
+    }
+    """
+
+    FastMarkerCluster(
+        data=streetlight_markers,
+        callback=streetlight_callback,
+        name="가로등",
+        overlay=True,
+        control=True,
+        show=True,
+        icon_create_function=streetlight_cluster_icon,
+        options={
+            "maxClusterRadius": 55,
+            "spiderfyOnMaxZoom": True,
+            "showCoverageOnHover": False,
+        },
+    ).add_to(map_object)
 
 if not CCTV_FILE.exists():
     st.warning(
@@ -160,9 +330,10 @@ else:
             ["latitude", "longitude"]
         ].drop_duplicates().shape[0]
 
-        first_column, second_column = st.columns(2)
+        first_column, second_column, third_column = st.columns(3)
         first_column.metric("표시 CCTV", f"{total_count:,}대")
         second_column.metric("좌표 위치", f"{unique_location_count:,}곳")
+        third_column.metric("표시 가로등", f"{len(streetlight_data):,}개")
 
         coverage_group = folium.FeatureGroup(
             name="CCTV 촬영범위 약 100m",
