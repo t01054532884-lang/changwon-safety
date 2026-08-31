@@ -65,7 +65,7 @@ st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
 map_object = folium.Map(
     location=[35.2279, 128.6811],
     zoom_start=11,
-    tiles="CartoDB positron",
+    tiles="OpenStreetMap",
     control_scale=True,
 )
 
