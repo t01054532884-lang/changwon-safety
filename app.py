@@ -69,6 +69,21 @@ map_object = folium.Map(
     control_scale=True,
 )
 
+map_object.get_root().html.add_child(
+    folium.Element(
+        """
+        <style>
+        .cctv-small-cluster {
+            background: #DC2626;
+            border: 3px solid #7F1D1D;
+            border-radius: 50%;
+            box-shadow: 0 0 0 3px rgba(254, 202, 202, 0.75);
+        }
+        </style>
+        """
+    )
+)
+
 if not CCTV_FILE.exists():
     st.warning(
         "아직 CCTV 좌표 파일이 없습니다. 먼저 `python geocode_cctv.py`를 "
@@ -93,11 +108,65 @@ else:
         first_column.metric("표시 CCTV", f"{total_count:,}대")
         second_column.metric("좌표 위치", f"{unique_location_count:,}곳")
 
+        coverage_group = folium.FeatureGroup(
+            name="CCTV 촬영범위 약 100m",
+            overlay=True,
+            control=True,
+            show=True,
+        ).add_to(map_object)
+
+        unique_locations = cctv_data.drop_duplicates(
+            subset=["latitude", "longitude"]
+        )
+        for _, location_row in unique_locations.iterrows():
+            folium.Circle(
+                location=[
+                    location_row["latitude"],
+                    location_row["longitude"],
+                ],
+                radius=100,
+                color="#2563EB",
+                weight=2,
+                opacity=0.8,
+                dash_array="5, 7",
+                fill=True,
+                fill_color="#60A5FA",
+                fill_opacity=0.05,
+                tooltip="CCTV 촬영범위 약 100m",
+            ).add_to(coverage_group)
+
+        cluster_icon = """
+        function(cluster) {
+            var count = cluster.getChildCount();
+            if (count <= 3) {
+                return L.divIcon({
+                    html: '',
+                    className: 'cctv-small-cluster',
+                    iconSize: new L.Point(18, 18)
+                });
+            }
+
+            var size = count < 10 ? 'small' :
+                       count < 100 ? 'medium' : 'large';
+            return L.divIcon({
+                html: '<div><span>' + count + '</span></div>',
+                className: 'marker-cluster marker-cluster-' + size,
+                iconSize: new L.Point(40, 40)
+            });
+        }
+        """
+
         marker_cluster = MarkerCluster(
             name="방범용 CCTV",
             overlay=True,
             control=True,
             show=True,
+            icon_create_function=cluster_icon,
+            options={
+                "disableClusteringAtZoom": 15,
+                "spiderfyOnMaxZoom": True,
+                "showCoverageOnHover": False,
+            },
         ).add_to(map_object)
 
         for _, row in cctv_data.iterrows():
