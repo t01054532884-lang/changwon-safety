@@ -1,5 +1,7 @@
 import json
+import os
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 import folium
 import pandas as pd
@@ -16,6 +18,9 @@ CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
 GIMHAE_BOUNDARY_FILE = BASE_DIR / "data" / "gimhae_boundary.geojson"
 TONGYEONG_BOUNDARY_FILE = BASE_DIR / "data" / "tongyeong_boundary.geojson"
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
+SAFEMAP_WMS_URL = "https://www.safemap.go.kr/openapi2/IF_0087_WMS"
+SAFEMAP_WMS_LAYER = "A2SM_CRMNLHSPOT_TOT"
+SAFEMAP_WMS_STYLE = "A2SM_CrmnlHspot_Tot_Tot"
 
 
 class ThresholdLightLayer(Layer):
@@ -659,6 +664,18 @@ def combine_unique_text(values: pd.Series) -> str:
     return " / ".join(unique_values) or "정보 없음"
 
 
+def get_safemap_service_key() -> str:
+    """환경 변수나 Streamlit Secrets에서 생활안전지도 인증키를 읽습니다."""
+    environment_key = os.environ.get("SAFEMAP_SERVICE_KEY", "").strip()
+    if environment_key:
+        return environment_key
+
+    try:
+        return str(st.secrets.get("SAFEMAP_SERVICE_KEY", "")).strip()
+    except Exception:
+        return ""
+
+
 @st.cache_data(show_spinner=False)
 def load_cctv_data(file_path: Path) -> pd.DataFrame:
     """최신 CCTV 엑셀을 읽고 앱에서 사용할 열을 정리합니다."""
@@ -847,6 +864,12 @@ st.markdown(
 st.title("창원시 안전지도")
 st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
+safemap_service_key = get_safemap_service_key()
+if not safemap_service_key:
+    st.info(
+        "범죄주의구간 WMS 레이어를 사용하려면 Streamlit Secrets에 "
+        "`SAFEMAP_SERVICE_KEY`를 등록해 주세요."
+    )
 
 map_views = {
     "창원시 중심": {"location": [35.1800, 128.6200], "zoom": 10},
@@ -875,6 +898,26 @@ map_object = folium.Map(
     prefer_canvas=True,
 )
 show_changwon_facilities = selected_map_view == "창원시 중심"
+
+if safemap_service_key:
+    encoded_safemap_key = quote(
+        unquote(safemap_service_key),
+        safe="",
+    )
+    folium.raster_layers.WmsTileLayer(
+        url=f"{SAFEMAP_WMS_URL}?serviceKey={encoded_safemap_key}",
+        layers=SAFEMAP_WMS_LAYER,
+        styles=SAFEMAP_WMS_STYLE,
+        fmt="image/png",
+        transparent=True,
+        version="1.1.1",
+        attr="생활안전지도·경찰청 (공공누리 제4유형)",
+        name="범죄주의구간(전체)",
+        overlay=True,
+        control=True,
+        show=True,
+        opacity=0.62,
+    ).add_to(map_object)
 
 add_boundary_layer(
     map_object=map_object,
