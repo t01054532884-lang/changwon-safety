@@ -11,6 +11,7 @@ from streamlit_folium import st_folium
 
 BASE_DIR = Path(__file__).resolve().parent
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.xlsx"
+WIFI_FILE = BASE_DIR / "data" / "wifi_data.csv"
 CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
 GIMHAE_BOUNDARY_FILE = BASE_DIR / "data" / "gimhae_boundary.geojson"
 TONGYEONG_BOUNDARY_FILE = BASE_DIR / "data" / "tongyeong_boundary.geojson"
@@ -457,6 +458,195 @@ class VisibleCctvCoverageLayer(Layer):
         self.minimum_zoom = minimum_zoom
 
 
+class ThresholdWifiLayer(Layer):
+    """와이파이 합계가 10개를 초과할 때만 연한 파란 군집으로 표시합니다."""
+
+    _template = Template(
+        """
+        {% macro script(this, kwargs) %}
+        var {{ this.get_name() }} = (function() {
+            var map = {{ this._parent.get_name() }};
+            var layer = L.layerGroup();
+            var data = {{ this.data | tojson }};
+            var minimumClusterSize = {{ this.minimum_cluster_size }};
+            var cellSize = {{ this.cell_size }};
+            var redrawTimer = null;
+
+            function wifiIcon() {
+                if (!window.changwonWifiIcon) {
+                    window.changwonWifiIcon = L.divIcon({
+                        html: '<div class="wifi-symbol">' +
+                              '<span class="wifi-wave wifi-wave-outer"></span>' +
+                              '<span class="wifi-wave wifi-wave-middle"></span>' +
+                              '<span class="wifi-dot"></span></div>',
+                        className: 'wifi-div-icon',
+                        iconSize: [26, 26],
+                        iconAnchor: [13, 13],
+                        popupAnchor: [0, -13]
+                    });
+                }
+                return window.changwonWifiIcon;
+            }
+
+            function addPopupField(popup, labelText, value, addBreak) {
+                var label = document.createElement('b');
+                label.textContent = labelText;
+                popup.appendChild(label);
+                popup.appendChild(
+                    document.createTextNode(value || '정보 없음')
+                );
+                if (addBreak) {
+                    popup.appendChild(document.createElement('br'));
+                }
+            }
+
+            function makeWifiMarker(row) {
+                var marker = L.marker([row[0], row[1]], {
+                    icon: wifiIcon(),
+                    title: '공공 와이파이 ' + row[2].toLocaleString() + '개'
+                });
+
+                marker.on('click', function() {
+                    if (!marker.getPopup()) {
+                        var popup = document.createElement('div');
+                        popup.style.width = '300px';
+                        popup.style.fontSize = '14px';
+                        popup.style.lineHeight = '1.55';
+
+                        var heading = document.createElement('b');
+                        heading.textContent = '공공 와이파이';
+                        popup.appendChild(heading);
+                        popup.appendChild(document.createElement('br'));
+                        addPopupField(popup, '설치 수: ', row[2] + '개', true);
+                        addPopupField(popup, '설치 장소: ', row[3], true);
+                        addPopupField(popup, '장소 상세: ', row[4], true);
+                        addPopupField(popup, '시설 구분: ', row[5], true);
+                        addPopupField(popup, 'SSID: ', row[6], true);
+                        addPopupField(popup, '서비스 제공사: ', row[7], true);
+                        addPopupField(popup, '주소: ', row[8], true);
+                        addPopupField(popup, '관리 기관: ', row[9], false);
+                        marker.bindPopup(popup);
+                    }
+                    marker.openPopup();
+                });
+                return marker;
+            }
+
+            function wifiTotal(rows) {
+                return rows.reduce(function(total, row) {
+                    return total + row[2];
+                }, 0);
+            }
+
+            function makeCluster(rows) {
+                var latitudeTotal = 0;
+                var longitudeTotal = 0;
+                var clusterBounds = [];
+
+                rows.forEach(function(row) {
+                    latitudeTotal += row[0];
+                    longitudeTotal += row[1];
+                    clusterBounds.push([row[0], row[1]]);
+                });
+
+                var count = wifiTotal(rows);
+                var center = [
+                    latitudeTotal / rows.length,
+                    longitudeTotal / rows.length
+                ];
+                var size = count < 100 ? 32 : count < 1000 ? 38 : 44;
+                var icon = L.divIcon({
+                    html: '<span>' + count.toLocaleString() + '</span>',
+                    className: 'wifi-cluster',
+                    iconSize: new L.Point(size, size)
+                });
+                var marker = L.marker(center, {
+                    icon: icon,
+                    title: '공공 와이파이 ' + count.toLocaleString() + '개'
+                });
+
+                marker.on('click', function() {
+                    var bounds = L.latLngBounds(clusterBounds);
+                    var targetZoom = Math.min(map.getZoom() + 2, 18);
+                    if (bounds.getNorthEast().equals(bounds.getSouthWest())) {
+                        map.setView(center, targetZoom);
+                    } else {
+                        map.fitBounds(bounds, {
+                            padding: [35, 35],
+                            maxZoom: targetZoom
+                        });
+                    }
+                });
+                return marker;
+            }
+
+            function redraw() {
+                redrawTimer = null;
+                if (!map.hasLayer(layer)) {
+                    return;
+                }
+
+                layer.clearLayers();
+                var bounds = map.getBounds().pad(0.15);
+                var buckets = {};
+
+                data.forEach(function(row) {
+                    var latLng = L.latLng(row[0], row[1]);
+                    if (!bounds.contains(latLng)) {
+                        return;
+                    }
+
+                    var point = map.latLngToContainerPoint(latLng);
+                    var key = Math.floor(point.x / cellSize) + ':' +
+                              Math.floor(point.y / cellSize);
+                    if (!buckets[key]) {
+                        buckets[key] = [];
+                    }
+                    buckets[key].push(row);
+                });
+
+                Object.keys(buckets).forEach(function(key) {
+                    var rows = buckets[key];
+                    if (wifiTotal(rows) > minimumClusterSize) {
+                        makeCluster(rows).addTo(layer);
+                    } else {
+                        rows.forEach(function(row) {
+                            makeWifiMarker(row).addTo(layer);
+                        });
+                    }
+                });
+            }
+
+            function scheduleRedraw() {
+                if (redrawTimer !== null) {
+                    window.clearTimeout(redrawTimer);
+                }
+                redrawTimer = window.setTimeout(redraw, 40);
+            }
+
+            map.on('zoomend moveend resize', scheduleRedraw);
+            layer.on('add', scheduleRedraw);
+            layer.addTo(map);
+            scheduleRedraw();
+            return layer;
+        })();
+        {% endmacro %}
+        """
+    )
+
+    def __init__(
+        self,
+        data: list[list],
+        name: str,
+        minimum_cluster_size: int = 10,
+        cell_size: int = 55,
+    ) -> None:
+        super().__init__(name=name, overlay=True, control=True, show=True)
+        self.data = data
+        self.minimum_cluster_size = minimum_cluster_size
+        self.cell_size = cell_size
+
+
 def combine_unique_text(values: pd.Series) -> str:
     """한 좌표에 여러 행이 있을 때 중복 없는 설명 문자열로 합칩니다."""
     unique_values = []
@@ -508,6 +698,53 @@ def load_cctv_data(file_path: Path) -> pd.DataFrame:
     dataframe["purpose"] = dataframe["설치목적구분"].fillna("정보 없음")
     dataframe["pixels"] = dataframe["카메라화소수"].fillna("정보 없음")
     dataframe["direction"] = dataframe["촬영방면정보"].fillna("정보 없음")
+
+    valid_coordinates = (
+        dataframe["latitude"].between(34.8, 35.6)
+        & dataframe["longitude"].between(128.1, 129.0)
+    )
+    return dataframe.loc[valid_coordinates].copy()
+
+
+@st.cache_data(show_spinner=False)
+def load_wifi_data(file_path: Path) -> pd.DataFrame:
+    """공공 와이파이 CSV를 읽고 유효한 창원시 좌표만 반환합니다."""
+    dataframe = pd.read_csv(file_path, encoding="cp949")
+
+    required_columns = {
+        "설치장소명",
+        "설치장소상세",
+        "설치시설구분명",
+        "서비스제공사명",
+        "와이파이SSID",
+        "소재지도로명주소",
+        "소재지지번주소",
+        "관리기관명",
+        "WGS84위도",
+        "WGS84경도",
+    }
+    missing_columns = required_columns.difference(dataframe.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"와이파이 CSV에 필요한 열이 없습니다: {missing}")
+
+    dataframe["latitude"] = pd.to_numeric(
+        dataframe["WGS84위도"], errors="coerce"
+    )
+    dataframe["longitude"] = pd.to_numeric(
+        dataframe["WGS84경도"], errors="coerce"
+    )
+    dataframe["address"] = (
+        dataframe["소재지도로명주소"]
+        .replace("", pd.NA)
+        .fillna(dataframe["소재지지번주소"])
+    )
+    dataframe["place"] = dataframe["설치장소명"].fillna("정보 없음")
+    dataframe["detail"] = dataframe["설치장소상세"].fillna("정보 없음")
+    dataframe["facility"] = dataframe["설치시설구분명"].fillna("정보 없음")
+    dataframe["provider"] = dataframe["서비스제공사명"].fillna("정보 없음")
+    dataframe["ssid"] = dataframe["와이파이SSID"].fillna("정보 없음")
+    dataframe["manager"] = dataframe["관리기관명"].fillna("정보 없음")
 
     valid_coordinates = (
         dataframe["latitude"].between(34.8, 35.6)
@@ -694,6 +931,59 @@ map_object.get_root().html.add_child(
             background: #7F1D1D;
             transform: rotate(28deg);
         }
+        .wifi-cluster {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #7DD3FC;
+            border: 3px solid #0284C7;
+            border-radius: 50%;
+            color: #0C4A6E;
+            font-size: 12px;
+            font-weight: 800;
+            box-shadow: 0 0 0 3px rgba(186, 230, 253, 0.75);
+        }
+        .wifi-div-icon {
+            background: transparent !important;
+            border: 0 !important;
+        }
+        .wifi-symbol {
+            position: relative;
+            width: 24px;
+            height: 24px;
+            border: 2px solid #38BDF8;
+            border-radius: 50%;
+            background: #E0F2FE;
+            box-shadow: 0 0 0 2px rgba(186, 230, 253, 0.65);
+        }
+        .wifi-wave {
+            position: absolute;
+            left: 50%;
+            border: 2px solid transparent;
+            border-top-color: #0369A1;
+            border-radius: 50%;
+            transform: translateX(-50%);
+        }
+        .wifi-wave-outer {
+            top: 5px;
+            width: 18px;
+            height: 18px;
+        }
+        .wifi-wave-middle {
+            top: 10px;
+            width: 10px;
+            height: 10px;
+        }
+        .wifi-dot {
+            position: absolute;
+            left: 50%;
+            bottom: 3px;
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background: #0369A1;
+            transform: translateX(-50%);
+        }
         .streetlight-cluster {
             display: flex;
             align-items: center;
@@ -798,6 +1088,10 @@ map_object.get_root().html.add_child(
             background: #FACC15;
             border: 2px solid #A16207;
         }
+        .map-color-swatch-wifi {
+            background: #7DD3FC;
+            border: 2px solid #0284C7;
+        }
         </style>
         """
     )
@@ -816,6 +1110,10 @@ if show_changwon_facilities:
                 <div class="map-color-legend-row">
                     <span class="map-color-swatch map-color-swatch-light"></span>
                     <span>가로등 · 노란색</span>
+                </div>
+                <div class="map-color-legend-row">
+                    <span class="map-color-swatch map-color-swatch-wifi"></span>
+                    <span>와이파이 · 연한 파란색</span>
                 </div>
             </div>
             """
@@ -858,6 +1156,57 @@ if pedestrian_lights:
         cell_size=55,
     ).add_to(map_object)
 
+wifi_data = pd.DataFrame()
+wifi_locations = pd.DataFrame()
+if show_changwon_facilities:
+    if not WIFI_FILE.exists():
+        st.warning("와이파이 파일 `data/wifi_data.csv`가 없습니다.")
+    else:
+        try:
+            wifi_data = load_wifi_data(WIFI_FILE)
+        except Exception as error:
+            st.error(f"와이파이 데이터를 읽지 못했습니다: {error}")
+
+if not wifi_data.empty:
+    wifi_locations = (
+        wifi_data.groupby(
+            ["latitude", "longitude"],
+            as_index=False,
+            sort=False,
+        )
+        .agg(
+            wifi_count=("latitude", "size"),
+            place=("place", combine_unique_text),
+            detail=("detail", combine_unique_text),
+            facility=("facility", combine_unique_text),
+            ssid=("ssid", combine_unique_text),
+            provider=("provider", combine_unique_text),
+            address=("address", combine_unique_text),
+            manager=("manager", combine_unique_text),
+        )
+    )
+    wifi_markers = [
+        [
+            row.latitude,
+            row.longitude,
+            int(row.wifi_count),
+            str(row.place),
+            str(row.detail),
+            str(row.facility),
+            str(row.ssid),
+            str(row.provider),
+            str(row.address),
+            str(row.manager),
+        ]
+        for row in wifi_locations.itertuples(index=False)
+    ]
+    ThresholdWifiLayer(
+        data=wifi_markers,
+        name="공공 와이파이",
+        minimum_cluster_size=10,
+        cell_size=55,
+    ).add_to(map_object)
+
 if not show_changwon_facilities:
     pass
 elif not CCTV_FILE.exists():
@@ -892,10 +1241,11 @@ else:
         total_count = int(cctv_locations["camera_count"].sum())
         unique_location_count = len(cctv_locations)
 
-        first_column, second_column, third_column = st.columns(3)
+        first_column, second_column, third_column, fourth_column = st.columns(4)
         first_column.metric("표시 CCTV", f"{total_count:,}대")
         second_column.metric("좌표 위치", f"{unique_location_count:,}곳")
         third_column.metric("표시 보행조명", f"{len(pedestrian_lights):,}개")
+        fourth_column.metric("표시 와이파이", f"{len(wifi_data):,}개")
 
         coverage_points = cctv_locations[
             ["latitude", "longitude"]
