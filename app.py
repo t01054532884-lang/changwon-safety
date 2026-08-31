@@ -1,3 +1,4 @@
+import json
 from html import escape
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from streamlit_folium import st_folium
 
 BASE_DIR = Path(__file__).resolve().parent
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.csv"
+CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
 
 
 @st.cache_data(show_spinner=False)
@@ -31,6 +33,52 @@ def load_cctv_data(file_path: Path) -> pd.DataFrame:
     )
 
     return dataframe.dropna(subset=["latitude", "longitude"]).copy()
+
+
+@st.cache_data(show_spinner=False)
+def load_geojson(file_path: Path) -> dict:
+    """행정경계 GeoJSON을 읽습니다."""
+    return json.loads(file_path.read_text(encoding="utf-8"))
+
+
+def add_boundary_layer(
+    map_object: folium.Map,
+    file_path: Path,
+    layer_name: str,
+    line_color: str,
+) -> bool:
+    """비교할 도시를 쉽게 추가할 수 있는 행정경계 레이어를 만듭니다."""
+    if not file_path.exists():
+        return False
+
+    boundary_data = load_geojson(file_path)
+    folium.GeoJson(
+        data=boundary_data,
+        name=layer_name,
+        overlay=True,
+        control=True,
+        show=True,
+        style_function=lambda _: {
+            "color": line_color,
+            "weight": 5,
+            "opacity": 0.95,
+            "fillColor": line_color,
+            "fillOpacity": 0.025,
+        },
+        highlight_function=lambda _: {
+            "color": line_color,
+            "weight": 7,
+            "opacity": 1.0,
+            "fillOpacity": 0.06,
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=["name"],
+            aliases=["행정구역:"],
+            labels=True,
+            sticky=False,
+        ),
+    ).add_to(map_object)
+    return True
 
 
 def popup_html(row: pd.Series) -> str:
@@ -61,12 +109,20 @@ st.set_page_config(
 
 st.title("창원시 안전지도")
 st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
+st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
 
 map_object = folium.Map(
     location=[35.2279, 128.6811],
     zoom_start=11,
     tiles="OpenStreetMap",
     control_scale=True,
+)
+
+add_boundary_layer(
+    map_object=map_object,
+    file_path=CHANGWON_BOUNDARY_FILE,
+    layer_name="창원시 행정경계",
+    line_color="#7C3AED",
 )
 
 map_object.get_root().html.add_child(
@@ -187,7 +243,7 @@ else:
                 popup=folium.Popup(popup_html(row), max_width=340),
             ).add_to(marker_cluster)
 
-        folium.LayerControl(collapsed=False).add_to(map_object)
+folium.LayerControl(collapsed=False).add_to(map_object)
 
 st_folium(
     map_object,
