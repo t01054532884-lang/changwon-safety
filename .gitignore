@@ -1,0 +1,13 @@
+# Local secrets
+.env
+.streamlit/secrets.toml
+
+# Local geocoding inputs and cache
+data/CCTV카메라(방범용)1.xlsx
+data/geocoding_cache.json
+
+# Generated and backup files
+changwon_map.html
+*.bak
+__pycache__/
+*.py[cod]

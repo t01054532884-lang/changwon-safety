@@ -65,6 +65,7 @@ st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
 map_object = folium.Map(
     location=[35.2279, 128.6811],
     zoom_start=11,
+    tiles="CartoDB positron",
     control_scale=True,
 )
 
@@ -107,12 +108,12 @@ else:
 
             folium.CircleMarker(
                 location=[row["latitude"], row["longitude"]],
-                radius=5,
-                color="#B91C1C",
-                weight=2,
+                radius=7,
+                color="#7F1D1D",
+                weight=3,
                 fill=True,
-                fill_color="#EF4444",
-                fill_opacity=0.8,
+                fill_color="#DC2626",
+                fill_opacity=1.0,
                 tooltip=tooltip,
                 popup=folium.Popup(popup_html(row), max_width=340),
             ).add_to(marker_cluster)
