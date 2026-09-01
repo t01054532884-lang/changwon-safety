@@ -808,8 +808,14 @@ def load_geojson(file_path: Path) -> dict:
 
 
 @st.cache_data(show_spinner=False)
-def load_pedestrian_light_data(file_path: Path) -> dict:
+def load_pedestrian_light_data(
+    file_path: Path,
+    file_version: str,
+) -> dict:
     """공개 관리시스템에서 받은 비차도 조명 좌표를 읽습니다."""
+    # 파일을 같은 이름으로 덮어써도 Streamlit이 예전 캐시를 쓰지 않도록
+    # 크기와 수정 시각을 호출 인수에 포함합니다.
+    del file_version
     payload = json.loads(file_path.read_text(encoding="utf-8"))
     records = []
 
@@ -1479,8 +1485,13 @@ if show_changwon_facilities:
 pedestrian_light_payload = {"records": []}
 if show_changwon_facilities and PEDESTRIAN_LIGHT_FILE.exists():
     try:
+        pedestrian_light_file_stat = PEDESTRIAN_LIGHT_FILE.stat()
         pedestrian_light_payload = load_pedestrian_light_data(
-            PEDESTRIAN_LIGHT_FILE
+            PEDESTRIAN_LIGHT_FILE,
+            (
+                f"{pedestrian_light_file_stat.st_size}:"
+                f"{pedestrian_light_file_stat.st_mtime_ns}"
+            ),
         )
     except Exception as error:
         st.error(f"보행조명 데이터를 읽지 못했습니다: {error}")
