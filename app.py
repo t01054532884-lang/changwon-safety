@@ -1151,18 +1151,37 @@ add_boundary_layer(
 map_object.get_root().html.add_child(
     folium.Element(
         """
+        <svg aria-hidden="true" width="0" height="0"
+             style="position:absolute;width:0;height:0;overflow:hidden">
+            <defs>
+                <filter id="risk-red-emphasis"
+                        color-interpolation-filters="sRGB">
+                    <feComponentTransfer>
+                        <feFuncR type="gamma" amplitude="1"
+                                 exponent="2.3" offset="0"></feFuncR>
+                        <feFuncG type="gamma" amplitude="1"
+                                 exponent="2.3" offset="0"></feFuncG>
+                        <feFuncB type="gamma" amplitude="1"
+                                 exponent="2.3" offset="0"></feFuncB>
+                    </feComponentTransfer>
+                    <feColorMatrix type="matrix" values="
+                        1.40 1.40 1.40 0 0
+                        0.08 0.08 0.08 0 0
+                        0.06 0.06 0.06 0 0
+                        0    0    0    1 0">
+                    </feColorMatrix>
+                </filter>
+            </defs>
+        </svg>
         <style>
         .leaflet-layer:has(img.leaflet-tile[src*="safemap.go.kr"]) {
             mix-blend-mode: screen !important;
         }
         img.leaflet-tile[src*="safemap.go.kr"] {
-            mix-blend-mode: screen !important;
-            filter:
-                contrast(2.8)
-                brightness(0.92)
-                sepia(1)
-                saturate(14)
-                hue-rotate(305deg);
+            filter: sepia(1) saturate(18) hue-rotate(305deg)
+                    contrast(2.1) brightness(1.08);
+            filter: url(#risk-red-emphasis)
+                    drop-shadow(0 0 2px rgba(239, 68, 68, 0.8));
         }
         .cctv-cluster {
             display: flex;
