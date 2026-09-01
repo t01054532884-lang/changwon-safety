@@ -18,9 +18,26 @@ CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
 GIMHAE_BOUNDARY_FILE = BASE_DIR / "data" / "gimhae_boundary.geojson"
 TONGYEONG_BOUNDARY_FILE = BASE_DIR / "data" / "tongyeong_boundary.geojson"
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
-SAFEMAP_WMS_URL = "https://www.safemap.go.kr/openapi2/IF_0087_WMS"
-SAFEMAP_WMS_LAYER = "A2SM_CRMNLHSPOT_TOT"
-SAFEMAP_WMS_STYLE = "A2SM_CrmnlHspot_Tot_Tot"
+SAFEMAP_RISK_PROFILES = {
+    "여성 버전": {
+        "title": "여성 밤길 치안안전",
+        "url": "https://www.safemap.go.kr/openapi2/IF_0080_WMS",
+        "layer": "A2SM_CRMNLHSPOT_F1_TOT",
+        "style": "",
+    },
+    "노인 버전": {
+        "title": "노인 대상 범죄주의구간",
+        "url": "https://www.safemap.go.kr/openapi2/IF_0082_WMS",
+        "layer": "A2SM_ODBLRCRMNLHSPOT_ODSN",
+        "style": "A2SM_OdblrCrmnlHspot_Odsn",
+    },
+    "어린이 버전": {
+        "title": "어린이 대상 범죄주의구간",
+        "url": "https://www.safemap.go.kr/openapi2/IF_0081_WMS",
+        "layer": "A2SM_ODBLRCRMNLHSPOT_KID",
+        "style": "A2SM_OdblrCrmnlHspot_Kid",
+    },
+}
 
 
 class ThresholdLightLayer(Layer):
@@ -877,12 +894,26 @@ map_views = {
     "통영시 중심": {"location": [34.8500, 128.4300], "zoom": 10},
     "세 도시 비교": {"location": [34.9000, 128.6000], "zoom": 8},
 }
-selected_map_view = st.selectbox(
-    "지도 중심",
-    options=list(map_views),
-    index=0,
-)
+map_view_column, risk_profile_column = st.columns(2)
+with map_view_column:
+    selected_map_view = st.selectbox(
+        "지도 중심",
+        options=list(map_views),
+        index=0,
+    )
+with risk_profile_column:
+    selected_risk_profile = st.selectbox(
+        "안전 대상",
+        options=list(SAFEMAP_RISK_PROFILES),
+        index=0,
+        help="여성·노인·어린이 중 확인할 범죄위험 WMS를 선택합니다.",
+    )
 map_view = map_views[selected_map_view]
+risk_profile = SAFEMAP_RISK_PROFILES[selected_risk_profile]
+st.caption(
+    f"현재 범죄위험 레이어: {risk_profile['title']} "
+    "(생활안전지도·경찰청 제공)"
+)
 
 map_object = folium.Map(
     location=map_view["location"],
@@ -905,18 +936,18 @@ if safemap_service_key:
         safe="",
     )
     folium.raster_layers.WmsTileLayer(
-        url=f"{SAFEMAP_WMS_URL}?serviceKey={encoded_safemap_key}",
-        layers=SAFEMAP_WMS_LAYER,
-        styles=SAFEMAP_WMS_STYLE,
+        url=f"{risk_profile['url']}?serviceKey={encoded_safemap_key}",
+        layers=risk_profile["layer"],
+        styles=risk_profile["style"],
         fmt="image/png",
         transparent=True,
         version="1.1.1",
         attr="생활안전지도·경찰청 (공공누리 제4유형)",
-        name="범죄주의구간(전체)",
+        name=risk_profile["title"],
         overlay=True,
         control=True,
         show=True,
-        opacity=0.62,
+        opacity=0.78,
     ).add_to(map_object)
 
 add_boundary_layer(
