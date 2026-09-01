@@ -1037,7 +1037,7 @@ def add_boundary_layer(
 
 
 st.set_page_config(
-    page_title="창원시 안전지도",
+    page_title="창원시 취약계층 안전 인프라 분석지도",
     layout="wide",
 )
 
@@ -1059,8 +1059,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.title("창원시 안전지도")
-st.write("창원시 방범용 CCTV 위치를 확인할 수 있습니다.")
+st.title("창원시 취약계층 안전 인프라 분석지도")
+st.write(
+    "창원시 취약계층 시설 주변의 범죄위험도와 "
+    "안전 인프라 공백을 분석하는 지도입니다."
+)
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
 safemap_service_key = get_safemap_service_key()
 if not safemap_service_key:
