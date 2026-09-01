@@ -1,5 +1,7 @@
 import json
+import math
 import os
+from html import escape
 from pathlib import Path
 from urllib.parse import quote, unquote
 
@@ -201,7 +203,9 @@ class ThresholdLightLayer(Layer):
 
             map.on('zoomend moveend resize', scheduleRedraw);
             layer.on('add', scheduleRedraw);
+            {% if this.show %}
             layer.addTo(map);
+            {% endif %}
             scheduleRedraw();
             return layer;
         })();
@@ -215,8 +219,9 @@ class ThresholdLightLayer(Layer):
         name: str,
         minimum_cluster_size: int = 10,
         cell_size: int = 55,
+        show: bool = True,
     ) -> None:
-        super().__init__(name=name, overlay=True, control=True, show=True)
+        super().__init__(name=name, overlay=True, control=True, show=show)
         self.data = data
         self.minimum_cluster_size = minimum_cluster_size
         self.cell_size = cell_size
@@ -391,7 +396,9 @@ class ThresholdCctvLayer(Layer):
 
             map.on('zoomend moveend resize', scheduleRedraw);
             layer.on('add', scheduleRedraw);
+            {% if this.show %}
             layer.addTo(map);
+            {% endif %}
             scheduleRedraw();
             return layer;
         })();
@@ -405,8 +412,9 @@ class ThresholdCctvLayer(Layer):
         name: str,
         minimum_cluster_size: int = 10,
         cell_size: int = 55,
+        show: bool = True,
     ) -> None:
-        super().__init__(name=name, overlay=True, control=True, show=True)
+        super().__init__(name=name, overlay=True, control=True, show=show)
         self.data = data
         self.minimum_cluster_size = minimum_cluster_size
         self.cell_size = cell_size
@@ -461,7 +469,9 @@ class VisibleCctvCoverageLayer(Layer):
 
             map.on('zoomend moveend resize', scheduleRedraw);
             layer.on('add', scheduleRedraw);
+            {% if this.show %}
             layer.addTo(map);
+            {% endif %}
             scheduleRedraw();
             return layer;
         })();
@@ -474,8 +484,9 @@ class VisibleCctvCoverageLayer(Layer):
         data: list[list],
         name: str,
         minimum_zoom: int = 14,
+        show: bool = True,
     ) -> None:
-        super().__init__(name=name, overlay=True, control=True, show=True)
+        super().__init__(name=name, overlay=True, control=True, show=show)
         self.data = data
         self.minimum_zoom = minimum_zoom
 
@@ -648,7 +659,9 @@ class ThresholdWifiLayer(Layer):
 
             map.on('zoomend moveend resize', scheduleRedraw);
             layer.on('add', scheduleRedraw);
+            {% if this.show %}
             layer.addTo(map);
+            {% endif %}
             scheduleRedraw();
             return layer;
         })();
@@ -662,8 +675,9 @@ class ThresholdWifiLayer(Layer):
         name: str,
         minimum_cluster_size: int = 10,
         cell_size: int = 55,
+        show: bool = True,
     ) -> None:
-        super().__init__(name=name, overlay=True, control=True, show=True)
+        super().__init__(name=name, overlay=True, control=True, show=show)
         self.data = data
         self.minimum_cluster_size = minimum_cluster_size
         self.cell_size = cell_size
@@ -815,6 +829,167 @@ def load_pedestrian_light_data(file_path: Path) -> dict:
     return payload
 
 
+def distance_in_meters(
+    first_latitude: float,
+    first_longitude: float,
+    second_latitude: float,
+    second_longitude: float,
+) -> float:
+    """창원시 범위에서 두 좌표 사이 거리를 미터 단위로 계산합니다."""
+    latitude_difference = math.radians(second_latitude - first_latitude)
+    longitude_difference = math.radians(
+        second_longitude - first_longitude
+    )
+    average_latitude = math.radians(
+        (first_latitude + second_latitude) / 2
+    )
+    x_distance = longitude_difference * math.cos(average_latitude)
+    return 6_371_000 * math.sqrt(
+        latitude_difference**2 + x_distance**2
+    )
+
+
+def build_coordinate_buckets(
+    coordinates: list[tuple[float, float]],
+    cell_size: float = 0.001,
+) -> dict[tuple[int, int], list[tuple[float, float]]]:
+    """최근접 시설 검색을 빠르게 하기 위한 간단한 공간 버킷입니다."""
+    buckets: dict[tuple[int, int], list[tuple[float, float]]] = {}
+    for latitude, longitude in coordinates:
+        key = (
+            math.floor(latitude / cell_size),
+            math.floor(longitude / cell_size),
+        )
+        buckets.setdefault(key, []).append((latitude, longitude))
+    return buckets
+
+
+def nearest_distance_in_buckets(
+    latitude: float,
+    longitude: float,
+    buckets: dict[tuple[int, int], list[tuple[float, float]]],
+    maximum_distance: float,
+    cell_size: float = 0.001,
+) -> float | None:
+    """지정 반경 안에 있는 가장 가까운 시설까지의 거리를 반환합니다."""
+    center_key = (
+        math.floor(latitude / cell_size),
+        math.floor(longitude / cell_size),
+    )
+    search_range = max(2, math.ceil(maximum_distance / 80))
+    nearest_distance: float | None = None
+
+    for latitude_offset in range(-search_range, search_range + 1):
+        for longitude_offset in range(-search_range, search_range + 1):
+            candidates = buckets.get(
+                (
+                    center_key[0] + latitude_offset,
+                    center_key[1] + longitude_offset,
+                ),
+                [],
+            )
+            for candidate_latitude, candidate_longitude in candidates:
+                distance = distance_in_meters(
+                    latitude,
+                    longitude,
+                    candidate_latitude,
+                    candidate_longitude,
+                )
+                if distance > maximum_distance:
+                    continue
+                if nearest_distance is None or distance < nearest_distance:
+                    nearest_distance = distance
+
+    return nearest_distance
+
+
+def build_three_factor_support_sites(
+    cctv_locations: pd.DataFrame,
+    pedestrian_lights: list[dict],
+    wifi_locations: pd.DataFrame,
+    cctv_radius: float = 100,
+    light_radius: float = 50,
+    grid_size: float = 200,
+) -> list[dict]:
+    """CCTV·보행조명·Wi-Fi가 모두 가까운 200m 대표 지점을 만듭니다."""
+    if cctv_locations.empty or not pedestrian_lights or wifi_locations.empty:
+        return []
+
+    cctv_coordinates = [
+        (float(row.latitude), float(row.longitude))
+        for row in cctv_locations.itertuples(index=False)
+    ]
+    light_coordinates = [
+        (float(record["latitude"]), float(record["longitude"]))
+        for record in pedestrian_lights
+    ]
+    cctv_buckets = build_coordinate_buckets(cctv_coordinates)
+    light_buckets = build_coordinate_buckets(light_coordinates)
+
+    candidate_sites = []
+    for row in wifi_locations.itertuples(index=False):
+        latitude = float(row.latitude)
+        longitude = float(row.longitude)
+        cctv_distance = nearest_distance_in_buckets(
+            latitude,
+            longitude,
+            cctv_buckets,
+            cctv_radius,
+        )
+        if cctv_distance is None:
+            continue
+
+        light_distance = nearest_distance_in_buckets(
+            latitude,
+            longitude,
+            light_buckets,
+            light_radius,
+        )
+        if light_distance is None:
+            continue
+
+        candidate_sites.append(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "cctv_distance": cctv_distance,
+                "light_distance": light_distance,
+                "wifi_count": int(row.wifi_count),
+                "wifi_place": str(row.place),
+                "wifi_address": str(row.address),
+            }
+        )
+
+    reference_latitude = 35.20
+    latitude_step = grid_size / 111_320
+    longitude_step = grid_size / (
+        111_320 * math.cos(math.radians(reference_latitude))
+    )
+    grouped_sites: dict[tuple[int, int], list[dict]] = {}
+    for site in candidate_sites:
+        grid_key = (
+            math.floor(site["latitude"] / latitude_step),
+            math.floor(site["longitude"] / longitude_step),
+        )
+        grouped_sites.setdefault(grid_key, []).append(site)
+
+    support_sites = []
+    for sites in grouped_sites.values():
+        representative = min(
+            sites,
+            key=lambda site: (
+                site["cctv_distance"] + site["light_distance"]
+            ),
+        ).copy()
+        representative["support_location_count"] = len(sites)
+        representative["wifi_count_in_grid"] = sum(
+            site["wifi_count"] for site in sites
+        )
+        support_sites.append(representative)
+
+    return support_sites
+
+
 def add_boundary_layer(
     map_object: folium.Map,
     file_path: Path,
@@ -914,6 +1089,10 @@ st.caption(
     f"현재 범죄위험 레이어: {risk_profile['title']} "
     "(생활안전지도·경찰청 제공)"
 )
+st.caption(
+    "기본 화면에는 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
+    "CCTV·보행조명·Wi-Fi 원본은 지도 우측 목록에서 켤 수 있습니다."
+)
 
 map_object = folium.Map(
     location=map_view["location"],
@@ -947,7 +1126,7 @@ if safemap_service_key:
         overlay=True,
         control=True,
         show=True,
-        opacity=0.78,
+        opacity=0.96,
     ).add_to(map_object)
 
 add_boundary_layer(
@@ -973,6 +1152,13 @@ map_object.get_root().html.add_child(
     folium.Element(
         """
         <style>
+        .leaflet-layer:has(img.leaflet-tile[src*="safemap.go.kr"]) {
+            mix-blend-mode: screen !important;
+        }
+        img.leaflet-tile[src*="safemap.go.kr"] {
+            mix-blend-mode: screen !important;
+            filter: contrast(2.2) brightness(1.15);
+        }
         .cctv-cluster {
             display: flex;
             align-items: center;
@@ -1190,6 +1376,43 @@ map_object.get_root().html.add_child(
             background: #7DD3FC;
             border: 2px solid #0284C7;
         }
+        .risk-density-swatch {
+            background: #FFFFFF;
+            border: 2px solid #111827;
+            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9),
+                        0 0 9px 4px rgba(255, 255, 255, 0.95);
+        }
+        .safe-support-swatch {
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-bottom: 15px solid #16A34A;
+            filter: drop-shadow(0 1px 1px rgba(20, 83, 45, 0.8));
+        }
+        .safe-support-div-icon {
+            background: transparent !important;
+            border: 0 !important;
+        }
+        .safe-support-triangle {
+            color: #16A34A;
+            font: 900 32px/30px sans-serif;
+            text-align: center;
+            text-shadow:
+                -2px -2px 0 #FFFFFF,
+                 2px -2px 0 #FFFFFF,
+                -2px  2px 0 #FFFFFF,
+                 2px  2px 0 #FFFFFF,
+                 0  3px 5px rgba(20, 83, 45, 0.75);
+        }
+        .map-color-legend-note {
+            max-width: 190px;
+            margin-top: 7px;
+            color: #4B5563;
+            font-size: 11px;
+            font-weight: 600;
+            white-space: normal;
+        }
         </style>
         """
     )
@@ -1200,18 +1423,17 @@ if show_changwon_facilities:
         folium.Element(
             """
             <div class="map-color-legend" aria-label="지도 표시 색상">
-                <div class="map-color-legend-title">지도 표시 색상</div>
+                <div class="map-color-legend-title">기본 분석 표시</div>
                 <div class="map-color-legend-row">
-                    <span class="map-color-swatch map-color-swatch-cctv"></span>
-                    <span>CCTV · 빨간색</span>
+                    <span class="map-color-swatch risk-density-swatch"></span>
+                    <span>범죄위험 밀도 · 흰색</span>
                 </div>
                 <div class="map-color-legend-row">
-                    <span class="map-color-swatch map-color-swatch-light"></span>
-                    <span>가로등 · 노란색</span>
+                    <span class="safe-support-swatch"></span>
+                    <span>안전요소 3종 충족 · 초록 △</span>
                 </div>
-                <div class="map-color-legend-row">
-                    <span class="map-color-swatch map-color-swatch-wifi"></span>
-                    <span>와이파이 · 연한 파란색</span>
+                <div class="map-color-legend-note">
+                    원본 시설 아이콘은 우측 레이어 목록에서 켤 수 있습니다.
                 </div>
             </div>
             """
@@ -1249,9 +1471,10 @@ if pedestrian_lights:
 
     ThresholdLightLayer(
         data=streetlight_markers,
-        name="보행조명(차도 가로등 제외)",
+        name="원본 보행조명(차도 가로등 제외)",
         minimum_cluster_size=10,
         cell_size=55,
+        show=False,
     ).add_to(map_object)
 
 wifi_data = pd.DataFrame()
@@ -1300,11 +1523,14 @@ if not wifi_data.empty:
     ]
     ThresholdWifiLayer(
         data=wifi_markers,
-        name="공공 와이파이",
+        name="원본 공공 와이파이",
         minimum_cluster_size=10,
         cell_size=55,
+        show=False,
     ).add_to(map_object)
 
+cctv_data = pd.DataFrame()
+cctv_locations = pd.DataFrame()
 if not show_changwon_facilities:
     pass
 elif not CCTV_FILE.exists():
@@ -1340,18 +1566,19 @@ else:
         unique_location_count = len(cctv_locations)
 
         first_column, second_column, third_column, fourth_column = st.columns(4)
-        first_column.metric("표시 CCTV", f"{total_count:,}대")
-        second_column.metric("좌표 위치", f"{unique_location_count:,}곳")
-        third_column.metric("표시 보행조명", f"{len(pedestrian_lights):,}개")
-        fourth_column.metric("표시 와이파이", f"{len(wifi_data):,}개")
+        first_column.metric("CCTV 데이터", f"{total_count:,}대")
+        second_column.metric("CCTV 위치", f"{unique_location_count:,}곳")
+        third_column.metric("보행조명 데이터", f"{len(pedestrian_lights):,}개")
+        fourth_column.metric("Wi-Fi 데이터", f"{len(wifi_data):,}개")
 
         coverage_points = cctv_locations[
             ["latitude", "longitude"]
         ].values.tolist()
         VisibleCctvCoverageLayer(
             data=coverage_points,
-            name="CCTV 촬영범위 약 100m (확대 시)",
+            name="원본 CCTV 촬영범위 약 100m (확대 시)",
             minimum_zoom=14,
+            show=False,
         ).add_to(map_object)
 
         cctv_markers = [
@@ -1368,10 +1595,57 @@ else:
         ]
         ThresholdCctvLayer(
             data=cctv_markers,
-            name="방범용 CCTV",
+            name="원본 방범용 CCTV",
             minimum_cluster_size=10,
             cell_size=55,
+            show=False,
         ).add_to(map_object)
+
+support_sites = build_three_factor_support_sites(
+    cctv_locations=cctv_locations,
+    pedestrian_lights=pedestrian_lights,
+    wifi_locations=wifi_locations,
+)
+if support_sites:
+    support_layer = folium.FeatureGroup(
+        name="안전요소 3종 충족 △",
+        overlay=True,
+        control=True,
+        show=True,
+    )
+    for site in support_sites:
+        popup_html = (
+            '<div style="width:285px;font-size:14px;line-height:1.55">'
+            '<b style="color:#15803D">안전요소 3종 충족 △</b><br>'
+            f'CCTV 최근접: {site["cctv_distance"]:.0f}m '
+            '(100m 기준)<br>'
+            f'보행조명 최근접: {site["light_distance"]:.0f}m '
+            '(50m 기준)<br>'
+            f'공공 Wi-Fi: {escape(site["wifi_place"])}<br>'
+            f'주소: {escape(site["wifi_address"])}<br>'
+            f'200m 격자 내 충족지점: '
+            f'{site["support_location_count"]}곳<br>'
+            '<span style="color:#6B7280;font-size:12px">'
+            '시설 접근성을 나타내며 절대적인 안전을 보장하지 않습니다.'
+            '</span></div>'
+        )
+        folium.Marker(
+            location=[site["latitude"], site["longitude"]],
+            tooltip="안전요소 3종 충족 △",
+            popup=folium.Popup(popup_html, max_width=320),
+            icon=folium.DivIcon(
+                html='<div class="safe-support-triangle">▲</div>',
+                class_name="safe-support-div-icon",
+                icon_size=(34, 34),
+                icon_anchor=(17, 28),
+                popup_anchor=(0, -24),
+            ),
+        ).add_to(support_layer)
+    support_layer.add_to(map_object)
+    st.caption(
+        f"안전요소 3종 충족 200m 격자: {len(support_sites):,}곳 "
+        "(CCTV 100m·보행조명 50m·공공 Wi-Fi 기준)"
+    )
 
 folium.LayerControl(collapsed=False).add_to(map_object)
 
