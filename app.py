@@ -1090,7 +1090,7 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 st.caption(
-    "기본 화면에는 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
+    "기본 화면에는 붉게 강조한 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
     "CCTV·보행조명·Wi-Fi 원본은 지도 우측 목록에서 켤 수 있습니다."
 )
 
@@ -1126,7 +1126,7 @@ if safemap_service_key:
         overlay=True,
         control=True,
         show=True,
-        opacity=0.96,
+        opacity=0.92,
     ).add_to(map_object)
 
 add_boundary_layer(
@@ -1157,7 +1157,12 @@ map_object.get_root().html.add_child(
         }
         img.leaflet-tile[src*="safemap.go.kr"] {
             mix-blend-mode: screen !important;
-            filter: contrast(2.2) brightness(1.15);
+            filter:
+                contrast(2.8)
+                brightness(0.92)
+                sepia(1)
+                saturate(14)
+                hue-rotate(305deg);
         }
         .cctv-cluster {
             display: flex;
@@ -1377,17 +1382,14 @@ map_object.get_root().html.add_child(
             border: 2px solid #0284C7;
         }
         .risk-density-swatch {
-            background: #FFFFFF;
-            border: 2px solid #111827;
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.9),
-                        0 0 9px 4px rgba(255, 255, 255, 0.95);
+            background: #EF4444;
+            border: 2px solid #7F1D1D;
+            box-shadow: 0 0 0 3px rgba(254, 202, 202, 0.82),
+                        0 0 8px rgba(239, 68, 68, 0.88);
         }
         .safe-support-swatch {
-            width: 0;
-            height: 0;
-            border-left: 8px solid transparent;
-            border-right: 8px solid transparent;
-            border-bottom: 15px solid #16A34A;
+            flex: none;
+            overflow: visible;
             filter: drop-shadow(0 1px 1px rgba(20, 83, 45, 0.8));
         }
         .safe-support-div-icon {
@@ -1395,15 +1397,13 @@ map_object.get_root().html.add_child(
             border: 0 !important;
         }
         .safe-support-triangle {
-            color: #16A34A;
-            font: 900 32px/30px sans-serif;
-            text-align: center;
-            text-shadow:
-                -2px -2px 0 #FFFFFF,
-                 2px -2px 0 #FFFFFF,
-                -2px  2px 0 #FFFFFF,
-                 2px  2px 0 #FFFFFF,
-                 0  3px 5px rgba(20, 83, 45, 0.75);
+            width: 30px;
+            height: 28px;
+            filter: drop-shadow(0 2px 2px rgba(20, 83, 45, 0.65));
+        }
+        .safe-support-triangle svg {
+            display: block;
+            overflow: visible;
         }
         .map-color-legend-note {
             max-width: 190px;
@@ -1426,11 +1426,16 @@ if show_changwon_facilities:
                 <div class="map-color-legend-title">기본 분석 표시</div>
                 <div class="map-color-legend-row">
                     <span class="map-color-swatch risk-density-swatch"></span>
-                    <span>범죄위험 밀도 · 흰색</span>
+                    <span>범죄위험 밀도 · 붉은색 강조</span>
                 </div>
                 <div class="map-color-legend-row">
-                    <span class="safe-support-swatch"></span>
-                    <span>안전요소 3종 충족 · 초록 △</span>
+                    <svg class="safe-support-swatch" width="18" height="17"
+                         viewBox="0 0 18 17" aria-hidden="true">
+                        <polygon points="9,1 17,16 1,16" fill="none"
+                                 stroke="#16A34A" stroke-width="2.5"
+                                 stroke-linejoin="round"></polygon>
+                    </svg>
+                    <span>안전요소 3종 충족 · 초록 테두리 △</span>
                 </div>
                 <div class="map-color-legend-note">
                     원본 시설 아이콘은 우측 레이어 목록에서 켤 수 있습니다.
@@ -1634,7 +1639,20 @@ if support_sites:
             tooltip="안전요소 3종 충족 △",
             popup=folium.Popup(popup_html, max_width=320),
             icon=folium.DivIcon(
-                html='<div class="safe-support-triangle">▲</div>',
+                html=(
+                    '<div class="safe-support-triangle" '
+                    'aria-label="안전요소 3종 충족">'
+                    '<svg width="30" height="28" viewBox="0 0 30 28" '
+                    'aria-hidden="true">'
+                    '<polygon points="15,2 28,26 2,26" fill="none" '
+                    'stroke="#FFFFFF" stroke-width="6" '
+                    'stroke-linejoin="round"></polygon>'
+                    '<polygon points="15,2 28,26 2,26" '
+                    'fill="rgba(22, 163, 74, 0.04)" '
+                    'stroke="#16A34A" stroke-width="3" '
+                    'stroke-linejoin="round"></polygon>'
+                    '</svg></div>'
+                ),
                 class_name="safe-support-div-icon",
                 icon_size=(34, 34),
                 icon_anchor=(17, 28),
