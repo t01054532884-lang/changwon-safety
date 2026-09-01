@@ -1090,7 +1090,7 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 st.caption(
-    "기본 화면에는 붉게 강조한 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
+    "기본 화면에는 붉은 원형으로 강조한 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
     "CCTV·보행조명·Wi-Fi 원본은 지도 우측 목록에서 켤 수 있습니다."
 )
 
@@ -1155,33 +1155,45 @@ map_object.get_root().html.add_child(
              style="position:absolute;width:0;height:0;overflow:hidden">
             <defs>
                 <filter id="risk-red-emphasis"
+                        x="-40%" y="-40%" width="180%" height="180%"
                         color-interpolation-filters="sRGB">
-                    <feComponentTransfer>
-                        <feFuncR type="gamma" amplitude="1"
-                                 exponent="2.3" offset="0"></feFuncR>
-                        <feFuncG type="gamma" amplitude="1"
-                                 exponent="2.3" offset="0"></feFuncG>
-                        <feFuncB type="gamma" amplitude="1"
-                                 exponent="2.3" offset="0"></feFuncB>
+                    <feColorMatrix in="SourceGraphic"
+                                   type="luminanceToAlpha"
+                                   result="risk-luminance"></feColorMatrix>
+                    <feComponentTransfer in="risk-luminance"
+                                         result="risk-mask">
+                        <feFuncA type="table"
+                                 tableValues="0 0 0 0 0.08 0.28 0.55 0.78 0.92 1 1">
+                        </feFuncA>
                     </feComponentTransfer>
-                    <feColorMatrix type="matrix" values="
-                        1.40 1.40 1.40 0 0
-                        0.08 0.08 0.08 0 0
-                        0.06 0.06 0.06 0 0
-                        0    0    0    1 0">
-                    </feColorMatrix>
+                    <feMorphology in="risk-mask" operator="dilate"
+                                  radius="1.3" result="risk-core"></feMorphology>
+                    <feGaussianBlur in="risk-core" stdDeviation="2.2"
+                                    result="risk-glow-mask"></feGaussianBlur>
+                    <feFlood flood-color="#FF6B6B" flood-opacity="0.82"
+                             result="risk-glow-color"></feFlood>
+                    <feComposite in="risk-glow-color" in2="risk-glow-mask"
+                                 operator="in" result="risk-glow"></feComposite>
+                    <feFlood flood-color="#DC2626" flood-opacity="1"
+                             result="risk-core-color"></feFlood>
+                    <feComposite in="risk-core-color" in2="risk-core"
+                                 operator="in" result="risk-red-core"></feComposite>
+                    <feMerge>
+                        <feMergeNode in="risk-glow"></feMergeNode>
+                        <feMergeNode in="risk-red-core"></feMergeNode>
+                    </feMerge>
                 </filter>
             </defs>
         </svg>
         <style>
         .leaflet-layer:has(img.leaflet-tile[src*="safemap.go.kr"]) {
-            mix-blend-mode: screen !important;
+            mix-blend-mode: normal !important;
         }
         img.leaflet-tile[src*="safemap.go.kr"] {
             filter: sepia(1) saturate(18) hue-rotate(305deg)
                     contrast(2.1) brightness(1.08);
-            filter: url(#risk-red-emphasis)
-                    drop-shadow(0 0 2px rgba(239, 68, 68, 0.8));
+            filter: url(#risk-red-emphasis);
+            mix-blend-mode: normal !important;
         }
         .cctv-cluster {
             display: flex;
@@ -1445,7 +1457,7 @@ if show_changwon_facilities:
                 <div class="map-color-legend-title">기본 분석 표시</div>
                 <div class="map-color-legend-row">
                     <span class="map-color-swatch risk-density-swatch"></span>
-                    <span>범죄위험 밀도 · 붉은색 강조</span>
+                    <span>범죄위험 밀도 · 붉은 원·밀집</span>
                 </div>
                 <div class="map-color-legend-row">
                     <svg class="safe-support-swatch" width="18" height="17"
