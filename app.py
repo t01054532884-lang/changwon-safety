@@ -17,9 +17,17 @@ BASE_DIR = Path(__file__).resolve().parent
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.xlsx"
 WIFI_FILE = BASE_DIR / "data" / "wifi_data.csv"
 CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
-GIMHAE_BOUNDARY_FILE = BASE_DIR / "data" / "gimhae_boundary.geojson"
-TONGYEONG_BOUNDARY_FILE = BASE_DIR / "data" / "tongyeong_boundary.geojson"
+CHANGWON_DISTRICTS_BOUNDARY_FILE = (
+    BASE_DIR / "data" / "changwon_districts_boundary.geojson"
+)
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
+DISTRICT_COLORS = {
+    "의창구": "#2563EB",
+    "성산구": "#F59E0B",
+    "마산합포구": "#DC2626",
+    "마산회원구": "#16A34A",
+    "진해구": "#7C3AED",
+}
 SAFEMAP_RISK_PROFILES = {
     "여성 버전": {
         "title": "여성 밤길 치안안전",
@@ -1074,6 +1082,55 @@ def add_boundary_layer(
     return True
 
 
+def add_changwon_district_boundary_layer(
+    map_object: folium.Map,
+    file_path: Path,
+) -> bool:
+    """창원시 5개 구를 구별되는 색상의 행정경계로 표시합니다."""
+    if not file_path.exists():
+        return False
+
+    boundary_data = load_geojson(file_path)
+
+    def district_style(feature: dict) -> dict:
+        district_name = feature.get("properties", {}).get("name", "")
+        color = DISTRICT_COLORS.get(district_name, "#475569")
+        return {
+            "color": color,
+            "weight": 4,
+            "opacity": 0.96,
+            "fillColor": color,
+            "fillOpacity": 0.035,
+        }
+
+    def district_highlight(feature: dict) -> dict:
+        district_name = feature.get("properties", {}).get("name", "")
+        color = DISTRICT_COLORS.get(district_name, "#475569")
+        return {
+            "color": color,
+            "weight": 7,
+            "opacity": 1.0,
+            "fillOpacity": 0.10,
+        }
+
+    folium.GeoJson(
+        data=boundary_data,
+        name="창원시 5개 구 경계",
+        overlay=True,
+        control=True,
+        show=True,
+        style_function=district_style,
+        highlight_function=district_highlight,
+        tooltip=folium.GeoJsonTooltip(
+            fields=["name"],
+            aliases=["행정구:"],
+            labels=True,
+            sticky=False,
+        ),
+    ).add_to(map_object)
+    return True
+
+
 st.set_page_config(
     page_title="창원시 취약계층 안전 인프라 분석지도",
     layout="wide",
@@ -1110,27 +1167,12 @@ if not safemap_service_key:
         "`SAFEMAP_SERVICE_KEY`를 등록해 주세요."
     )
 
-map_views = {
-    "창원시 중심": {"location": [35.1800, 128.6200], "zoom": 10},
-    "김해시 중심": {"location": [35.2500, 128.8800], "zoom": 11},
-    "통영시 중심": {"location": [34.8500, 128.4300], "zoom": 10},
-    "세 도시 비교": {"location": [34.9000, 128.6000], "zoom": 8},
-}
-map_view_column, risk_profile_column = st.columns(2)
-with map_view_column:
-    selected_map_view = st.selectbox(
-        "지도 중심",
-        options=list(map_views),
-        index=0,
-    )
-with risk_profile_column:
-    selected_risk_profile = st.selectbox(
-        "안전 대상",
-        options=list(SAFEMAP_RISK_PROFILES),
-        index=0,
-        help="여성·노인·어린이 중 확인할 범죄위험 WMS를 선택합니다.",
-    )
-map_view = map_views[selected_map_view]
+selected_risk_profile = st.selectbox(
+    "안전 대상",
+    options=list(SAFEMAP_RISK_PROFILES),
+    index=0,
+    help="여성·노인·어린이 중 확인할 범죄위험 WMS를 선택합니다.",
+)
 risk_profile = SAFEMAP_RISK_PROFILES[selected_risk_profile]
 st.caption(
     f"현재 범죄위험 레이어: {risk_profile['title']} "
@@ -1152,19 +1194,19 @@ raw_facility_layers = st.multiselect(
 )
 
 map_object = folium.Map(
-    location=map_view["location"],
-    zoom_start=map_view["zoom"],
-    min_zoom=8,
-    min_lat=34.45,
-    max_lat=36.00,
-    min_lon=127.35,
-    max_lon=129.50,
+    location=[35.1800, 128.6200],
+    zoom_start=10,
+    min_zoom=9,
+    min_lat=34.75,
+    max_lat=35.55,
+    min_lon=128.10,
+    max_lon=129.00,
     max_bounds=True,
     tiles="OpenStreetMap",
     control_scale=True,
     prefer_canvas=True,
 )
-show_changwon_facilities = selected_map_view == "창원시 중심"
+show_changwon_facilities = True
 
 if safemap_service_key:
     encoded_safemap_key = quote(
@@ -1189,20 +1231,12 @@ if safemap_service_key:
 add_boundary_layer(
     map_object=map_object,
     file_path=CHANGWON_BOUNDARY_FILE,
-    layer_name="창원시 행정경계",
-    line_color="#7C3AED",
+    layer_name="창원시 외곽경계",
+    line_color="#312E81",
 )
-add_boundary_layer(
+add_changwon_district_boundary_layer(
     map_object=map_object,
-    file_path=GIMHAE_BOUNDARY_FILE,
-    layer_name="김해시 행정경계",
-    line_color="#16A34A",
-)
-add_boundary_layer(
-    map_object=map_object,
-    file_path=TONGYEONG_BOUNDARY_FILE,
-    layer_name="통영시 행정경계",
-    line_color="#DC2626",
+    file_path=CHANGWON_DISTRICTS_BOUNDARY_FILE,
 )
 
 map_object.get_root().html.add_child(
@@ -1501,6 +1535,33 @@ map_object.get_root().html.add_child(
             font-weight: 600;
             white-space: normal;
         }
+        .map-district-legend-title {
+            margin-top: 8px;
+            padding-top: 7px;
+            border-top: 1px solid #D1D5DB;
+            font-size: 12px;
+            font-weight: 800;
+        }
+        .map-district-legend {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4px 10px;
+            margin-top: 5px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+        .map-district-legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            white-space: nowrap;
+        }
+        .map-district-line {
+            width: 15px;
+            height: 0;
+            border-top: 4px solid;
+            border-radius: 2px;
+        }
         </style>
         """
     )
@@ -1524,6 +1585,29 @@ if show_changwon_facilities:
                                  stroke-linejoin="round"></polygon>
                     </svg>
                     <span>안전요소 3종 충족 · 초록 테두리 △</span>
+                </div>
+                <div class="map-district-legend-title">창원시 5개 구 경계</div>
+                <div class="map-district-legend">
+                    <div class="map-district-legend-item">
+                        <span class="map-district-line" style="border-color:#2563EB"></span>
+                        <span>의창구</span>
+                    </div>
+                    <div class="map-district-legend-item">
+                        <span class="map-district-line" style="border-color:#F59E0B"></span>
+                        <span>성산구</span>
+                    </div>
+                    <div class="map-district-legend-item">
+                        <span class="map-district-line" style="border-color:#DC2626"></span>
+                        <span>마산합포구</span>
+                    </div>
+                    <div class="map-district-legend-item">
+                        <span class="map-district-line" style="border-color:#16A34A"></span>
+                        <span>마산회원구</span>
+                    </div>
+                    <div class="map-district-legend-item">
+                        <span class="map-district-line" style="border-color:#7C3AED"></span>
+                        <span>진해구</span>
+                    </div>
                 </div>
                 <div class="map-color-legend-note">
                     원본 시설은 지도 위 선택 메뉴에서 필요한 종류만 불러옵니다.
@@ -1755,6 +1839,6 @@ st_folium(
     map_object,
     width=None,
     height=820,
-    key=f"changwon-safety-map-{selected_map_view}",
+    key=f"changwon-safety-map-{selected_risk_profile}",
     returned_objects=[],
 )
