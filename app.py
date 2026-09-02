@@ -76,7 +76,7 @@ class ThresholdLightLayer(Layer):
             function makeLightMarker(row) {
                 var marker = L.marker([row[0], row[1]], {
                     icon: lightIcon(),
-                    title: row[4] + ' ' + row[2]
+                    title: '보행조명 · ' + row[2]
                 });
 
                 marker.on('click', function() {
@@ -87,10 +87,13 @@ class ThresholdLightLayer(Layer):
                         popup.style.lineHeight = '1.55';
 
                         var fields = [
-                            [row[4], ''],
-                            ['관리번호: ', row[2]],
-                            ['주소: ', row[3]],
-                            ['제공 구: ', row[5]]
+                            ['보행조명', ''],
+                            ['제공 구: ', row[2]],
+                            [
+                                '좌표: ',
+                                row[0].toFixed(6) + ', ' +
+                                row[1].toFixed(6)
+                            ]
                         ];
 
                         fields.forEach(function(field, index) {
@@ -707,7 +710,7 @@ def get_safemap_service_key() -> str:
         return ""
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_cctv_data(file_path: Path) -> pd.DataFrame:
     """최신 CCTV 엑셀을 읽고 앱에서 사용할 열을 정리합니다."""
     dataframe = pd.read_excel(file_path, engine="openpyxl")
@@ -751,10 +754,21 @@ def load_cctv_data(file_path: Path) -> pd.DataFrame:
         dataframe["latitude"].between(34.8, 35.6)
         & dataframe["longitude"].between(128.1, 129.0)
     )
-    return dataframe.loc[valid_coordinates].copy()
+    return dataframe.loc[
+        valid_coordinates,
+        [
+            "latitude",
+            "longitude",
+            "camera_count",
+            "address",
+            "purpose",
+            "pixels",
+            "direction",
+        ],
+    ].copy()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_wifi_data(file_path: Path) -> pd.DataFrame:
     """공공 와이파이 CSV를 읽고 유효한 창원시 좌표만 반환합니다."""
     dataframe = pd.read_csv(file_path, encoding="cp949")
@@ -798,16 +812,29 @@ def load_wifi_data(file_path: Path) -> pd.DataFrame:
         dataframe["latitude"].between(34.8, 35.6)
         & dataframe["longitude"].between(128.1, 129.0)
     )
-    return dataframe.loc[valid_coordinates].copy()
+    return dataframe.loc[
+        valid_coordinates,
+        [
+            "latitude",
+            "longitude",
+            "address",
+            "place",
+            "detail",
+            "facility",
+            "provider",
+            "ssid",
+            "manager",
+        ],
+    ].copy()
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_geojson(file_path: Path) -> dict:
     """행정경계 GeoJSON을 읽습니다."""
     return json.loads(file_path.read_text(encoding="utf-8"))
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_resource(show_spinner=False)
 def load_pedestrian_light_data(
     file_path: Path,
     file_version: str,
@@ -816,10 +843,10 @@ def load_pedestrian_light_data(
     # 파일을 같은 이름으로 덮어써도 Streamlit이 예전 캐시를 쓰지 않도록
     # 크기와 수정 시각을 호출 인수에 포함합니다.
     del file_version
-    payload = json.loads(file_path.read_text(encoding="utf-8"))
+    source_payload = json.loads(file_path.read_text(encoding="utf-8"))
     records = []
 
-    for record in payload.get("records", []):
+    for record in source_payload.get("records", []):
         try:
             latitude = float(record["latitude"])
             longitude = float(record["longitude"])
@@ -829,10 +856,21 @@ def load_pedestrian_light_data(
         if not (34.8 <= latitude <= 35.6 and 128.1 <= longitude <= 129.0):
             continue
 
-        records.append(record)
+        # 분석과 지도 표시에 필요한 값만 메모리에 유지합니다. 주소·관리번호 등
+        # 긴 문자열 27,000여 건은 원본 JSON에 보존하되 앱 메모리에는 복제하지
+        # 않습니다.
+        records.append(
+            [
+                latitude,
+                longitude,
+                str(record.get("district") or "정보 없음"),
+            ]
+        )
 
-    payload["records"] = records
-    return payload
+    return {
+        "records": records,
+        "coverage": source_payload.get("coverage", []),
+    }
 
 
 def distance_in_meters(
@@ -911,7 +949,7 @@ def nearest_distance_in_buckets(
 
 def build_three_factor_support_sites(
     cctv_locations: pd.DataFrame,
-    pedestrian_lights: list[dict],
+    pedestrian_lights: list[list],
     wifi_locations: pd.DataFrame,
     cctv_radius: float = 100,
     light_radius: float = 50,
@@ -926,7 +964,7 @@ def build_three_factor_support_sites(
         for row in cctv_locations.itertuples(index=False)
     ]
     light_coordinates = [
-        (float(record["latitude"]), float(record["longitude"]))
+        (float(record[0]), float(record[1]))
         for record in pedestrian_lights
     ]
     cctv_buckets = build_coordinate_buckets(cctv_coordinates)
@@ -1100,7 +1138,17 @@ st.caption(
 )
 st.caption(
     "기본 화면에는 붉은 원형으로 강조한 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
-    "CCTV·보행조명·Wi-Fi 원본은 지도 우측 목록에서 켤 수 있습니다."
+    "원본 시설은 아래에서 필요한 종류만 불러오면 메모리 사용을 줄일 수 있습니다."
+)
+
+raw_facility_layers = st.multiselect(
+    "원본 시설 표시 (필요한 것만 선택)",
+    options=["CCTV", "보행조명", "공공 와이파이"],
+    default=[],
+    help=(
+        "선택한 원본 좌표만 지도에 전달합니다. 보행조명 27,000여 건을 "
+        "항상 전달하지 않아 Streamlit Community Cloud의 메모리를 절약합니다."
+    ),
 )
 
 map_object = folium.Map(
@@ -1478,7 +1526,7 @@ if show_changwon_facilities:
                     <span>안전요소 3종 충족 · 초록 테두리 △</span>
                 </div>
                 <div class="map-color-legend-note">
-                    원본 시설 아이콘은 우측 레이어 목록에서 켤 수 있습니다.
+                    원본 시설은 지도 위 선택 메뉴에서 필요한 종류만 불러옵니다.
                 </div>
             </div>
             """
@@ -1507,25 +1555,14 @@ if pedestrian_lights:
         "(차도 가로등 제외)"
     )
 
-    streetlight_markers = [
-        [
-            record["latitude"],
-            record["longitude"],
-            record.get("manage_no") or "정보 없음",
-            record.get("location") or "정보 없음",
-            record.get("light_type") or "보행조명",
-            record.get("district") or "",
-        ]
-        for record in pedestrian_lights
-    ]
-
-    ThresholdLightLayer(
-        data=streetlight_markers,
-        name="원본 보행조명(차도 가로등 제외)",
-        minimum_cluster_size=10,
-        cell_size=55,
-        show=False,
-    ).add_to(map_object)
+    if "보행조명" in raw_facility_layers:
+        ThresholdLightLayer(
+            data=pedestrian_lights,
+            name="원본 보행조명(차도 가로등 제외)",
+            minimum_cluster_size=10,
+            cell_size=55,
+            show=True,
+        ).add_to(map_object)
 
 wifi_data = pd.DataFrame()
 wifi_locations = pd.DataFrame()
@@ -1556,28 +1593,29 @@ if not wifi_data.empty:
             manager=("manager", combine_unique_text),
         )
     )
-    wifi_markers = [
-        [
-            row.latitude,
-            row.longitude,
-            int(row.wifi_count),
-            str(row.place),
-            str(row.detail),
-            str(row.facility),
-            str(row.ssid),
-            str(row.provider),
-            str(row.address),
-            str(row.manager),
+    if "공공 와이파이" in raw_facility_layers:
+        wifi_markers = [
+            [
+                row.latitude,
+                row.longitude,
+                int(row.wifi_count),
+                str(row.place),
+                str(row.detail),
+                str(row.facility),
+                str(row.ssid),
+                str(row.provider),
+                str(row.address),
+                str(row.manager),
+            ]
+            for row in wifi_locations.itertuples(index=False)
         ]
-        for row in wifi_locations.itertuples(index=False)
-    ]
-    ThresholdWifiLayer(
-        data=wifi_markers,
-        name="원본 공공 와이파이",
-        minimum_cluster_size=10,
-        cell_size=55,
-        show=False,
-    ).add_to(map_object)
+        ThresholdWifiLayer(
+            data=wifi_markers,
+            name="원본 공공 와이파이",
+            minimum_cluster_size=10,
+            cell_size=55,
+            show=True,
+        ).add_to(map_object)
 
 cctv_data = pd.DataFrame()
 cctv_locations = pd.DataFrame()
@@ -1621,35 +1659,36 @@ else:
         third_column.metric("보행조명 데이터", f"{len(pedestrian_lights):,}개")
         fourth_column.metric("Wi-Fi 데이터", f"{len(wifi_data):,}개")
 
-        coverage_points = cctv_locations[
-            ["latitude", "longitude"]
-        ].values.tolist()
-        VisibleCctvCoverageLayer(
-            data=coverage_points,
-            name="원본 CCTV 촬영범위 약 100m (확대 시)",
-            minimum_zoom=14,
-            show=False,
-        ).add_to(map_object)
+        if "CCTV" in raw_facility_layers:
+            coverage_points = cctv_locations[
+                ["latitude", "longitude"]
+            ].values.tolist()
+            VisibleCctvCoverageLayer(
+                data=coverage_points,
+                name="CCTV 촬영범위 약 100m (확대 시)",
+                minimum_zoom=14,
+                show=False,
+            ).add_to(map_object)
 
-        cctv_markers = [
-            [
-                row.latitude,
-                row.longitude,
-                int(row.camera_count),
-                str(row.address),
-                str(row.purpose),
-                str(row.pixels),
-                str(row.direction),
+            cctv_markers = [
+                [
+                    row.latitude,
+                    row.longitude,
+                    int(row.camera_count),
+                    str(row.address),
+                    str(row.purpose),
+                    str(row.pixels),
+                    str(row.direction),
+                ]
+                for row in cctv_locations.itertuples(index=False)
             ]
-            for row in cctv_locations.itertuples(index=False)
-        ]
-        ThresholdCctvLayer(
-            data=cctv_markers,
-            name="원본 방범용 CCTV",
-            minimum_cluster_size=10,
-            cell_size=55,
-            show=False,
-        ).add_to(map_object)
+            ThresholdCctvLayer(
+                data=cctv_markers,
+                name="원본 방범용 CCTV",
+                minimum_cluster_size=10,
+                cell_size=55,
+                show=True,
+            ).add_to(map_object)
 
 support_sites = build_three_factor_support_sites(
     cctv_locations=cctv_locations,
