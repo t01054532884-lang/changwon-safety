@@ -1248,14 +1248,31 @@ def risk_signal_for_grid(
         + 0.0722 * rgba[:, 2]
     ) / 255
     alpha = rgba[:, 3] / 255
-    signal = luminance * alpha
-    positive_signal = signal[signal > 0.01]
+    raw_signal = luminance * alpha
+
+    # 이 WMS는 투명한 무자료 대신 일정한 회색 배경을 사용하는 경우가 있다.
+    # 창원시 내부에서 가장 자주 나타나는 밝기를 배경으로 간주해 제거하지
+    # 않으면 산지와 해안까지 높은 위험등급으로 잘못 분류된다.
+    rounded_signal = np.round(raw_signal, 3)
+    unique_signal, signal_counts = np.unique(
+        rounded_signal,
+        return_counts=True,
+    )
+    background_signal = float(unique_signal[np.argmax(signal_counts)])
+    signal = np.maximum(0, raw_signal - background_signal)
+    positive = signal > 0.01
+    positive_signal = signal[positive]
     if len(positive_signal) < 20:
         raise ValueError("범죄위험 픽셀을 충분히 찾지 못했습니다.")
 
-    thresholds = np.quantile(positive_signal, [0.25, 0.5, 0.75])
+    # 픽셀 수가 많은 한 가지 색이 여러 분위수 경계를 차지하지 않도록
+    # 고유 강도값을 기준으로 상대 위험 단계를 나눈다.
+    unique_positive_signal = np.unique(np.round(positive_signal, 4))
+    thresholds = np.quantile(
+        unique_positive_signal,
+        [0.25, 0.5, 0.75],
+    )
     grades = np.ones(len(signal), dtype=np.uint8)
-    positive = signal > 0.01
     grades[positive] = (
         np.searchsorted(thresholds, signal[positive], side="right") + 2
     )
