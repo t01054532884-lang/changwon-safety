@@ -1571,8 +1571,8 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 st.caption(
-    "기본 화면에는 붉은 원형으로 강조한 범죄위험 밀도와 안전요소 3종 충족지점만 표시됩니다. "
-    "원본 시설은 아래에서 필요한 종류만 불러오면 메모리 사용을 줄일 수 있습니다."
+    "기본 화면에는 100m 추정 안전등급과 안전요소 3종 충족지점이 표시됩니다. "
+    "청록색 배경이 포함된 원본 범죄위험 레이어는 지도 메뉴에서 따로 켤 수 있습니다."
 )
 
 raw_facility_layers = st.multiselect(
@@ -1616,7 +1616,7 @@ if safemap_service_key:
         name=risk_profile["title"],
         overlay=True,
         control=True,
-        show=True,
+        show=False,
         opacity=0.92,
     ).add_to(map_object)
 
@@ -1981,10 +1981,10 @@ if show_changwon_facilities:
         folium.Element(
             """
             <div class="map-color-legend" aria-label="지도 표시 색상">
-                <div class="map-color-legend-title">기본 분석 표시</div>
+                <div class="map-color-legend-title">지도 분석 표시</div>
                 <div class="map-color-legend-row">
                     <span class="map-color-swatch risk-density-swatch"></span>
-                    <span>범죄위험 밀도 · 붉은 원·밀집</span>
+                    <span>원본 범죄위험 · 지도 메뉴에서 선택</span>
                 </div>
                 <div class="map-color-legend-row">
                     <svg class="safe-support-swatch" width="18" height="17"
