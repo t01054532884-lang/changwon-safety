@@ -28,11 +28,11 @@ PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 SAFETY_GRADE_COLORS = {
-    1: (153, 27, 27, 165),
-    2: (239, 68, 68, 150),
-    3: (250, 204, 21, 135),
-    4: (74, 222, 128, 125),
-    5: (22, 163, 74, 115),
+    1: (127, 29, 29, 225),
+    2: (239, 68, 68, 215),
+    3: (250, 204, 21, 200),
+    4: (74, 222, 128, 185),
+    5: (22, 163, 74, 170),
 }
 DISTRICT_COLORS = {
     "의창구": "#2563EB",
@@ -1876,6 +1876,23 @@ map_object.get_root().html.add_child(
             margin-top: 5px;
             white-space: nowrap;
         }
+        .safety-grade-gradient {
+            width: 72px;
+            height: 13px;
+            border: 1px solid rgba(17, 24, 39, 0.55);
+            border-radius: 2px;
+            background: linear-gradient(
+                90deg,
+                #7F1D1D 0%,
+                #EF4444 25%,
+                #FACC15 50%,
+                #4ADE80 75%,
+                #16A34A 100%
+            );
+        }
+        .leaflet-image-layer {
+            image-rendering: pixelated;
+        }
         .map-color-swatch {
             display: inline-block;
             width: 14px;
@@ -1977,6 +1994,10 @@ if show_changwon_facilities:
                                  stroke-linejoin="round"></polygon>
                     </svg>
                     <span>안전요소 3종 충족 · 초록 테두리 △</span>
+                </div>
+                <div class="map-color-legend-row">
+                    <span class="safety-grade-gradient"></span>
+                    <span>100m 안전등급 · 1 위험 → 5 안전</span>
                 </div>
                 <div class="map-district-legend-title">창원시 5개 구 경계</div>
                 <div class="map-district-legend">
@@ -2219,11 +2240,11 @@ if analysis_ready:
             image=safety_grade_overlay(safety_analysis, analysis_grid),
             bounds=analysis_grid["bounds"],
             name="100m 추정 안전등급 1~5",
-            opacity=0.58,
+            opacity=0.90,
             interactive=False,
             cross_origin=False,
-            zindex=2,
-            show=False,
+            zindex=10,
+            show=True,
         ).add_to(map_object)
 
         priority_layer = folium.FeatureGroup(
