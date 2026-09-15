@@ -50,7 +50,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   const districtColors={"의창구":"#2563EB","성산구":"#F59E0B","마산합포구":"#DC2626","마산회원구":"#16A34A","진해구":"#7C3AED"};
   const groups={};
   const facilityState={};
-  let map,infoWindow,naver;
+  let map,infoWindow,naver,initialized=false;
   const status=document.getElementById("map-status");
   const fail=(message)=>{status.style.display="none";const error=document.getElementById("map-error");error.innerHTML=message;error.style.display="flex"};
   const esc=(value)=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -76,11 +76,11 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
     groups.support=(DATA.supportSites||[]).map(supportMarker);if(groups.support.length)addControl("support","안전요소 3종 충족 △",true,v=>setObjects(groups.support,v));
     const labels={cctv:"원본 방범용 CCTV",light:"원본 보행조명",wifi:"원본 공공 Wi-Fi"};for(const kind of ["cctv","light","wifi"]){if((DATA.facilities[kind]||[]).length){facilityState[kind]=true;addControl(kind,labels[kind],true,v=>{facilityState[kind]=v;redrawFacility(kind)})}}
     if(DATA.route&&DATA.route.coordinates?.length){const path=DATA.route.coordinates.map(p=>new naver.maps.LatLng(p[0],p[1]));const route=new naver.maps.Polyline({map,path,strokeColor:"#2563EB",strokeWeight:8,strokeOpacity:.95,strokeLineCap:"round",strokeLineJoin:"round",clickable:true,zIndex:150});const start=new naver.maps.Marker({map,position:path[0],title:"출발 · "+DATA.route.startName,icon:{content:'<div class="start-pin">출</div>',size:new naver.maps.Size(34,34),anchor:new naver.maps.Point(17,17)},zIndex:170});const end=new naver.maps.Marker({map,position:path[path.length-1],title:"도착 · "+DATA.route.destinationName,icon:{content:'<div class="end-pin">도</div>',size:new naver.maps.Size(34,34),anchor:new naver.maps.Point(17,17)},zIndex:170});groups.route=[route,start,end];addControl("route","안전 추천 보행경로",true,v=>setObjects(groups.route,v));const routeBounds=new naver.maps.LatLngBounds();path.forEach(p=>routeBounds.extend(p));map.fitBounds(routeBounds,{top:70,right:45,bottom:70,left:45})}
-    let redrawTimer;const schedule=()=>{clearTimeout(redrawTimer);redrawTimer=setTimeout(redrawFacilities,180)};naver.maps.Event.addListener(map,"idle",schedule);redrawFacilities();status.style.display="none";
+    let redrawTimer;const schedule=()=>{clearTimeout(redrawTimer);redrawTimer=setTimeout(redrawFacilities,180)};naver.maps.Event.addListener(map,"idle",schedule);redrawFacilities();initialized=true;status.style.display="none";
     }catch(error){console.error(error);fail("네이버 지도 초기화 중 오류가 발생했습니다.<br><small>"+esc(error?.message||error)+"</small>")}
   }
   window.navermap_authFailure=()=>fail("네이버 지도 인증에 실패했습니다.<br>Web Dynamic Map 사용 설정과 허용 URL을 확인해 주세요.");
-  if(window.naver&&window.naver.maps){initNaverMap()}else{const script=document.createElement("script");script.src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=__CLIENT_ID__";script.async=true;script.onload=()=>{if(window.naver&&window.naver.maps)initNaverMap();else fail("네이버 지도 SDK 응답이 올바르지 않습니다.<br>Web Dynamic Map 사용 설정을 확인해 주세요.")};script.onerror=()=>fail("네이버 지도 SDK를 불러오지 못했습니다.<br>잠시 후 새로고침해 주세요.");document.head.appendChild(script);setTimeout(()=>{if(!(window.naver&&window.naver.maps))fail("네이버 지도 연결 시간이 초과되었습니다.<br>API의 Web 서비스 URL 등록 상태를 확인해 주세요.")},10000)}
+  if(window.naver&&window.naver.maps){initNaverMap()}else{const script=document.createElement("script");script.src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpClientId=__CLIENT_ID__";script.async=true;script.onload=()=>{if(window.naver&&window.naver.maps)initNaverMap();else fail("네이버 지도 SDK 응답이 올바르지 않습니다.<br>Web Dynamic Map 사용 설정을 확인해 주세요.")};script.onerror=()=>fail("네이버 지도 SDK를 불러오지 못했습니다.<br>잠시 후 새로고침해 주세요.");document.head.appendChild(script);setTimeout(()=>{if(!initialized)fail("네이버 지도 연결 시간이 초과되었습니다.<br>API의 Web 서비스 URL 등록 상태를 확인해 주세요.")},10000)}
   })();
 </script>
 """
