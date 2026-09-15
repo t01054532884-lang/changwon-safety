@@ -2422,7 +2422,7 @@ with st.form("night-walking-route-form"):
     route_submitted = st.form_submit_button(
         "안전 보행경로 찾기",
         type="primary",
-        use_container_width=True,
+        width="stretch",
     )
 
 if route_submitted:
@@ -2459,6 +2459,17 @@ if route_submitted:
 walking_route = st.session_state.get("walking_route")
 if walking_route:
     selected_route = walking_route["route"]
+    if not walking_route.get("calculated_at") or not walking_route.get(
+        "arrival_time"
+    ):
+        # 배포 전 세션에 저장된 경로에는 두 필드가 없을 수 있다.
+        # 기존 사용자가 새로고침했을 때 KeyError가 나지 않도록 보완한다.
+        route_reference_time = datetime.now(ZoneInfo("Asia/Seoul"))
+        walking_route["calculated_at"] = route_reference_time.strftime("%H:%M")
+        walking_route["arrival_time"] = (
+            route_reference_time
+            + timedelta(seconds=selected_route.get("duration", 0))
+        ).strftime("%H:%M")
     route_layer_name = "안전 추천 보행경로"
     route_layer = folium.FeatureGroup(
         name=route_layer_name,
@@ -2541,7 +2552,7 @@ if walking_route:
         "이 경로는 OpenStreetMap 보행로와 현재 시설자료를 이용한 참고용입니다. "
         "실제 보도·횡단보도·공사구간과 현장 안전상황을 반드시 확인하세요."
     )
-    if st.button("경로 지우기", use_container_width=True):
+    if st.button("경로 지우기", width="stretch"):
         st.session_state.pop("walking_route", None)
         st.rerun()
 
