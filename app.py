@@ -1400,18 +1400,85 @@ def route_support_count(route: dict, support_sites: list[dict]) -> int:
     )
 
 
+def sampled_route_points(
+    coordinates: list[list[float]],
+    interval_meters: float = 50,
+) -> list[list[float]]:
+    """긴 보행로 구간도 빠뜨리지 않도록 일정 간격으로 좌표를 보간합니다."""
+    if not coordinates:
+        return []
+    sampled = [coordinates[0]]
+    for start, end in zip(coordinates, coordinates[1:]):
+        segment_distance = distance_in_meters(
+            start[0], start[1], end[0], end[1]
+        )
+        step_count = max(1, math.ceil(segment_distance / interval_meters))
+        sampled.extend(
+            [
+                start[0] + (end[0] - start[0]) * step / step_count,
+                start[1] + (end[1] - start[1]) * step / step_count,
+            ]
+            for step in range(1, step_count + 1)
+        )
+    return sampled
+
+
+def route_risk_exposure(route: dict, risk_grid: dict | None) -> dict:
+    """경로가 원본 범죄위험 고밀도 100m 격자를 지나는 비율을 계산합니다."""
+    if not risk_grid:
+        return {"count": 0, "highest_count": 0, "percent": None}
+
+    grades = risk_grid["grades"]
+    minimum_latitude, minimum_longitude = risk_grid["bounds"][0]
+    maximum_latitude, _ = risk_grid["bounds"][1]
+    latitude_step = risk_grid["latitude_step"]
+    longitude_step = risk_grid["longitude_step"]
+    sampled_points = sampled_route_points(route["coordinates"])
+    high_risk_count = 0
+    highest_risk_count = 0
+    valid_count = 0
+    for latitude, longitude in sampled_points:
+        row = math.floor((maximum_latitude - latitude) / latitude_step)
+        column = math.floor((longitude - minimum_longitude) / longitude_step)
+        if 0 <= row < grades.shape[0] and 0 <= column < grades.shape[1]:
+            grade = int(grades[row, column])
+            if grade:
+                valid_count += 1
+                high_risk_count += int(grade >= 4)
+                highest_risk_count += int(grade >= 5)
+    return {
+        "count": high_risk_count,
+        "highest_count": highest_risk_count,
+        "percent": (
+            high_risk_count / valid_count * 100 if valid_count else None
+        ),
+    }
+
+
 def choose_pedestrian_route(
     routes: list[dict],
     support_sites: list[dict],
     night_mode: bool,
+    risk_grid: dict | None = None,
 ) -> dict:
-    """밤에는 과도한 우회 없이 안전요소가 많은 경로를 선택합니다."""
+    """밤에는 위험 격자를 피하면서 안전요소가 많은 경로를 선택합니다."""
     shortest_distance = min(route["distance"] for route in routes)
     candidates = [
         route for route in routes if route["distance"] <= shortest_distance * 1.35
     ]
     for route in candidates:
         route["support_count"] = route_support_count(route, support_sites)
+        route["risk_exposure"] = route_risk_exposure(route, risk_grid)
+    if night_mode and risk_grid:
+        return min(
+            candidates,
+            key=lambda route: (
+                route["risk_exposure"]["highest_count"] * 2
+                + route["risk_exposure"]["count"],
+                -route["support_count"],
+                route["distance"],
+            ),
+        )
     if night_mode and support_sites:
         return max(
             candidates,
@@ -2155,6 +2222,7 @@ else:
                 show=True,
             ).add_to(map_object)
 
+route_risk_grid = None
 risk_grid_ready = bool(safemap_service_key) and CHANGWON_BOUNDARY_FILE.exists()
 if risk_grid_ready:
     try:
@@ -2175,6 +2243,19 @@ if risk_grid_ready:
                 risk_image_bytes,
                 analysis_grid,
             )
+            grade_matrix = np.zeros(
+                analysis_grid["mask"].shape,
+                dtype=np.uint8,
+            )
+            grade_matrix[
+                analysis_grid["rows"], analysis_grid["columns"]
+            ] = risk_grades
+            route_risk_grid = {
+                "grades": grade_matrix,
+                "bounds": analysis_grid["bounds"],
+                "latitude_step": analysis_grid["latitude_step"],
+                "longitude_step": analysis_grid["longitude_step"],
+            }
 
         folium.raster_layers.ImageOverlay(
             image=high_risk_grid_overlay(risk_grades, analysis_grid),
@@ -2254,7 +2335,8 @@ if support_sites:
 st.subheader("밤길 안전 보행 길찾기")
 st.caption(
     "창원시 내 장소명이나 주소를 입력하세요. 오후 7시부터 오전 6시까지는 "
-    "과도하게 우회하지 않는 경로 중 안전요소 △가 많은 길을 우선 추천합니다."
+    "과도하게 우회하지 않는 경로 중 빨간 위험 격자를 덜 지나고 "
+    "안전요소 △가 많은 길을 우선 추천합니다."
 )
 with st.form("night-walking-route-form"):
     route_columns = st.columns(2)
@@ -2296,6 +2378,7 @@ if route_submitted:
                 route_candidates,
                 support_sites,
                 route_night_mode,
+                route_risk_grid,
             )
             st.session_state["walking_route"] = {
                 "start": route_start,
@@ -2366,7 +2449,7 @@ if walking_route:
         padding=(35, 35),
     )
 
-    route_metrics = st.columns(3)
+    route_metrics = st.columns(4)
     route_metrics[0].metric(
         "추천 경로",
         route_layer_name,
@@ -2380,11 +2463,16 @@ if walking_route:
         "경로 주변 안전 △",
         f'{selected_route.get("support_count", 0)}곳',
     )
+    risk_percent = selected_route.get("risk_exposure", {}).get("percent")
+    route_metrics[3].metric(
+        "고위험 격자 통과",
+        f"{risk_percent:.0f}%" if risk_percent is not None else "분석 대기",
+    )
     if walking_route["night_mode"]:
         st.success(
             f'{walking_route["departure_time"]} 밤길 모드 · '
             f'{walking_route["alternative_count"]}개 보행경로를 비교해 '
-            "안전요소가 많은 경로를 표시했습니다."
+            "고위험 격자를 덜 지나고 안전요소가 많은 경로를 표시했습니다."
         )
     else:
         st.info(
