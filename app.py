@@ -1,12 +1,13 @@
 import json
 import math
 import os
-from datetime import time
+from datetime import datetime, timedelta
 from io import BytesIO
 from html import escape
 from pathlib import Path
 from urllib.parse import quote, unquote, urlencode
 from urllib.request import Request, urlopen
+from zoneinfo import ZoneInfo
 
 import folium
 import numpy as np
@@ -2332,10 +2333,10 @@ if support_sites:
         "(CCTV 100m·보행조명 50m·공공 Wi-Fi 기준)"
     )
 
-st.subheader("밤길 안전 보행 길찾기")
+st.subheader("안전 보행 길찾기")
 st.caption(
-    "창원시 내 장소명이나 주소를 입력하세요. 오후 7시부터 오전 6시까지는 "
-    "과도하게 우회하지 않는 경로 중 빨간 위험 격자를 덜 지나고 "
+    "창원시 내 장소명이나 주소를 입력하세요. 가장 짧은 경로에서 "
+    "35% 이상 크게 우회하지 않으면서 빨간 위험 격자를 덜 지나고 "
     "안전요소 △가 많은 길을 우선 추천합니다."
 )
 with st.form("night-walking-route-form"):
@@ -2350,11 +2351,6 @@ with st.form("night-walking-route-form"):
             "도착지",
             placeholder="예: 창원대학교",
         )
-    departure_time = st.time_input(
-        "출발 시간",
-        value=time(19, 0),
-        step=900,
-    )
     route_submitted = st.form_submit_button(
         "안전 보행경로 찾기",
         type="primary",
@@ -2370,22 +2366,22 @@ if route_submitted:
                 route_start,
                 route_destination,
             )
-            route_night_mode = (
-                departure_time >= time(19, 0)
-                or departure_time < time(6, 0)
-            )
+            calculated_at = datetime.now(ZoneInfo("Asia/Seoul"))
             selected_route = choose_pedestrian_route(
                 route_candidates,
                 support_sites,
-                route_night_mode,
+                True,
                 route_risk_grid,
+            )
+            arrival_time = calculated_at + timedelta(
+                seconds=selected_route["duration"]
             )
             st.session_state["walking_route"] = {
                 "start": route_start,
                 "destination": route_destination,
                 "route": selected_route,
-                "night_mode": route_night_mode,
-                "departure_time": departure_time.strftime("%H:%M"),
+                "calculated_at": calculated_at.strftime("%H:%M"),
+                "arrival_time": arrival_time.strftime("%H:%M"),
                 "alternative_count": len(route_candidates),
             }
     except Exception as error:
@@ -2395,11 +2391,7 @@ if route_submitted:
 walking_route = st.session_state.get("walking_route")
 if walking_route:
     selected_route = walking_route["route"]
-    route_layer_name = (
-        "밤길 안전 추천 보행경로"
-        if walking_route["night_mode"]
-        else "보행 최단경로"
-    )
+    route_layer_name = "안전 추천 보행경로"
     route_layer = folium.FeatureGroup(
         name=route_layer_name,
         overlay=True,
@@ -2449,7 +2441,7 @@ if walking_route:
         padding=(35, 35),
     )
 
-    route_metrics = st.columns(4)
+    route_metrics = st.columns(5)
     route_metrics[0].metric(
         "추천 경로",
         route_layer_name,
@@ -2460,25 +2452,23 @@ if walking_route:
         f'{max(1, round(selected_route["duration"] / 60))}분',
     )
     route_metrics[2].metric(
+        "예상 도착",
+        walking_route["arrival_time"],
+    )
+    route_metrics[3].metric(
         "경로 주변 안전 △",
         f'{selected_route.get("support_count", 0)}곳',
     )
     risk_percent = selected_route.get("risk_exposure", {}).get("percent")
-    route_metrics[3].metric(
+    route_metrics[4].metric(
         "고위험 격자 통과",
         f"{risk_percent:.0f}%" if risk_percent is not None else "분석 대기",
     )
-    if walking_route["night_mode"]:
-        st.success(
-            f'{walking_route["departure_time"]} 밤길 모드 · '
-            f'{walking_route["alternative_count"]}개 보행경로를 비교해 '
-            "고위험 격자를 덜 지나고 안전요소가 많은 경로를 표시했습니다."
-        )
-    else:
-        st.info(
-            f'{walking_route["departure_time"]} 주간 모드 · '
-            "가장 짧은 보행경로를 표시했습니다."
-        )
+    st.success(
+        f'{walking_route["calculated_at"]} 출발 기준 · '
+        f'{walking_route["alternative_count"]}개 보행경로를 비교해 '
+        "고위험 격자를 덜 지나고 안전요소가 많은 경로를 표시했습니다."
+    )
     st.caption(
         "이 경로는 OpenStreetMap 보행로와 현재 시설자료를 이용한 참고용입니다. "
         "실제 보도·횡단보도·공사구간과 현장 안전상황을 반드시 확인하세요."
@@ -2493,6 +2483,6 @@ st_folium(
     map_object,
     width=None,
     height=820,
-    key=f"changwon-night-route-v1-{selected_risk_profile}",
+    key=f"changwon-safe-route-v2-{selected_risk_profile}",
     returned_objects=[],
 )
