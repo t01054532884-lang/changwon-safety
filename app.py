@@ -28,11 +28,11 @@ PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 SAFETY_GRADE_COLORS = {
-    1: (127, 29, 29, 225),
-    2: (239, 68, 68, 215),
-    3: (250, 204, 21, 200),
-    4: (74, 222, 128, 100),
-    5: (22, 163, 74, 60),
+    1: (185, 28, 28, 210),
+    2: (234, 88, 12, 210),
+    3: (234, 179, 8, 210),
+    4: (101, 163, 13, 210),
+    5: (21, 128, 61, 210),
 }
 DISTRICT_COLORS = {
     "의창구": "#2563EB",
