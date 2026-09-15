@@ -13,6 +13,7 @@ import folium
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from folium.map import Layer
 from jinja2 import Template
 from naver_map import build_naver_map_html, png_data_url
@@ -2676,10 +2677,10 @@ if naver_map_client_id:
         "facilities": naver_facilities,
         "route": naver_route,
     }
-    st.html(
+    components.html(
         build_naver_map_html(naver_map_client_id, naver_payload),
-        width="stretch",
-        unsafe_allow_javascript=True,
+        height=820,
+        scrolling=False,
     )
     st.caption(
         "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "
