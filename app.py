@@ -15,6 +15,7 @@ import pandas as pd
 import streamlit as st
 from folium.map import Layer
 from jinja2 import Template
+from naver_map import build_naver_map_html, png_data_url
 from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
@@ -724,6 +725,18 @@ def get_safemap_service_key() -> str:
         return ""
 
 
+def get_naver_map_client_id() -> str:
+    """환경 변수나 Streamlit Secrets에서 NAVER 지도 Client ID를 읽습니다."""
+    environment_key = os.environ.get("NAVER_MAP_CLIENT_ID", "").strip()
+    if environment_key:
+        return environment_key
+
+    try:
+        return str(st.secrets.get("NAVER_MAP_CLIENT_ID", "")).strip()
+    except Exception:
+        return ""
+
+
 @st.cache_resource(show_spinner=False)
 def load_cctv_data(file_path: Path) -> pd.DataFrame:
     """최신 CCTV 엑셀을 읽고 앱에서 사용할 열을 정리합니다."""
@@ -1292,6 +1305,39 @@ def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
     return overlay
 
 
+def red_risk_density_image(image_bytes: bytes) -> bytes:
+    """생활안전지도 WMS 밝기를 투명한 빨간 위험 밀도 PNG로 바꿉니다."""
+    pixels = np.asarray(
+        Image.open(BytesIO(image_bytes)).convert("RGBA"),
+        dtype=np.float32,
+    )
+    luminance = (
+        0.2126 * pixels[:, :, 0]
+        + 0.7152 * pixels[:, :, 1]
+        + 0.0722 * pixels[:, :, 2]
+    ) / 255
+    raw_signal = luminance * (pixels[:, :, 3] / 255)
+    rounded_signal = np.round(raw_signal, 3)
+    unique_signal, signal_counts = np.unique(
+        rounded_signal,
+        return_counts=True,
+    )
+    background = float(unique_signal[np.argmax(signal_counts)])
+    signal = np.maximum(0, raw_signal - background)
+    positive = signal[signal > 0.01]
+    scale = float(np.quantile(positive, 0.97)) if positive.size else 1
+    intensity = np.clip(signal / max(scale, 0.01), 0, 1)
+    alpha = np.where(intensity > 0.03, 45 + intensity * 200, 0)
+    overlay = np.zeros((*signal.shape, 4), dtype=np.uint8)
+    overlay[:, :, 0] = 220
+    overlay[:, :, 1] = np.where(intensity > 0.65, 38, 82).astype(np.uint8)
+    overlay[:, :, 2] = np.where(intensity > 0.65, 38, 82).astype(np.uint8)
+    overlay[:, :, 3] = alpha.astype(np.uint8)
+    output = BytesIO()
+    Image.fromarray(overlay, mode="RGBA").save(output, format="PNG")
+    return output.getvalue()
+
+
 @st.cache_data(ttl=86_400, show_spinner=False)
 def geocode_changwon(place: str) -> dict:
     """창원시 안의 장소명이나 주소를 보행 길찾기 좌표로 변환합니다."""
@@ -1675,10 +1721,16 @@ st.write(
 )
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
 safemap_service_key = get_safemap_service_key()
+naver_map_client_id = get_naver_map_client_id()
 if not safemap_service_key:
     st.info(
         "범죄주의구간 WMS 레이어를 사용하려면 Streamlit Secrets에 "
         "`SAFEMAP_SERVICE_KEY`를 등록해 주세요."
+    )
+if not naver_map_client_id:
+    st.info(
+        "네이버 지도 배경을 사용하려면 Streamlit Secrets에 "
+        "`NAVER_MAP_CLIENT_ID`를 등록해 주세요. 현재는 OpenStreetMap을 표시합니다."
     )
 
 selected_risk_profile = st.selectbox(
@@ -2292,6 +2344,8 @@ else:
             ).add_to(map_object)
 
 route_risk_grid = None
+risk_density_image_bytes = None
+risk_grid_image_bytes = None
 risk_grid_ready = bool(safemap_service_key) and CHANGWON_BOUNDARY_FILE.exists()
 if risk_grid_ready:
     try:
@@ -2325,6 +2379,13 @@ if risk_grid_ready:
                 "latitude_step": analysis_grid["latitude_step"],
                 "longitude_step": analysis_grid["longitude_step"],
             }
+            risk_density_image_bytes = red_risk_density_image(risk_image_bytes)
+            risk_grid_buffer = BytesIO()
+            Image.fromarray(
+                high_risk_grid_overlay(risk_grades, analysis_grid),
+                mode="RGBA",
+            ).save(risk_grid_buffer, format="PNG")
+            risk_grid_image_bytes = risk_grid_buffer.getvalue()
 
         folium.raster_layers.ImageOverlay(
             image=high_risk_grid_overlay(risk_grades, analysis_grid),
@@ -2558,10 +2619,77 @@ if walking_route:
 
 folium.LayerControl(collapsed=False).add_to(map_object)
 
-st_folium(
-    map_object,
-    width=None,
-    height=820,
-    key=f"changwon-safe-route-v2-{selected_risk_profile}",
-    returned_objects=[],
-)
+if naver_map_client_id:
+    naver_support_sites = [
+        {
+            "lat": float(site["latitude"]),
+            "lng": float(site["longitude"]),
+            "cctvDistance": float(site["cctv_distance"]),
+            "lightDistance": float(site["light_distance"]),
+            "place": str(site["wifi_place"]),
+            "address": str(site["wifi_address"]),
+        }
+        for site in support_sites
+    ]
+    naver_facilities = {"cctv": [], "light": [], "wifi": []}
+    if "CCTV" in raw_facility_layers and not cctv_locations.empty:
+        naver_facilities["cctv"] = [
+            [float(row.latitude), float(row.longitude), str(row.address)]
+            for row in cctv_locations.itertuples(index=False)
+        ]
+    if "보행조명" in raw_facility_layers:
+        naver_facilities["light"] = [
+            [float(record[0]), float(record[1]), f"{record[2]} 보행조명"]
+            for record in pedestrian_lights
+        ]
+    if "공공 와이파이" in raw_facility_layers and not wifi_locations.empty:
+        naver_facilities["wifi"] = [
+            [float(row.latitude), float(row.longitude), str(row.place)]
+            for row in wifi_locations.itertuples(index=False)
+        ]
+
+    naver_route = None
+    if walking_route:
+        naver_route = {
+            "coordinates": selected_route["coordinates"],
+            "startName": walking_route["start"]["name"],
+            "destinationName": walking_route["destination"]["name"],
+        }
+
+    naver_payload = {
+        "outerBoundary": (
+            load_geojson(CHANGWON_BOUNDARY_FILE)
+            if CHANGWON_BOUNDARY_FILE.exists()
+            else None
+        ),
+        "districtBoundary": (
+            load_geojson(CHANGWON_DISTRICTS_BOUNDARY_FILE)
+            if CHANGWON_DISTRICTS_BOUNDARY_FILE.exists()
+            else None
+        ),
+        "riskImage": png_data_url(risk_density_image_bytes),
+        "riskGridImage": png_data_url(risk_grid_image_bytes),
+        "riskBounds": (
+            route_risk_grid["bounds"] if route_risk_grid else None
+        ),
+        "supportSites": naver_support_sites,
+        "facilities": naver_facilities,
+        "route": naver_route,
+    }
+    st.iframe(
+        build_naver_map_html(naver_map_client_id, naver_payload),
+        width="stretch",
+        height=820,
+    )
+    st.caption(
+        "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "
+        "본 서비스의 창원시 분석 데이터입니다."
+    )
+else:
+    st_folium(
+        map_object,
+        width=None,
+        height=820,
+        key=f"changwon-safe-route-v2-{selected_risk_profile}",
+        returned_objects=[],
+    )
