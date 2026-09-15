@@ -1376,8 +1376,15 @@ def build_safety_analysis(
     risk_scores = (risk_grades.astype(float) - 1) * 25
     priority_scores = 0.65 * risk_scores + 0.35 * (100 - protection_scores)
     safety_scores = 100 - priority_scores
+    # 절대 점수 구간으로 나누면 대부분의 격자가 4~5등급에 몰려 지도가
+    # 초록색 한 가지처럼 보인다. 창원시 내부의 상대 순위를 5분위로 나눠
+    # 위험 지역부터 안전 지역까지 다섯 색이 실제로 구분되게 한다.
+    safety_percentiles = pd.Series(safety_scores).rank(
+        method="average",
+        pct=True,
+    ).to_numpy()
     safety_grades = np.clip(
-        np.floor(safety_scores / 20).astype(int) + 1,
+        np.ceil(safety_percentiles * 5).astype(int),
         1,
         5,
     )
@@ -1571,8 +1578,8 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 st.caption(
-    "기본 화면에는 100m 추정 안전등급과 안전요소 3종 충족지점이 표시됩니다. "
-    "청록색 배경이 포함된 원본 범죄위험 레이어는 지도 메뉴에서 따로 켤 수 있습니다."
+    "기본 화면에는 원본 범죄위험, 100m 상대 안전등급, "
+    "우선개선 위험 Top 10과 안전요소 3종 충족지점이 표시됩니다."
 )
 
 raw_facility_layers = st.multiselect(
@@ -1616,7 +1623,7 @@ if safemap_service_key:
         name=risk_profile["title"],
         overlay=True,
         control=True,
-        show=False,
+        show=True,
         opacity=0.92,
     ).add_to(map_object)
 
@@ -1886,8 +1893,8 @@ map_object.get_root().html.add_child(
                 #7F1D1D 0%,
                 #EF4444 25%,
                 #FACC15 50%,
-                rgba(74, 222, 128, 0.55) 75%,
-                rgba(22, 163, 74, 0.30) 100%
+                #65A30D 75%,
+                #15803D 100%
             );
         }
         .leaflet-image-layer {
@@ -1984,7 +1991,7 @@ if show_changwon_facilities:
                 <div class="map-color-legend-title">지도 분석 표시</div>
                 <div class="map-color-legend-row">
                     <span class="map-color-swatch risk-density-swatch"></span>
-                    <span>원본 범죄위험 · 지도 메뉴에서 선택</span>
+                    <span>원본 범죄위험 · 기본 표시</span>
                 </div>
                 <div class="map-color-legend-row">
                     <svg class="safe-support-swatch" width="18" height="17"
@@ -1997,7 +2004,7 @@ if show_changwon_facilities:
                 </div>
                 <div class="map-color-legend-row">
                     <span class="safety-grade-gradient"></span>
-                    <span>100m 안전등급 · 1 위험 → 5 안전</span>
+                    <span>100m 상대 안전등급 · 1 위험 → 5 안전</span>
                 </div>
                 <div class="map-district-legend-title">창원시 5개 구 경계</div>
                 <div class="map-district-legend">
@@ -2415,6 +2422,6 @@ st_folium(
     map_object,
     width=None,
     height=820,
-    key=f"changwon-safety-map-{selected_risk_profile}",
+    key=f"changwon-safety-map-grade-v2-{selected_risk_profile}",
     returned_objects=[],
 )
