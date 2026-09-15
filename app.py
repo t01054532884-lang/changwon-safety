@@ -1,11 +1,12 @@
 import json
 import math
 import os
+from datetime import time
 from io import BytesIO
 from html import escape
 from pathlib import Path
 from urllib.parse import quote, unquote, urlencode
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import folium
 import numpy as np
@@ -27,6 +28,10 @@ CHANGWON_DISTRICTS_BOUNDARY_FILE = (
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
+CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
+PEDESTRIAN_ROUTER_URL = (
+    "https://routing.openstreetmap.de/routed-foot/route/v1/driving"
+)
 DISTRICT_COLORS = {
     "의창구": "#2563EB",
     "성산구": "#F59E0B",
@@ -1286,6 +1291,135 @@ def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
     return overlay
 
 
+@st.cache_data(ttl=86_400, show_spinner=False)
+def geocode_changwon(place: str) -> dict:
+    """창원시 안의 장소명이나 주소를 보행 길찾기 좌표로 변환합니다."""
+    query = place.strip()
+    if not query:
+        raise ValueError("출발지와 도착지를 모두 입력해 주세요.")
+
+    try:
+        latitude_text, longitude_text = [
+            value.strip() for value in query.split(",", maxsplit=1)
+        ]
+        latitude = float(latitude_text)
+        longitude = float(longitude_text)
+        minimum_latitude, minimum_longitude, maximum_latitude, maximum_longitude = (
+            CHANGWON_BOUNDS
+        )
+        if (
+            minimum_latitude <= latitude <= maximum_latitude
+            and minimum_longitude <= longitude <= maximum_longitude
+        ):
+            return {
+                "latitude": latitude,
+                "longitude": longitude,
+                "name": query,
+            }
+    except (ValueError, TypeError):
+        pass
+
+    parameters = urlencode(
+        {
+            "format": "jsonv2",
+            "countrycodes": "kr",
+            "limit": 1,
+            "bounded": 1,
+            "viewbox": "128.10,35.55,129.00,34.75",
+            "q": f"창원시 {query}",
+        }
+    )
+    request = Request(
+        f"https://nominatim.openstreetmap.org/search?{parameters}",
+        headers={"User-Agent": "changwon-night-safety-map/1.0"},
+    )
+    with urlopen(request, timeout=20) as response:
+        results = json.loads(response.read().decode("utf-8"))
+    if not results:
+        raise ValueError(f"창원시에서 '{query}' 위치를 찾지 못했습니다.")
+    return {
+        "latitude": float(results[0]["lat"]),
+        "longitude": float(results[0]["lon"]),
+        "name": str(results[0]["display_name"]).split(", 대한민국")[0],
+    }
+
+
+@st.cache_data(ttl=3_600, show_spinner=False)
+def fetch_pedestrian_routes(start: dict, destination: dict) -> list[dict]:
+    """OpenStreetMap 보행 네트워크에서 최대 3개 대안 경로를 가져옵니다."""
+    coordinates = (
+        f'{start["longitude"]},{start["latitude"]};'
+        f'{destination["longitude"]},{destination["latitude"]}'
+    )
+    parameters = urlencode(
+        {
+            "overview": "full",
+            "geometries": "geojson",
+            "steps": "true",
+            "alternatives": "3",
+        }
+    )
+    request = Request(
+        f"{PEDESTRIAN_ROUTER_URL}/{coordinates}?{parameters}",
+        headers={"User-Agent": "changwon-night-safety-map/1.0"},
+    )
+    with urlopen(request, timeout=30) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    if payload.get("code") != "Ok" or not payload.get("routes"):
+        raise ValueError("보행 가능한 경로를 찾지 못했습니다.")
+
+    return [
+        {
+            "coordinates": [
+                [float(latitude), float(longitude)]
+                for longitude, latitude in route["geometry"]["coordinates"]
+            ],
+            "distance": float(route["distance"]),
+            "duration": float(route["duration"]),
+        }
+        for route in payload["routes"][:3]
+    ]
+
+
+def route_support_count(route: dict, support_sites: list[dict]) -> int:
+    """보행경로 120m 안에 있는 안전요소 삼각형 수를 계산합니다."""
+    route_points = route["coordinates"]
+    return sum(
+        1
+        for site in support_sites
+        if min(
+            distance_in_meters(
+                site["latitude"],
+                site["longitude"],
+                point[0],
+                point[1],
+            )
+            for point in route_points
+        )
+        <= 120
+    )
+
+
+def choose_pedestrian_route(
+    routes: list[dict],
+    support_sites: list[dict],
+    night_mode: bool,
+) -> dict:
+    """밤에는 과도한 우회 없이 안전요소가 많은 경로를 선택합니다."""
+    shortest_distance = min(route["distance"] for route in routes)
+    candidates = [
+        route for route in routes if route["distance"] <= shortest_distance * 1.35
+    ]
+    for route in candidates:
+        route["support_count"] = route_support_count(route, support_sites)
+    if night_mode and support_sites:
+        return max(
+            candidates,
+            key=lambda route: (route["support_count"], -route["distance"]),
+        )
+    return min(candidates, key=lambda route: route["distance"])
+
+
 def add_boundary_layer(
     map_object: folium.Map,
     file_path: Path,
@@ -2117,12 +2251,160 @@ if support_sites:
         "(CCTV 100m·보행조명 50m·공공 Wi-Fi 기준)"
     )
 
+st.subheader("밤길 안전 보행 길찾기")
+st.caption(
+    "창원시 내 장소명이나 주소를 입력하세요. 오후 7시부터 오전 6시까지는 "
+    "과도하게 우회하지 않는 경로 중 안전요소 △가 많은 길을 우선 추천합니다."
+)
+with st.form("night-walking-route-form"):
+    route_columns = st.columns(2)
+    with route_columns[0]:
+        start_query = st.text_input(
+            "출발지",
+            placeholder="예: 창원시청",
+        )
+    with route_columns[1]:
+        destination_query = st.text_input(
+            "도착지",
+            placeholder="예: 창원대학교",
+        )
+    departure_time = st.time_input(
+        "출발 시간",
+        value=time(19, 0),
+        step=900,
+    )
+    route_submitted = st.form_submit_button(
+        "안전 보행경로 찾기",
+        type="primary",
+        use_container_width=True,
+    )
+
+if route_submitted:
+    try:
+        with st.spinner("보행로와 주변 안전요소를 비교하고 있습니다..."):
+            route_start = geocode_changwon(start_query)
+            route_destination = geocode_changwon(destination_query)
+            route_candidates = fetch_pedestrian_routes(
+                route_start,
+                route_destination,
+            )
+            route_night_mode = (
+                departure_time >= time(19, 0)
+                or departure_time < time(6, 0)
+            )
+            selected_route = choose_pedestrian_route(
+                route_candidates,
+                support_sites,
+                route_night_mode,
+            )
+            st.session_state["walking_route"] = {
+                "start": route_start,
+                "destination": route_destination,
+                "route": selected_route,
+                "night_mode": route_night_mode,
+                "departure_time": departure_time.strftime("%H:%M"),
+                "alternative_count": len(route_candidates),
+            }
+    except Exception as error:
+        st.session_state.pop("walking_route", None)
+        st.error(f"보행경로를 만들지 못했습니다. {error}")
+
+walking_route = st.session_state.get("walking_route")
+if walking_route:
+    selected_route = walking_route["route"]
+    route_layer_name = (
+        "밤길 안전 추천 보행경로"
+        if walking_route["night_mode"]
+        else "보행 최단경로"
+    )
+    route_layer = folium.FeatureGroup(
+        name=route_layer_name,
+        overlay=True,
+        control=True,
+        show=True,
+    )
+    folium.PolyLine(
+        selected_route["coordinates"],
+        color="#2563EB",
+        weight=8,
+        opacity=0.95,
+        tooltip=route_layer_name,
+    ).add_to(route_layer)
+    folium.CircleMarker(
+        location=[
+            walking_route["start"]["latitude"],
+            walking_route["start"]["longitude"],
+        ],
+        radius=8,
+        color="#FFFFFF",
+        weight=3,
+        fill=True,
+        fill_color="#2563EB",
+        fill_opacity=1,
+        tooltip=f'출발 · {walking_route["start"]["name"]}',
+    ).add_to(route_layer)
+    folium.Marker(
+        location=[
+            walking_route["destination"]["latitude"],
+            walking_route["destination"]["longitude"],
+        ],
+        tooltip=f'도착 · {walking_route["destination"]["name"]}',
+        icon=folium.Icon(color="red", icon="flag"),
+    ).add_to(route_layer)
+    route_layer.add_to(map_object)
+    map_object.fit_bounds(
+        [
+            [
+                walking_route["start"]["latitude"],
+                walking_route["start"]["longitude"],
+            ],
+            [
+                walking_route["destination"]["latitude"],
+                walking_route["destination"]["longitude"],
+            ],
+        ],
+        padding=(35, 35),
+    )
+
+    route_metrics = st.columns(3)
+    route_metrics[0].metric(
+        "추천 경로",
+        route_layer_name,
+    )
+    route_metrics[1].metric(
+        "거리·예상시간",
+        f'{selected_route["distance"] / 1000:.1f}km · '
+        f'{max(1, round(selected_route["duration"] / 60))}분',
+    )
+    route_metrics[2].metric(
+        "경로 주변 안전 △",
+        f'{selected_route.get("support_count", 0)}곳',
+    )
+    if walking_route["night_mode"]:
+        st.success(
+            f'{walking_route["departure_time"]} 밤길 모드 · '
+            f'{walking_route["alternative_count"]}개 보행경로를 비교해 '
+            "안전요소가 많은 경로를 표시했습니다."
+        )
+    else:
+        st.info(
+            f'{walking_route["departure_time"]} 주간 모드 · '
+            "가장 짧은 보행경로를 표시했습니다."
+        )
+    st.caption(
+        "이 경로는 OpenStreetMap 보행로와 현재 시설자료를 이용한 참고용입니다. "
+        "실제 보도·횡단보도·공사구간과 현장 안전상황을 반드시 확인하세요."
+    )
+    if st.button("경로 지우기", use_container_width=True):
+        st.session_state.pop("walking_route", None)
+        st.rerun()
+
 folium.LayerControl(collapsed=False).add_to(map_object)
 
 st_folium(
     map_object,
     width=None,
     height=820,
-    key=f"changwon-safety-map-risk-grid-v3-{selected_risk_profile}",
+    key=f"changwon-night-route-v1-{selected_risk_profile}",
     returned_objects=[],
 )

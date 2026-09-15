@@ -11,3 +11,4 @@ changwon_map.html
 *.bak
 __pycache__/
 *.py[cod]
+.venv/
