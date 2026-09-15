@@ -1330,18 +1330,86 @@ def geocode_changwon(place: str) -> dict:
             "q": f"창원시 {query}",
         }
     )
-    request = Request(
-        f"https://nominatim.openstreetmap.org/search?{parameters}",
+    try:
+        request = Request(
+            f"https://nominatim.openstreetmap.org/search?{parameters}",
+            headers={"User-Agent": "changwon-night-safety-map/1.0"},
+        )
+        with urlopen(request, timeout=20) as response:
+            results = json.loads(response.read().decode("utf-8"))
+        if results:
+            return {
+                "latitude": float(results[0]["lat"]),
+                "longitude": float(results[0]["lon"]),
+                "name": str(results[0]["display_name"]).split(
+                    ", 대한민국"
+                )[0],
+            }
+    except Exception:
+        # Streamlit Cloud의 공용 IP가 Nominatim 호출 제한(HTTP 429)에
+        # 걸릴 수 있어 동일 OSM 데이터를 사용하는 Photon으로 재시도한다.
+        pass
+
+    photon_parameters = urlencode(
+        {
+            "q": f"창원시 {query}",
+            "limit": 10,
+            "lat": 35.23,
+            "lon": 128.68,
+        }
+    )
+    photon_request = Request(
+        f"https://photon.komoot.io/api/?{photon_parameters}",
         headers={"User-Agent": "changwon-night-safety-map/1.0"},
     )
-    with urlopen(request, timeout=20) as response:
-        results = json.loads(response.read().decode("utf-8"))
-    if not results:
+    try:
+        with urlopen(photon_request, timeout=20) as response:
+            photon_results = json.loads(response.read().decode("utf-8"))
+    except Exception as error:
+        raise ValueError(
+            "장소검색 서버가 잠시 혼잡합니다. 잠시 후 다시 시도해 주세요."
+        ) from error
+
+    minimum_latitude, minimum_longitude, maximum_latitude, maximum_longitude = (
+        CHANGWON_BOUNDS
+    )
+    candidates = []
+    normalized_query = query.replace(" ", "")
+    for feature in photon_results.get("features", []):
+        properties = feature.get("properties", {})
+        coordinates = feature.get("geometry", {}).get("coordinates", [])
+        if len(coordinates) < 2:
+            continue
+        longitude, latitude = map(float, coordinates[:2])
+        if not (
+            minimum_latitude <= latitude <= maximum_latitude
+            and minimum_longitude <= longitude <= maximum_longitude
+        ):
+            continue
+        candidate_name = str(properties.get("name") or query)
+        candidate_city = str(properties.get("city") or "")
+        score = 0
+        score += 10 if candidate_name.replace(" ", "") == normalized_query else 0
+        score += 5 if "창원" in candidate_city else 0
+        score += 2 if properties.get("osm_type") == "W" else 0
+        score += 1 if properties.get("housenumber") else 0
+        candidates.append((score, feature))
+
+    if not candidates:
         raise ValueError(f"창원시에서 '{query}' 위치를 찾지 못했습니다.")
+    _, selected = max(candidates, key=lambda item: item[0])
+    properties = selected["properties"]
+    longitude, latitude = map(float, selected["geometry"]["coordinates"][:2])
+    location_parts = [
+        properties.get("name") or query,
+        properties.get("street"),
+        properties.get("district"),
+        properties.get("city"),
+    ]
     return {
-        "latitude": float(results[0]["lat"]),
-        "longitude": float(results[0]["lon"]),
-        "name": str(results[0]["display_name"]).split(", 대한민국")[0],
+        "latitude": latitude,
+        "longitude": longitude,
+        "name": ", ".join(str(part) for part in location_parts if part),
     }
 
 
