@@ -27,13 +27,6 @@ CHANGWON_DISTRICTS_BOUNDARY_FILE = (
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
-SAFETY_GRADE_COLORS = {
-    1: (185, 28, 28, 210),
-    2: (234, 88, 12, 210),
-    3: (234, 179, 8, 210),
-    4: (101, 163, 13, 210),
-    5: (21, 128, 61, 210),
-}
 DISTRICT_COLORS = {
     "의창구": "#2563EB",
     "성산구": "#F59E0B",
@@ -42,12 +35,6 @@ DISTRICT_COLORS = {
     "진해구": "#7C3AED",
 }
 SAFEMAP_RISK_PROFILES = {
-    "여성 버전": {
-        "title": "여성 밤길 치안안전",
-        "url": "https://www.safemap.go.kr/openapi2/IF_0080_WMS",
-        "layer": "A2SM_CRMNLHSPOT_F1_TOT",
-        "style": "",
-    },
     "노인 버전": {
         "title": "노인 대상 범죄주의구간",
         "url": "https://www.safemap.go.kr/openapi2/IF_0082_WMS",
@@ -1279,166 +1266,24 @@ def risk_signal_for_grid(
     return signal, grades
 
 
-def facility_metrics_for_grid(
-    latitudes: np.ndarray,
-    longitudes: np.ndarray,
-    coordinates: list[tuple[float, float]],
-    radius: float,
-) -> tuple[np.ndarray, np.ndarray]:
-    """각 격자의 시설 최근접 거리와 영향반경 내 시설 수를 계산합니다."""
-    buckets = build_coordinate_buckets(coordinates)
-    distances = np.full(len(latitudes), radius, dtype=np.float32)
-    counts = np.zeros(len(latitudes), dtype=np.int16)
-    search_range = max(2, math.ceil(radius / 80))
-
-    for index, (latitude, longitude) in enumerate(
-        zip(latitudes, longitudes)
-    ):
-        center_key = (
-            math.floor(float(latitude) / 0.001),
-            math.floor(float(longitude) / 0.001),
-        )
-        nearest = radius
-        count = 0
-        for latitude_offset in range(-search_range, search_range + 1):
-            for longitude_offset in range(-search_range, search_range + 1):
-                candidates = buckets.get(
-                    (
-                        center_key[0] + latitude_offset,
-                        center_key[1] + longitude_offset,
-                    ),
-                    [],
-                )
-                for candidate_latitude, candidate_longitude in candidates:
-                    distance = distance_in_meters(
-                        float(latitude),
-                        float(longitude),
-                        candidate_latitude,
-                        candidate_longitude,
-                    )
-                    if distance <= radius:
-                        count += 1
-                        nearest = min(nearest, distance)
-        distances[index] = nearest
-        counts[index] = count
-    return distances, counts
-
-
-def normalized_facility_score(
-    distances: np.ndarray,
-    counts: np.ndarray,
-    radius: float,
-) -> np.ndarray:
-    """최근접 거리 60%, 포화형 시설밀도 40%로 시설점수를 만듭니다."""
-    distance_score = np.maximum(0, 1 - distances / radius)
-    positive_counts = counts[counts > 0]
-    reference_count = (
-        max(1, float(np.quantile(positive_counts, 0.75)))
-        if len(positive_counts)
-        else 1
-    )
-    density_score = 1 - np.exp(-counts / reference_count)
-    return 100 * (0.6 * distance_score + 0.4 * density_score)
-
-
-@st.cache_data(show_spinner=False)
-def build_safety_analysis(
-    risk_grades: np.ndarray,
-    grid: dict,
-    cctv_coordinates: list[tuple[float, float]],
-    light_coordinates: list[tuple[float, float]],
-    wifi_coordinates: list[tuple[float, float]],
-) -> pd.DataFrame:
-    """100m 격자의 보호점수·우선개선점수·안전등급을 계산합니다."""
-    latitudes = grid["latitudes"]
-    longitudes = grid["longitudes"]
-    cctv_distances, cctv_counts = facility_metrics_for_grid(
-        latitudes, longitudes, cctv_coordinates, 100
-    )
-    light_distances, light_counts = facility_metrics_for_grid(
-        latitudes, longitudes, light_coordinates, 50
-    )
-    wifi_distances, wifi_counts = facility_metrics_for_grid(
-        latitudes, longitudes, wifi_coordinates, 100
-    )
-    cctv_scores = normalized_facility_score(
-        cctv_distances, cctv_counts, 100
-    )
-    light_scores = normalized_facility_score(
-        light_distances, light_counts, 50
-    )
-    wifi_scores = normalized_facility_score(
-        wifi_distances, wifi_counts, 100
-    )
-    protection_scores = (
-        0.45 * cctv_scores + 0.45 * light_scores + 0.10 * wifi_scores
-    )
-    risk_scores = (risk_grades.astype(float) - 1) * 25
-    priority_scores = 0.65 * risk_scores + 0.35 * (100 - protection_scores)
-    safety_scores = 100 - priority_scores
-    # 절대 점수 구간으로 나누면 대부분의 격자가 4~5등급에 몰려 지도가
-    # 초록색 한 가지처럼 보인다. 창원시 내부의 상대 순위를 5분위로 나눠
-    # 위험 지역부터 안전 지역까지 다섯 색이 실제로 구분되게 한다.
-    safety_percentiles = pd.Series(safety_scores).rank(
-        method="average",
-        pct=True,
-    ).to_numpy()
-    safety_grades = np.clip(
-        np.ceil(safety_percentiles * 5).astype(int),
-        1,
-        5,
-    )
-    return pd.DataFrame(
-        {
-            "row": grid["rows"],
-            "column": grid["columns"],
-            "latitude": latitudes,
-            "longitude": longitudes,
-            "estimated_risk_grade": risk_grades,
-            "cctv_score": cctv_scores,
-            "light_score": light_scores,
-            "wifi_score": wifi_scores,
-            "protection_score": protection_scores,
-            "priority_score": priority_scores,
-            "safety_score": safety_scores,
-            "safety_grade": safety_grades,
-        }
-    )
-
-
-def safety_grade_overlay(analysis: pd.DataFrame, grid: dict) -> np.ndarray:
-    """Folium ImageOverlay에 사용할 안전등급 색상 이미지를 만듭니다."""
+def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
+    """원본 WMS 상대 위험도가 높은 격자만 빨간색으로 강조합니다."""
     overlay = np.zeros((*grid["mask"].shape, 4), dtype=np.uint8)
-    for grade, color in SAFETY_GRADE_COLORS.items():
-        selected = analysis["safety_grade"].to_numpy() == grade
-        overlay[
-            analysis.loc[selected, "row"].to_numpy(),
-            analysis.loc[selected, "column"].to_numpy(),
-        ] = color
+    high_risk = risk_grades >= 4
+    highest_risk = risk_grades >= 5
+    overlay[grid["rows"][high_risk], grid["columns"][high_risk]] = (
+        239,
+        68,
+        68,
+        165,
+    )
+    overlay[grid["rows"][highest_risk], grid["columns"][highest_risk]] = (
+        127,
+        29,
+        29,
+        225,
+    )
     return overlay
-
-
-def top_priority_cells(
-    analysis: pd.DataFrame,
-    limit: int = 10,
-) -> pd.DataFrame:
-    """인접 중복을 줄이기 위해 300m 이상 떨어진 위험 격자를 고릅니다."""
-    selected_rows = []
-    for row in analysis.sort_values("priority_score", ascending=False).itertuples():
-        if any(
-            distance_in_meters(
-                row.latitude,
-                row.longitude,
-                selected.latitude,
-                selected.longitude,
-            ) < 300
-            for selected in selected_rows
-        ):
-            continue
-        selected_rows.append(row)
-        if len(selected_rows) == limit:
-            break
-    return pd.DataFrame([row._asdict() for row in selected_rows])
 
 
 def add_boundary_layer(
@@ -1570,7 +1415,7 @@ selected_risk_profile = st.selectbox(
     "안전 대상",
     options=list(SAFEMAP_RISK_PROFILES),
     index=0,
-    help="여성·노인·어린이 중 확인할 범죄위험 WMS를 선택합니다.",
+    help="노인·어린이 중 확인할 범죄위험 WMS를 선택합니다.",
 )
 risk_profile = SAFEMAP_RISK_PROFILES[selected_risk_profile]
 st.caption(
@@ -1578,8 +1423,8 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 st.caption(
-    "기본 화면에는 원본 범죄위험, 100m 상대 안전등급, "
-    "우선개선 위험 Top 10과 안전요소 3종 충족지점이 표시됩니다."
+    "기본 화면에는 원본 범죄위험의 빨간 밀도와 "
+    "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
 )
 
 raw_facility_layers = st.multiselect(
@@ -1883,20 +1728,6 @@ map_object.get_root().html.add_child(
             margin-top: 5px;
             white-space: nowrap;
         }
-        .safety-grade-gradient {
-            width: 72px;
-            height: 13px;
-            border: 1px solid rgba(17, 24, 39, 0.55);
-            border-radius: 2px;
-            background: linear-gradient(
-                90deg,
-                #7F1D1D 0%,
-                #EF4444 25%,
-                #FACC15 50%,
-                #65A30D 75%,
-                #15803D 100%
-            );
-        }
         .leaflet-image-layer {
             image-rendering: pixelated;
         }
@@ -2001,10 +1832,6 @@ if show_changwon_facilities:
                                  stroke-linejoin="round"></polygon>
                     </svg>
                     <span>안전요소 3종 충족 · 초록 테두리 △</span>
-                </div>
-                <div class="map-color-legend-row">
-                    <span class="safety-grade-gradient"></span>
-                    <span>100m 상대 안전등급 · 1 위험 → 5 안전</span>
                 </div>
                 <div class="map-district-legend-title">창원시 5개 구 경계</div>
                 <div class="map-district-legend">
@@ -2194,18 +2021,10 @@ else:
                 show=True,
             ).add_to(map_object)
 
-safety_analysis = pd.DataFrame()
-priority_top_ten = pd.DataFrame()
-analysis_ready = (
-    bool(safemap_service_key)
-    and CHANGWON_BOUNDARY_FILE.exists()
-    and not cctv_locations.empty
-    and bool(pedestrian_lights)
-    and not wifi_locations.empty
-)
-if analysis_ready:
+risk_grid_ready = bool(safemap_service_key) and CHANGWON_BOUNDARY_FILE.exists()
+if risk_grid_ready:
     try:
-        with st.spinner("100m 격자별 추정 안전도를 계산하고 있습니다..."):
+        with st.spinner("원본 범죄위험 고밀도 격자를 만들고 있습니다..."):
             analysis_boundary = load_geojson(CHANGWON_BOUNDARY_FILE)
             analysis_grid = boundary_grid_mask(
                 analysis_boundary,
@@ -2218,142 +2037,24 @@ if analysis_ready:
                 risk_profile["style"],
                 tuple(tuple(value) for value in analysis_grid["bounds"]),
             )
-            _, estimated_risk_grades = risk_signal_for_grid(
+            _, risk_grades = risk_signal_for_grid(
                 risk_image_bytes,
                 analysis_grid,
             )
-            cctv_analysis_coordinates = [
-                (float(row.latitude), float(row.longitude))
-                for row in cctv_locations.itertuples(index=False)
-            ]
-            light_analysis_coordinates = [
-                (float(record[0]), float(record[1]))
-                for record in pedestrian_lights
-            ]
-            wifi_analysis_coordinates = [
-                (float(row.latitude), float(row.longitude))
-                for row in wifi_locations.itertuples(index=False)
-            ]
-            safety_analysis = build_safety_analysis(
-                estimated_risk_grades,
-                analysis_grid,
-                cctv_analysis_coordinates,
-                light_analysis_coordinates,
-                wifi_analysis_coordinates,
-            )
-            priority_top_ten = top_priority_cells(safety_analysis)
 
         folium.raster_layers.ImageOverlay(
-            image=safety_grade_overlay(safety_analysis, analysis_grid),
+            image=high_risk_grid_overlay(risk_grades, analysis_grid),
             bounds=analysis_grid["bounds"],
-            name="100m 추정 안전등급 1~5",
-            opacity=0.90,
+            name="원본 범죄위험 고밀도 격자",
+            opacity=1,
             interactive=False,
             cross_origin=False,
             zindex=10,
             show=True,
         ).add_to(map_object)
-
-        priority_layer = folium.FeatureGroup(
-            name="우선개선 위험 Top 10",
-            overlay=True,
-            control=True,
-            show=True,
-        )
-        latitude_half_step = analysis_grid["latitude_step"] / 2
-        longitude_half_step = analysis_grid["longitude_step"] / 2
-        for rank, row in enumerate(
-            priority_top_ten.itertuples(index=False),
-            start=1,
-        ):
-            popup_html = (
-                '<div style="width:260px;font-size:14px;line-height:1.55">'
-                f'<b style="color:#991B1B">우선개선 후보 #{rank}</b><br>'
-                f'추정 범죄위험 등급: {int(row.estimated_risk_grade)}<br>'
-                f'안전도: {row.safety_score:.1f}점 '
-                f'({int(row.safety_grade)}등급)<br>'
-                f'시설 보호점수: {row.protection_score:.1f}점<br>'
-                f'CCTV {row.cctv_score:.1f} · '
-                f'보안등 {row.light_score:.1f} · '
-                f'Wi-Fi {row.wifi_score:.1f}<br>'
-                '<span style="color:#6B7280;font-size:12px">'
-                'WMS 픽셀 강도에 따른 상대 추정치이며 실제 범죄 건수가 아닙니다.'
-                '</span></div>'
-            )
-            folium.Rectangle(
-                bounds=[
-                    [
-                        row.latitude - latitude_half_step,
-                        row.longitude - longitude_half_step,
-                    ],
-                    [
-                        row.latitude + latitude_half_step,
-                        row.longitude + longitude_half_step,
-                    ],
-                ],
-                color="#7F1D1D",
-                weight=3,
-                fill=True,
-                fill_color="#EF4444",
-                fill_opacity=0.72,
-                tooltip=f"우선개선 후보 #{rank}",
-                popup=folium.Popup(popup_html, max_width=300),
-            ).add_to(priority_layer)
-        priority_layer.add_to(map_object)
-
-        st.subheader("100m 격자 추정 안전도 분석")
-        st.caption(
-            "생활안전지도 WMS 픽셀 강도를 창원시 내부 상대등급 1~5로 변환한 "
-            "추정치입니다. 실제 범죄 발생 건수나 공식 범죄등급이 아닙니다."
-        )
-        risk_cell_count = int(
-            (safety_analysis["estimated_risk_grade"] >= 4).sum()
-        )
-        low_safety_count = int((safety_analysis["safety_grade"] <= 2).sum())
-        analysis_columns = st.columns(3)
-        analysis_columns[0].metric(
-            "분석 100m 격자",
-            f"{len(safety_analysis):,}개",
-        )
-        analysis_columns[1].metric(
-            "추정 위험 4~5등급 격자",
-            f"{risk_cell_count:,}개",
-        )
-        analysis_columns[2].metric(
-            "안전도 1~2등급 격자",
-            f"{low_safety_count:,}개",
-        )
-
-        top_ten_table = priority_top_ten[
-            [
-                "latitude",
-                "longitude",
-                "estimated_risk_grade",
-                "protection_score",
-                "safety_score",
-                "safety_grade",
-            ]
-        ].copy()
-        top_ten_table.insert(0, "순위", range(1, len(top_ten_table) + 1))
-        top_ten_table.columns = [
-            "순위",
-            "위도",
-            "경도",
-            "추정 범죄위험 등급",
-            "시설 보호점수",
-            "안전도",
-            "안전등급",
-        ]
-        st.dataframe(
-            top_ten_table.round(
-                {"위도": 6, "경도": 6, "시설 보호점수": 1, "안전도": 1}
-            ),
-            hide_index=True,
-            use_container_width=True,
-        )
     except Exception as error:
         st.warning(
-            "100m 추정 안전도 분석을 생성하지 못했습니다. "
+            "원본 범죄위험 고밀도 격자를 생성하지 못했습니다. "
             f"기존 지도는 계속 사용할 수 있습니다. ({error})"
         )
 
@@ -2422,6 +2123,6 @@ st_folium(
     map_object,
     width=None,
     height=820,
-    key=f"changwon-safety-map-grade-v2-{selected_risk_profile}",
+    key=f"changwon-safety-map-risk-grid-v3-{selected_risk_profile}",
     returned_objects=[],
 )
