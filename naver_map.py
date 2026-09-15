@@ -79,8 +79,8 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
     let redrawTimer;const schedule=()=>{clearTimeout(redrawTimer);redrawTimer=setTimeout(redrawFacilities,180)};naver.maps.Event.addListener(map,"idle",schedule);redrawFacilities();status.style.display="none";
     }catch(error){console.error(error);fail("네이버 지도 초기화 중 오류가 발생했습니다.<br><small>"+esc(error?.message||error)+"</small>")}
   }
-  window.navermap_authFailure=()=>fail("네이버 지도 인증에 실패했습니다.<br>Web Dynamic Map 사용 설정과 허용 URL을 확인해 주세요.");window.initChangwonNaverMap=initNaverMap;
-  if(window.naver&&window.naver.maps){initNaverMap()}else{const script=document.createElement("script");script.src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=__CLIENT_ID__&callback=initChangwonNaverMap";script.async=true;script.onerror=()=>fail("네이버 지도 SDK를 불러오지 못했습니다.<br>잠시 후 새로고침해 주세요.");document.head.appendChild(script);setTimeout(()=>{if(!(window.naver&&window.naver.maps))fail("네이버 지도 연결 시간이 초과되었습니다.<br>API의 Web 서비스 URL 등록 상태를 확인해 주세요.")},10000)}
+  window.navermap_authFailure=()=>fail("네이버 지도 인증에 실패했습니다.<br>Web Dynamic Map 사용 설정과 허용 URL을 확인해 주세요.");
+  if(window.naver&&window.naver.maps){initNaverMap()}else{const script=document.createElement("script");script.src="https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=__CLIENT_ID__";script.async=true;script.onload=()=>{if(window.naver&&window.naver.maps)initNaverMap();else fail("네이버 지도 SDK 응답이 올바르지 않습니다.<br>Web Dynamic Map 사용 설정을 확인해 주세요.")};script.onerror=()=>fail("네이버 지도 SDK를 불러오지 못했습니다.<br>잠시 후 새로고침해 주세요.");document.head.appendChild(script);setTimeout(()=>{if(!(window.naver&&window.naver.maps))fail("네이버 지도 연결 시간이 초과되었습니다.<br>API의 Web 서비스 URL 등록 상태를 확인해 주세요.")},10000)}
   })();
 </script>
 """
