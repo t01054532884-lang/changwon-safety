@@ -50,7 +50,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   const districtColors={"의창구":"#2563EB","성산구":"#F59E0B","마산합포구":"#DC2626","마산회원구":"#16A34A","진해구":"#7C3AED"};
   const groups={};
   const facilityState={};
-  let map,infoWindow;
+  let map,infoWindow,naver;
   const status=document.getElementById("map-status");
   const fail=(message)=>{status.style.display="none";const error=document.getElementById("map-error");error.innerHTML=message;error.style.display="flex"};
   const esc=(value)=>String(value??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -66,6 +66,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   function redrawFacilities(){Object.keys(facilityState).forEach(redrawFacility)}
   function initNaverMap(){
     try{
+    naver=window.naver;
     status.textContent="네이버 지도와 안전 데이터를 불러오는 중…";
     map=new naver.maps.Map("changwon-naver-map",{center:new naver.maps.LatLng(35.18,128.62),zoom:10,mapTypeControl:true,zoomControl:true,zoomControlOptions:{position:naver.maps.Position.LEFT_CENTER},scaleControl:true});infoWindow=new naver.maps.InfoWindow({borderWidth:0,backgroundColor:"transparent",anchorSize:new naver.maps.Size(12,8)});
     const risk=addGround(DATA.riskImage,DATA.riskBounds,.82);if(risk)addControl("risk","원본 범죄위험 빨간 밀도",true,v=>risk.setMap(v?map:null));
