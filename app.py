@@ -2676,10 +2676,10 @@ if naver_map_client_id:
         "facilities": naver_facilities,
         "route": naver_route,
     }
-    st.iframe(
+    st.html(
         build_naver_map_html(naver_map_client_id, naver_payload),
         width="stretch",
-        height=820,
+        unsafe_allow_javascript=True,
     )
     st.caption(
         "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "
