@@ -22,6 +22,10 @@ from streamlit_folium import st_folium
 
 
 BASE_DIR = Path(__file__).resolve().parent
+NAVER_MAP_COMPONENT = components.declare_component(
+    "changwon_naver_map",
+    path=str(BASE_DIR / "naver_component"),
+)
 CCTV_FILE = BASE_DIR / "data" / "cctv_coordinates.xlsx"
 WIFI_FILE = BASE_DIR / "data" / "wifi_data.csv"
 CHANGWON_BOUNDARY_FILE = BASE_DIR / "data" / "changwon_boundary.geojson"
@@ -2677,10 +2681,10 @@ if naver_map_client_id:
         "facilities": naver_facilities,
         "route": naver_route,
     }
-    components.html(
-        build_naver_map_html(naver_map_client_id, naver_payload),
-        height=820,
-        scrolling=False,
+    NAVER_MAP_COMPONENT(
+        html=build_naver_map_html(naver_map_client_id, naver_payload),
+        key=f"changwon-naver-{selected_risk_profile}",
+        default=None,
     )
     st.caption(
         "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "

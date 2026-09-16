@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>창원 안전지도</title>
+  </head>
+  <body>
+    <div style="height:820px;display:flex;align-items:center;justify-content:center;font-family:sans-serif;color:#475569">
+      네이버 안전지도를 준비하고 있습니다…
+    </div>
+    <script>
+      const streamlitMessage = (type, extra = {}) => {
+        window.parent.postMessage(
+          { isStreamlitMessage: true, type, ...extra },
+          "*",
+        );
+      };
+
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "streamlit:render") return;
+        const html = event.data?.args?.html;
+        if (!html) return;
+        streamlitMessage("streamlit:setFrameHeight", { height: 820 });
+        document.open();
+        document.write(html);
+        document.close();
+      });
+
+      streamlitMessage("streamlit:componentReady", { apiVersion: 1 });
+      streamlitMessage("streamlit:setFrameHeight", { height: 820 });
+    </script>
+  </body>
+</html>
