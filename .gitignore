@@ -12,3 +12,4 @@ changwon_map.html
 __pycache__/
 *.py[cod]
 .venv/
+.codex-tmp/
