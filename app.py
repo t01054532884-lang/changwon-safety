@@ -1408,6 +1408,8 @@ def search_changwon_places_cached(
         label = name.strip() or address.strip() or query
         if address.strip() and address.strip() not in label:
             label = f"{label} · {address.strip()}"
+        if source == "NAVER 지역검색":
+            label = f"{label} · NAVER"
         candidates.append(
             {
                 "latitude": latitude,
@@ -1423,7 +1425,7 @@ def search_changwon_places_cached(
     if search_client_id and search_client_secret:
         try:
             local_parameters = urlencode(
-                {"query": f"창원시 {query}", "display": 5, "sort": "random"}
+                {"query": query, "display": 5, "sort": "random"}
             )
             local_request = Request(
                 "https://naverapihub.apigw.ntruss.com/search/v1/local?"
