@@ -2800,26 +2800,30 @@ if walking_route:
         padding=(35, 35),
     )
 
-    route_metrics = st.columns(5)
-    route_metrics[0].metric(
-        "추천 경로",
-        route_layer_name,
+    st.markdown(
+        f'**추천 경로:** {walking_route["start"]["name"]} → '
+        f'{walking_route["destination"]["name"]}'
     )
-    route_metrics[1].metric(
-        "거리·예상시간",
-        f'{selected_route["distance"] / 1000:.1f}km · '
+    primary_metrics = st.columns(2)
+    primary_metrics[0].metric(
+        "거리",
+        f'{selected_route["distance"] / 1000:.1f} km',
+    )
+    primary_metrics[1].metric(
+        "예상시간",
         f'{max(1, round(selected_route["duration"] / 60))}분',
     )
-    route_metrics[2].metric(
+    secondary_metrics = st.columns(2)
+    secondary_metrics[0].metric(
         "예상 도착",
         walking_route["arrival_time"],
     )
-    route_metrics[3].metric(
+    secondary_metrics[1].metric(
         "경로 주변 안전 △",
         f'{selected_route.get("support_count", 0)}곳',
     )
     risk_percent = selected_route.get("risk_exposure", {}).get("percent")
-    route_metrics[4].metric(
+    st.metric(
         "고위험 격자 통과",
         f"{risk_percent:.0f}%" if risk_percent is not None else "분석 대기",
     )
