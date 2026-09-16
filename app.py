@@ -1452,8 +1452,10 @@ def search_changwon_places_cached(
                     address,
                     "NAVER 지역검색",
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            # 인증키 값은 출력하지 않고 상태 코드/오류 유형만 배포 로그에 남긴다.
+            # 장소검색이 보조 검색원으로 조용히 대체되는 경우에도 원인을 확인할 수 있다.
+            print(f"NAVER API HUB local search failed: {type(exc).__name__}: {exc}")
 
     normalized_query = re.sub(r"\s+", "", query).lower()
     landmark_address = CHANGWON_LANDMARK_ADDRESSES.get(normalized_query)
