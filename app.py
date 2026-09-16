@@ -1402,6 +1402,8 @@ def search_changwon_places_cached(
     ) -> None:
         if not is_in_changwon(latitude, longitude):
             return
+        if address.strip() and "창원" not in address:
+            return
         coordinate_key = (round(latitude * 100_000), round(longitude * 100_000))
         if coordinate_key in seen_coordinates:
             return
@@ -1425,8 +1427,9 @@ def search_changwon_places_cached(
     # 업체·기관·학교·공원 등 네이버 장소 결과를 우선 사용한다.
     if search_client_id and search_client_secret:
         try:
+            naver_query = query if "창원" in query else f"창원시 {query}"
             local_parameters = urlencode(
-                {"query": query, "display": 5, "sort": "random"}
+                {"query": naver_query, "display": 5, "sort": "random"}
             )
             local_request = Request(
                 "https://naverapihub.apigw.ntruss.com/search/v1/local?"
