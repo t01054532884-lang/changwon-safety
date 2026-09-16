@@ -1418,7 +1418,7 @@ def search_changwon_places_cached(
             }
         )
 
-    # 네이버 개발자센터의 지역검색 API 키가 별도로 등록되어 있으면
+    # NAVER Cloud API HUB의 지역검색 API 키가 별도로 등록되어 있으면
     # 업체·기관·학교·공원 등 네이버 장소 결과를 우선 사용한다.
     if search_client_id and search_client_secret:
         try:
@@ -1426,10 +1426,11 @@ def search_changwon_places_cached(
                 {"query": f"창원시 {query}", "display": 5, "sort": "random"}
             )
             local_request = Request(
-                f"https://openapi.naver.com/v1/search/local.json?{local_parameters}",
+                "https://naverapihub.apigw.ntruss.com/search/v1/local?"
+                f"{local_parameters}",
                 headers={
-                    "X-Naver-Client-Id": search_client_id,
-                    "X-Naver-Client-Secret": search_client_secret,
+                    "X-NCP-APIGW-API-KEY-ID": search_client_id,
+                    "X-NCP-APIGW-API-KEY": search_client_secret,
                     "Accept": "application/json",
                 },
             )
@@ -1441,8 +1442,9 @@ def search_changwon_places_cached(
                 )
                 if "창원" not in address:
                     continue
-                longitude = float(item.get("mapx", 0)) / 10_000_000
-                latitude = float(item.get("mapy", 0)) / 10_000_000
+                # API HUB는 mapx/mapy를 WGS84 경도/위도로 반환한다.
+                longitude = float(item.get("mapx", 0))
+                latitude = float(item.get("mapy", 0))
                 add_candidate(
                     latitude,
                     longitude,
