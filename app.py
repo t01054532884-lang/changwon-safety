@@ -1580,12 +1580,18 @@ def search_changwon_places_cached(
 
 
 def search_changwon_places(place: str) -> list[dict]:
+    search_client_id = get_secret("NAVER_SEARCH_CLIENT_ID")
+    search_client_secret = get_secret("NAVER_SEARCH_CLIENT_SECRET")
+    print(
+        "NAVER API HUB credentials configured: "
+        f"{bool(search_client_id and search_client_secret)}"
+    )
     return search_changwon_places_cached(
         place,
         get_naver_map_client_id(),
         get_secret("NAVER_MAP_CLIENT_SECRET"),
-        get_secret("NAVER_SEARCH_CLIENT_ID"),
-        get_secret("NAVER_SEARCH_CLIENT_SECRET"),
+        search_client_id,
+        search_client_secret,
     )
 
 
