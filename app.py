@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
+from streamlit_searchbox import st_searchbox
 from folium.map import Layer
 from jinja2 import Template
 from naver_map import build_naver_map_html, png_data_url
@@ -1596,6 +1597,17 @@ def search_changwon_places(place: str) -> list[dict]:
     )
 
 
+def autocomplete_changwon_places(search_term: str) -> list[tuple[str, dict]]:
+    """입력 중인 검색어에 대한 창원시 장소 후보를 자동완성 형식으로 반환합니다."""
+    query = search_term.strip()
+    if len(query) < 2:
+        return []
+    return [
+        (candidate["label"], candidate)
+        for candidate in search_changwon_places(query)
+    ]
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def check_naver_local_search(client_id: str, client_secret: str) -> tuple[bool, str]:
     """키 값을 노출하지 않고 NAVER API HUB 지역검색 연결 상태를 확인합니다."""
@@ -2657,41 +2669,25 @@ else:
     st.warning(naver_search_status)
 route_columns = st.columns(2)
 with route_columns[0]:
-    start_query = st.text_input(
-        "출발지",
-        placeholder="예: 창원NC파크",
+    start_choice = st_searchbox(
+        autocomplete_changwon_places,
+        label="출발지",
+        placeholder="장소명 입력 (예: 창원NC파크)",
         key="route-start-query",
+        debounce=350,
+        clear_on_submit=False,
+        edit_after_submit="option",
     )
-    start_candidates = (
-        search_changwon_places(start_query) if len(start_query.strip()) >= 2 else []
-    )
-    start_choice = None
-    if start_candidates:
-        start_choice = st.selectbox(
-            "출발지 검색 결과",
-            options=list(range(len(start_candidates))),
-            format_func=lambda index: start_candidates[index]["label"],
-            key=f"route-start-result-{start_query.strip()}",
-        )
 with route_columns[1]:
-    destination_query = st.text_input(
-        "도착지",
-        placeholder="예: 창원대학교",
+    destination_choice = st_searchbox(
+        autocomplete_changwon_places,
+        label="도착지",
+        placeholder="장소명 입력 (예: 창원대학교)",
         key="route-destination-query",
+        debounce=350,
+        clear_on_submit=False,
+        edit_after_submit="option",
     )
-    destination_candidates = (
-        search_changwon_places(destination_query)
-        if len(destination_query.strip()) >= 2
-        else []
-    )
-    destination_choice = None
-    if destination_candidates:
-        destination_choice = st.selectbox(
-            "도착지 검색 결과",
-            options=list(range(len(destination_candidates))),
-            format_func=lambda index: destination_candidates[index]["label"],
-            key=f"route-destination-result-{destination_query.strip()}",
-        )
 
 route_submitted = st.button(
     "안전 보행경로 찾기",
@@ -2701,17 +2697,13 @@ route_submitted = st.button(
 
 if route_submitted:
     try:
+        if not isinstance(start_choice, dict) or not isinstance(
+            destination_choice, dict
+        ):
+            raise ValueError("출발지와 도착지를 검색한 뒤 후보 목록에서 선택해 주세요.")
         with st.spinner("보행로와 주변 안전요소를 비교하고 있습니다..."):
-            route_start = (
-                start_candidates[start_choice]
-                if start_choice is not None
-                else geocode_changwon(start_query)
-            )
-            route_destination = (
-                destination_candidates[destination_choice]
-                if destination_choice is not None
-                else geocode_changwon(destination_query)
-            )
+            route_start = start_choice
+            route_destination = destination_choice
             route_candidates = fetch_pedestrian_routes(
                 route_start,
                 route_destination,
