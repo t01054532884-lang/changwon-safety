@@ -1,9 +1,10 @@
 import json
 import math
 import os
+import re
 from datetime import datetime, timedelta
 from io import BytesIO
-from html import escape
+from html import escape, unescape
 from pathlib import Path
 from urllib.parse import quote, unquote, urlencode
 from urllib.request import Request, urlopen
@@ -36,6 +37,12 @@ PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
+CHANGWON_LANDMARK_ADDRESSES = {
+    "창원nc파크": "경상남도 창원시 마산회원구 삼호로 63",
+    "nc파크": "경상남도 창원시 마산회원구 삼호로 63",
+    "창원엔씨파크": "경상남도 창원시 마산회원구 삼호로 63",
+    "마산야구장": "경상남도 창원시 마산회원구 삼호로 63",
+}
 PEDESTRIAN_ROUTER_URL = (
     "https://routing.openstreetmap.de/routed-foot/route/v1/driving"
 )
@@ -742,6 +749,17 @@ def get_naver_map_client_id() -> str:
         return ""
 
 
+def get_secret(name: str) -> str:
+    """환경 변수나 Streamlit Secrets에서 지정한 비밀값을 읽습니다."""
+    environment_value = os.environ.get(name, "").strip()
+    if environment_value:
+        return environment_value
+    try:
+        return str(st.secrets.get(name, "")).strip()
+    except Exception:
+        return ""
+
+
 @st.cache_resource(show_spinner=False)
 def load_cctv_data(file_path: Path) -> pd.DataFrame:
     """최신 CCTV 엑셀을 읽고 앱에서 사용할 열을 정리합니다."""
@@ -1343,12 +1361,133 @@ def red_risk_density_image(image_bytes: bytes) -> bytes:
     return output.getvalue()
 
 
-@st.cache_data(ttl=86_400, show_spinner=False)
-def geocode_changwon(place: str) -> dict:
-    """창원시 안의 장소명이나 주소를 보행 길찾기 좌표로 변환합니다."""
+def clean_place_text(value: object) -> str:
+    """검색 API가 반환한 HTML 태그와 엔티티를 제거합니다."""
+    return unescape(re.sub(r"<[^>]+>", "", str(value or ""))).strip()
+
+
+def is_in_changwon(latitude: float, longitude: float) -> bool:
+    minimum_latitude, minimum_longitude, maximum_latitude, maximum_longitude = (
+        CHANGWON_BOUNDS
+    )
+    return (
+        minimum_latitude <= latitude <= maximum_latitude
+        and minimum_longitude <= longitude <= maximum_longitude
+    )
+
+
+@st.cache_data(ttl=3_600, show_spinner=False)
+def search_changwon_places_cached(
+    place: str,
+    map_client_id: str,
+    map_client_secret: str,
+    search_client_id: str,
+    search_client_secret: str,
+) -> list[dict]:
+    """창원시의 주소·시설·상호 후보를 여러 검색원에서 합칩니다."""
     query = place.strip()
     if not query:
-        raise ValueError("출발지와 도착지를 모두 입력해 주세요.")
+        return []
+
+    candidates: list[dict] = []
+    seen_coordinates: set[tuple[int, int]] = set()
+
+    def add_candidate(
+        latitude: float,
+        longitude: float,
+        name: str,
+        address: str = "",
+        source: str = "",
+    ) -> None:
+        if not is_in_changwon(latitude, longitude):
+            return
+        coordinate_key = (round(latitude * 100_000), round(longitude * 100_000))
+        if coordinate_key in seen_coordinates:
+            return
+        seen_coordinates.add(coordinate_key)
+        label = name.strip() or address.strip() or query
+        if address.strip() and address.strip() not in label:
+            label = f"{label} · {address.strip()}"
+        candidates.append(
+            {
+                "latitude": latitude,
+                "longitude": longitude,
+                "name": name.strip() or query,
+                "label": label,
+                "source": source,
+            }
+        )
+
+    # 네이버 개발자센터의 지역검색 API 키가 별도로 등록되어 있으면
+    # 업체·기관·학교·공원 등 네이버 장소 결과를 우선 사용한다.
+    if search_client_id and search_client_secret:
+        try:
+            local_parameters = urlencode(
+                {"query": f"창원시 {query}", "display": 5, "sort": "random"}
+            )
+            local_request = Request(
+                f"https://openapi.naver.com/v1/search/local.json?{local_parameters}",
+                headers={
+                    "X-Naver-Client-Id": search_client_id,
+                    "X-Naver-Client-Secret": search_client_secret,
+                    "Accept": "application/json",
+                },
+            )
+            with urlopen(local_request, timeout=15) as response:
+                local_results = json.loads(response.read().decode("utf-8"))
+            for item in local_results.get("items", []):
+                address = clean_place_text(
+                    item.get("roadAddress") or item.get("address")
+                )
+                if "창원" not in address:
+                    continue
+                longitude = float(item.get("mapx", 0)) / 10_000_000
+                latitude = float(item.get("mapy", 0)) / 10_000_000
+                add_candidate(
+                    latitude,
+                    longitude,
+                    clean_place_text(item.get("title")),
+                    address,
+                    "NAVER 지역검색",
+                )
+        except Exception:
+            pass
+
+    normalized_query = re.sub(r"\s+", "", query).lower()
+    landmark_address = CHANGWON_LANDMARK_ADDRESSES.get(normalized_query)
+    address_query = landmark_address or query
+
+    # NAVER Cloud Maps Geocoding은 주소 검색용이다. Geocoding 권한이
+    # 활성화된 경우 도로명·지번주소 후보를 추가한다.
+    if map_client_id and map_client_secret:
+        try:
+            geocode_parameters = urlencode(
+                {"query": address_query, "count": 5, "language": "kor"}
+            )
+            geocode_request = Request(
+                "https://maps.apigw.ntruss.com/map-geocode/v2/geocode?"
+                f"{geocode_parameters}",
+                headers={
+                    "x-ncp-apigw-api-key-id": map_client_id,
+                    "x-ncp-apigw-api-key": map_client_secret,
+                    "Accept": "application/json",
+                },
+            )
+            with urlopen(geocode_request, timeout=15) as response:
+                geocode_results = json.loads(response.read().decode("utf-8"))
+            for item in geocode_results.get("addresses", []):
+                address = str(
+                    item.get("roadAddress") or item.get("jibunAddress") or ""
+                )
+                add_candidate(
+                    float(item["y"]),
+                    float(item["x"]),
+                    query if landmark_address else address,
+                    address,
+                    "NAVER 주소검색",
+                )
+        except Exception:
+            pass
 
     try:
         latitude_text, longitude_text = [
@@ -1356,18 +1495,8 @@ def geocode_changwon(place: str) -> dict:
         ]
         latitude = float(latitude_text)
         longitude = float(longitude_text)
-        minimum_latitude, minimum_longitude, maximum_latitude, maximum_longitude = (
-            CHANGWON_BOUNDS
-        )
-        if (
-            minimum_latitude <= latitude <= maximum_latitude
-            and minimum_longitude <= longitude <= maximum_longitude
-        ):
-            return {
-                "latitude": latitude,
-                "longitude": longitude,
-                "name": query,
-            }
+        if is_in_changwon(latitude, longitude):
+            add_candidate(latitude, longitude, query, source="직접 입력 좌표")
     except (ValueError, TypeError):
         pass
 
@@ -1375,10 +1504,10 @@ def geocode_changwon(place: str) -> dict:
         {
             "format": "jsonv2",
             "countrycodes": "kr",
-            "limit": 1,
+            "limit": 5,
             "bounded": 1,
             "viewbox": "128.10,35.55,129.00,34.75",
-            "q": f"창원시 {query}",
+            "q": address_query,
         }
     )
     try:
@@ -1388,14 +1517,17 @@ def geocode_changwon(place: str) -> dict:
         )
         with urlopen(request, timeout=20) as response:
             results = json.loads(response.read().decode("utf-8"))
-        if results:
-            return {
-                "latitude": float(results[0]["lat"]),
-                "longitude": float(results[0]["lon"]),
-                "name": str(results[0]["display_name"]).split(
-                    ", 대한민국"
-                )[0],
-            }
+        for item in results:
+            display_name = str(item.get("display_name") or query).split(
+                ", 대한민국"
+            )[0]
+            add_candidate(
+                float(item["lat"]),
+                float(item["lon"]),
+                query if landmark_address else display_name.split(",")[0],
+                display_name,
+                "OpenStreetMap",
+            )
     except Exception:
         # Streamlit Cloud의 공용 IP가 Nominatim 호출 제한(HTTP 429)에
         # 걸릴 수 있어 동일 OSM 데이터를 사용하는 Photon으로 재시도한다.
@@ -1403,7 +1535,7 @@ def geocode_changwon(place: str) -> dict:
 
     photon_parameters = urlencode(
         {
-            "q": f"창원시 {query}",
+            "q": f"창원시 {address_query}",
             "limit": 10,
             "lat": 35.23,
             "lon": 128.68,
@@ -1417,50 +1549,53 @@ def geocode_changwon(place: str) -> dict:
         with urlopen(photon_request, timeout=20) as response:
             photon_results = json.loads(response.read().decode("utf-8"))
     except Exception as error:
-        raise ValueError(
-            "장소검색 서버가 잠시 혼잡합니다. 잠시 후 다시 시도해 주세요."
-        ) from error
+        photon_results = {"features": []}
 
-    minimum_latitude, minimum_longitude, maximum_latitude, maximum_longitude = (
-        CHANGWON_BOUNDS
-    )
-    candidates = []
-    normalized_query = query.replace(" ", "")
     for feature in photon_results.get("features", []):
         properties = feature.get("properties", {})
         coordinates = feature.get("geometry", {}).get("coordinates", [])
         if len(coordinates) < 2:
             continue
         longitude, latitude = map(float, coordinates[:2])
-        if not (
-            minimum_latitude <= latitude <= maximum_latitude
-            and minimum_longitude <= longitude <= maximum_longitude
-        ):
-            continue
-        candidate_name = str(properties.get("name") or query)
-        candidate_city = str(properties.get("city") or "")
-        score = 0
-        score += 10 if candidate_name.replace(" ", "") == normalized_query else 0
-        score += 5 if "창원" in candidate_city else 0
-        score += 2 if properties.get("osm_type") == "W" else 0
-        score += 1 if properties.get("housenumber") else 0
-        candidates.append((score, feature))
+        location_parts = [
+            properties.get("street"),
+            properties.get("district"),
+            properties.get("city"),
+        ]
+        add_candidate(
+            latitude,
+            longitude,
+            query if landmark_address else str(properties.get("name") or query),
+            ", ".join(str(part) for part in location_parts if part),
+            "Photon",
+        )
 
+    return candidates[:8]
+
+
+def search_changwon_places(place: str) -> list[dict]:
+    return search_changwon_places_cached(
+        place,
+        get_naver_map_client_id(),
+        get_secret("NAVER_MAP_CLIENT_SECRET"),
+        get_secret("NAVER_SEARCH_CLIENT_ID"),
+        get_secret("NAVER_SEARCH_CLIENT_SECRET"),
+    )
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
+def geocode_changwon(place: str) -> dict:
+    """창원시 안의 장소명이나 주소를 보행 길찾기 좌표로 변환합니다."""
+    query = place.strip()
+    if not query:
+        raise ValueError("출발지와 도착지를 모두 입력해 주세요.")
+    candidates = search_changwon_places(query)
     if not candidates:
         raise ValueError(f"창원시에서 '{query}' 위치를 찾지 못했습니다.")
-    _, selected = max(candidates, key=lambda item: item[0])
-    properties = selected["properties"]
-    longitude, latitude = map(float, selected["geometry"]["coordinates"][:2])
-    location_parts = [
-        properties.get("name") or query,
-        properties.get("street"),
-        properties.get("district"),
-        properties.get("city"),
-    ]
     return {
-        "latitude": latitude,
-        "longitude": longitude,
-        "name": ", ".join(str(part) for part in location_parts if part),
+        "latitude": candidates[0]["latitude"],
+        "longitude": candidates[0]["longitude"],
+        "name": candidates[0]["name"],
     }
 
 
@@ -2473,29 +2608,63 @@ st.caption(
     "35% 이상 크게 우회하지 않으면서 빨간 위험 격자를 덜 지나고 "
     "안전요소 △가 많은 길을 우선 추천합니다."
 )
-with st.form("night-walking-route-form"):
-    route_columns = st.columns(2)
-    with route_columns[0]:
-        start_query = st.text_input(
-            "출발지",
-            placeholder="예: 창원시청",
-        )
-    with route_columns[1]:
-        destination_query = st.text_input(
-            "도착지",
-            placeholder="예: 창원대학교",
-        )
-    route_submitted = st.form_submit_button(
-        "안전 보행경로 찾기",
-        type="primary",
-        width="stretch",
+route_columns = st.columns(2)
+with route_columns[0]:
+    start_query = st.text_input(
+        "출발지",
+        placeholder="예: 창원NC파크",
+        key="route-start-query",
     )
+    start_candidates = (
+        search_changwon_places(start_query) if len(start_query.strip()) >= 2 else []
+    )
+    start_choice = None
+    if start_candidates:
+        start_choice = st.selectbox(
+            "출발지 검색 결과",
+            options=list(range(len(start_candidates))),
+            format_func=lambda index: start_candidates[index]["label"],
+            key=f"route-start-result-{start_query.strip()}",
+        )
+with route_columns[1]:
+    destination_query = st.text_input(
+        "도착지",
+        placeholder="예: 창원대학교",
+        key="route-destination-query",
+    )
+    destination_candidates = (
+        search_changwon_places(destination_query)
+        if len(destination_query.strip()) >= 2
+        else []
+    )
+    destination_choice = None
+    if destination_candidates:
+        destination_choice = st.selectbox(
+            "도착지 검색 결과",
+            options=list(range(len(destination_candidates))),
+            format_func=lambda index: destination_candidates[index]["label"],
+            key=f"route-destination-result-{destination_query.strip()}",
+        )
+
+route_submitted = st.button(
+    "안전 보행경로 찾기",
+    type="primary",
+    width="stretch",
+)
 
 if route_submitted:
     try:
         with st.spinner("보행로와 주변 안전요소를 비교하고 있습니다..."):
-            route_start = geocode_changwon(start_query)
-            route_destination = geocode_changwon(destination_query)
+            route_start = (
+                start_candidates[start_choice]
+                if start_choice is not None
+                else geocode_changwon(start_query)
+            )
+            route_destination = (
+                destination_candidates[destination_choice]
+                if destination_choice is not None
+                else geocode_changwon(destination_query)
+            )
             route_candidates = fetch_pedestrian_routes(
                 route_start,
                 route_destination,
