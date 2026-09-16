@@ -1443,6 +1443,9 @@ def search_changwon_places_cached(
             with urlopen(local_request, timeout=15) as response:
                 local_results = json.loads(response.read().decode("utf-8"))
             for item in local_results.get("items", []):
+                category = clean_place_text(item.get("category"))
+                if "터미널" in query and "터미널" not in category:
+                    continue
                 address = clean_place_text(
                     item.get("roadAddress") or item.get("address")
                 )
