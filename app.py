@@ -17,6 +17,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 from folium.map import Layer
+from folium.plugins import PolyLineTextPath
 from jinja2 import Template
 from naver_map import build_naver_map_html, png_data_url
 from PIL import Image, ImageDraw
@@ -2757,25 +2758,41 @@ if walking_route:
         control=True,
         show=True,
     )
-    folium.PolyLine(
+    route_polyline = folium.PolyLine(
         selected_route["coordinates"],
         color="#2563EB",
         weight=8,
         opacity=0.95,
         tooltip=route_layer_name,
+    )
+    route_polyline.add_to(route_layer)
+    PolyLineTextPath(
+        route_polyline,
+        "  ➤  ",
+        repeat=True,
+        offset=7,
+        attributes={
+            "fill": "#ffffff",
+            "font-weight": "900",
+            "font-size": "16",
+        },
     ).add_to(route_layer)
-    folium.CircleMarker(
+    folium.Marker(
         location=[
             walking_route["start"]["latitude"],
             walking_route["start"]["longitude"],
         ],
-        radius=8,
-        color="#FFFFFF",
-        weight=3,
-        fill=True,
-        fill_color="#2563EB",
-        fill_opacity=1,
         tooltip=f'출발 · {walking_route["start"]["name"]}',
+        icon=folium.DivIcon(
+            html=(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'width:52px;height:30px;border-radius:16px;border:3px solid white;'
+                'background:#16a34a;color:white;font-size:12px;font-weight:900;'
+                'box-shadow:0 2px 7px rgba(0,0,0,.38);">출발</div>'
+            ),
+            icon_size=(58, 36),
+            icon_anchor=(29, 18),
+        ),
     ).add_to(route_layer)
     folium.Marker(
         location=[
@@ -2783,7 +2800,16 @@ if walking_route:
             walking_route["destination"]["longitude"],
         ],
         tooltip=f'도착 · {walking_route["destination"]["name"]}',
-        icon=folium.Icon(color="red", icon="flag"),
+        icon=folium.DivIcon(
+            html=(
+                '<div style="display:flex;align-items:center;justify-content:center;'
+                'width:52px;height:30px;border-radius:16px;border:3px solid white;'
+                'background:#dc2626;color:white;font-size:12px;font-weight:900;'
+                'box-shadow:0 2px 7px rgba(0,0,0,.38);">도착</div>'
+            ),
+            icon_size=(58, 36),
+            icon_anchor=(29, 18),
+        ),
     ).add_to(route_layer)
     route_layer.add_to(map_object)
     map_object.fit_bounds(
