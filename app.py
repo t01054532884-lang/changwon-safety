@@ -17,7 +17,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
 from folium.map import Layer
-from folium.plugins import PolyLineTextPath
 from jinja2 import Template
 from naver_map import build_naver_map_html, png_data_url
 from PIL import Image, ImageDraw
@@ -2766,17 +2765,47 @@ if walking_route:
         tooltip=route_layer_name,
     )
     route_polyline.add_to(route_layer)
-    PolyLineTextPath(
-        route_polyline,
-        "  ➤  ",
-        repeat=True,
-        offset=7,
-        attributes={
-            "fill": "#ffffff",
-            "font-weight": "900",
-            "font-size": "16",
-        },
-    ).add_to(route_layer)
+    route_coordinates = selected_route["coordinates"]
+    arrow_count = min(12, max(4, len(route_coordinates) // 18))
+    for arrow_number in range(1, arrow_count + 1):
+        arrow_index = min(
+            len(route_coordinates) - 2,
+            max(
+                1,
+                int(
+                    arrow_number
+                    * (len(route_coordinates) - 1)
+                    / (arrow_count + 1)
+                ),
+            ),
+        )
+        before_latitude, before_longitude = route_coordinates[
+            max(0, arrow_index - 1)
+        ]
+        after_latitude, after_longitude = route_coordinates[
+            min(len(route_coordinates) - 1, arrow_index + 1)
+        ]
+        arrow_angle = math.degrees(
+            math.atan2(
+                -(after_latitude - before_latitude),
+                after_longitude - before_longitude,
+            )
+        )
+        folium.Marker(
+            location=route_coordinates[arrow_index],
+            tooltip="진행 방향",
+            icon=folium.DivIcon(
+                html=(
+                    '<div style="display:flex;align-items:center;justify-content:center;'
+                    'width:24px;height:24px;border-radius:50%;border:2px solid white;'
+                    'background:#2563eb;color:white;font-size:15px;font-weight:900;'
+                    f'box-shadow:0 1px 4px rgba(0,0,0,.35);transform:rotate({arrow_angle}deg);">'
+                    "➤</div>"
+                ),
+                icon_size=(28, 28),
+                icon_anchor=(14, 14),
+            ),
+        ).add_to(route_layer)
     folium.Marker(
         location=[
             walking_route["start"]["latitude"],
@@ -2925,11 +2954,34 @@ if naver_map_client_id:
         "facilities": naver_facilities,
         "route": naver_route,
     }
+    route_component_signature = "empty"
+    if naver_route:
+        route_coordinates = naver_route["coordinates"]
+        signature_points = [
+            route_coordinates[0],
+            route_coordinates[len(route_coordinates) // 2],
+            route_coordinates[-1],
+        ]
+        route_component_signature = "-".join(
+            f"{float(value):.5f}"
+            for point in signature_points
+            for value in point
+        )
+        route_component_signature += f"-{len(route_coordinates)}"
+
     NAVER_MAP_COMPONENT(
         html=build_naver_map_html(naver_map_client_id, naver_payload),
-        key=f"changwon-naver-{selected_risk_profile}",
+        key=(
+            f"changwon-naver-route-v3-{selected_risk_profile}-"
+            f"{route_component_signature}"
+        ),
         default=None,
     )
+    if walking_route:
+        st.caption(
+            "지도 표시: 초록색 `출발` · 빨간색 `도착` · "
+            "파란 경로 위 화살표는 이동 방향입니다."
+        )
     st.caption(
         "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "
         "본 서비스의 창원시 분석 데이터입니다."
@@ -2939,6 +2991,9 @@ else:
         map_object,
         width=None,
         height=820,
-        key=f"changwon-safe-route-v2-{selected_risk_profile}",
+        key=(
+            f"changwon-safe-route-v3-{selected_risk_profile}-"
+            f"{'active' if walking_route else 'empty'}"
+        ),
         returned_objects=[],
     )
