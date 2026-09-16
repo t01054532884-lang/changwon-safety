@@ -1444,9 +1444,14 @@ def search_changwon_places_cached(
                 )
                 if "창원" not in address:
                     continue
-                # API HUB는 mapx/mapy를 WGS84 경도/위도로 반환한다.
+                # API HUB 문서의 WGS84 소수 좌표와 기존 검색 API의
+                # 1e7 배율 정수 좌표를 모두 안전하게 처리한다.
                 longitude = float(item.get("mapx", 0))
                 latitude = float(item.get("mapy", 0))
+                if abs(longitude) > 180:
+                    longitude /= 10_000_000
+                if abs(latitude) > 90:
+                    latitude /= 10_000_000
                 add_candidate(
                     latitude,
                     longitude,
