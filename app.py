@@ -1595,6 +1595,32 @@ def search_changwon_places(place: str) -> list[dict]:
     )
 
 
+@st.cache_data(ttl=300, show_spinner=False)
+def check_naver_local_search(client_id: str, client_secret: str) -> tuple[bool, str]:
+    """키 값을 노출하지 않고 NAVER API HUB 지역검색 연결 상태를 확인합니다."""
+    if not client_id or not client_secret:
+        return False, "Streamlit Secrets에서 지역검색 키를 찾지 못했습니다."
+    try:
+        parameters = urlencode({"query": "창원시청", "display": 1, "sort": "random"})
+        request = Request(
+            f"https://naverapihub.apigw.ntruss.com/search/v1/local?{parameters}",
+            headers={
+                "X-NCP-APIGW-API-KEY-ID": client_id,
+                "X-NCP-APIGW-API-KEY": client_secret,
+                "Accept": "application/json",
+            },
+        )
+        with urlopen(request, timeout=15) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        if payload.get("items"):
+            return True, "NAVER 지역검색 API 연결됨"
+        return False, "NAVER 지역검색 API는 응답했지만 검색 결과가 비어 있습니다."
+    except Exception as exc:
+        status_code = getattr(exc, "code", None)
+        detail = f"HTTP {status_code}" if status_code else type(exc).__name__
+        return False, f"NAVER 지역검색 API 연결 실패 ({detail})"
+
+
 @st.cache_data(ttl=86_400, show_spinner=False)
 def geocode_changwon(place: str) -> dict:
     """창원시 안의 장소명이나 주소를 보행 길찾기 좌표로 변환합니다."""
@@ -2620,6 +2646,14 @@ st.caption(
     "35% 이상 크게 우회하지 않으면서 빨간 위험 격자를 덜 지나고 "
     "안전요소 △가 많은 길을 우선 추천합니다."
 )
+naver_search_ok, naver_search_status = check_naver_local_search(
+    get_secret("NAVER_SEARCH_CLIENT_ID"),
+    get_secret("NAVER_SEARCH_CLIENT_SECRET"),
+)
+if naver_search_ok:
+    st.caption(f"✅ {naver_search_status}")
+else:
+    st.warning(naver_search_status)
 route_columns = st.columns(2)
 with route_columns[0]:
     start_query = st.text_input(
