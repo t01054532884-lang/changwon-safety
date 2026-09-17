@@ -23,6 +23,12 @@ from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
 from analysis.optimization import build_candidates, optimize_budget
+from analysis.priority import (
+    add_target_influence,
+    build_priority_top10,
+    prepare_target_facilities,
+)
+from analysis.risk import red_high_risk_percentage
 from analysis.vulnerability import build_grid_analysis, merge_external_grid_data
 
 
@@ -39,6 +45,8 @@ CHANGWON_DISTRICTS_BOUNDARY_FILE = (
 )
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 POLICE_STATION_FILE = BASE_DIR / "data" / "police_stations.csv"
+CHILDCARE_FILE = BASE_DIR / "data" / "childcare_centers.csv"
+SENIOR_CENTER_FILE = BASE_DIR / "data" / "senior_centers.csv"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -1964,6 +1972,16 @@ with st.expander("관리자: 분석 입력 및 예산 최적 배치", expanded=F
             "repair_count, report_count"
         ),
     )
+    childcare_file = st.file_uploader(
+        "어린이집 위치 CSV",
+        type=["csv"],
+        help="위도/경도 또는 latitude/longitude, 선택적으로 어린이집명 컬럼",
+    )
+    senior_center_file = st.file_uploader(
+        "경로당 위치 CSV",
+        type=["csv"],
+        help="위도/경도 또는 latitude/longitude, 선택적으로 경로당명 컬럼",
+    )
     optimization_budget = st.number_input(
         "총 예산 (원)", min_value=0, value=100_000_000, step=10_000_000
     )
@@ -2013,6 +2031,28 @@ if police_source is not None:
         st.success(f"파출소 위치 {len(police_coordinates):,}건을 불러왔습니다.")
     except Exception as error:
         st.error(f"파출소 CSV를 읽지 못했습니다: {error}")
+
+target_facility_frames: dict[str, pd.DataFrame | None] = {
+    "어린이 버전": None,
+    "노인 버전": None,
+}
+for profile_name, uploaded_file, default_file, facility_label in (
+    ("어린이 버전", childcare_file, CHILDCARE_FILE, "어린이집"),
+    ("노인 버전", senior_center_file, SENIOR_CENTER_FILE, "경로당"),
+):
+    target_source = uploaded_file or (default_file if default_file.exists() else None)
+    if target_source is None:
+        continue
+    try:
+        target_facility_frames[profile_name] = prepare_target_facilities(
+            pd.read_csv(target_source)
+        )
+        st.success(
+            f"{facility_label} 위치 "
+            f"{len(target_facility_frames[profile_name]):,}건을 불러왔습니다."
+        )
+    except Exception as error:
+        st.error(f"{facility_label} CSV를 읽지 못했습니다: {error}")
 st.caption(
     "기본 화면에는 원본 범죄위험의 빨간 밀도와 "
     "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
@@ -2615,6 +2655,7 @@ else:
 route_risk_grid = None
 risk_density_image_bytes = None
 risk_grid_image_bytes = None
+installation_top_ten = pd.DataFrame()
 risk_grid_ready = bool(safemap_service_key) and CHANGWON_BOUNDARY_FILE.exists()
 if risk_grid_ready:
     try:
@@ -2677,12 +2718,34 @@ if risk_grid_ready:
                     "police": police_coordinates,
                 },
             )
+            safety_analysis["risk_area_pct"] = red_high_risk_percentage(
+                risk_image_bytes, analysis_grid
+            )
+            target_label = (
+                "어린이" if selected_risk_profile == "어린이 버전" else "노인"
+            )
+            target_facility_label = (
+                "어린이집" if selected_risk_profile == "어린이 버전" else "경로당"
+            )
+            safety_analysis = add_target_influence(
+                safety_analysis,
+                target_facility_frames[selected_risk_profile],
+                target_facility_label,
+            )
             if external_grid_file is not None:
                 external_grid_data = pd.read_csv(external_grid_file)
                 safety_analysis = merge_external_grid_data(
                     safety_analysis, external_grid_data
                 )
-            priority_top_ten = top_priority_cells(safety_analysis)
+            installation_top_ten = build_priority_top10(
+                safety_analysis,
+                target_label,
+                (
+                    load_geojson(CHANGWON_DISTRICTS_BOUNDARY_FILE)
+                    if CHANGWON_DISTRICTS_BOUNDARY_FILE.exists()
+                    else None
+                ),
+            )
 
         folium.raster_layers.ImageOverlay(
             image=high_risk_grid_overlay(risk_grades, analysis_grid),
@@ -2695,7 +2758,7 @@ if risk_grid_ready:
             show=True,
         ).add_to(map_object)
         priority_layer = folium.FeatureGroup(
-            name="우선개선 위험 Top 10",
+            name=f"{target_label} 추가 설치 필요지역 TOP 10",
             overlay=True,
             control=True,
             show=True,
@@ -2703,19 +2766,25 @@ if risk_grid_ready:
         latitude_half_step = analysis_grid["latitude_step"] / 2
         longitude_half_step = analysis_grid["longitude_step"] / 2
         for rank, row in enumerate(
-            priority_top_ten.itertuples(index=False),
+            installation_top_ten.itertuples(index=False),
             start=1,
         ):
             popup_html = (
                 '<div style="width:260px;font-size:14px;line-height:1.55">'
-                f'<b style="color:#991B1B">우선개선 후보 #{rank}</b><br>'
-                f'추정 범죄위험 등급: {int(row.estimated_risk_grade)}<br>'
-                f'안전도: {row.safety_score:.1f}점 '
-                f'({int(row.safety_grade)}등급)<br>'
-                f'시설 보호점수: {row.protection_score:.1f}점<br>'
-                f'CCTV {row.cctv_score:.1f} · '
-                f'보안등 {row.light_score:.1f} · '
-                f'Wi-Fi {row.wifi_score:.1f}<br>'
+                f'<b style="color:#991B1B">추가 설치 필요지역 #{rank}</b><br>'
+                f'위치: {escape(row.district or "행정구 확인 불가")} '
+                f'({row.latitude:.6f}, {row.longitude:.6f})<br>'
+                f'범죄 고위험영역: {row.risk_area_pct:.1f}%<br>'
+                f'안전 인프라: {int(row.infra_count)}/3개 '
+                f'({row.infra_score:.2f}/5점)<br>'
+                f'CCTV: {"충족" if row.cctv_present else "미충족"} · '
+                f'보안등: {"충족" if row.light_present else "미충족"} · '
+                f'Wi-Fi: {"충족" if row.wifi_present else "미충족"}<br>'
+                f'최근접 파출소: {row.police_distance_m:.0f}m<br>'
+                f'{target_facility_label} 영향권: '
+                f'{"자료 없음" if pd.isna(row.target_influence) else ("해당" if row.target_influence else "비해당")}<br>'
+                f'부족 시설: {escape(row.missing_infrastructure)}<br>'
+                f'선정 이유: {escape(row.reason)}<br>'
                 '<span style="color:#6B7280;font-size:12px">'
                 'WMS 픽셀 강도에 따른 상대 추정치이며 실제 범죄 건수가 아닙니다.'
                 '</span></div>'
@@ -2736,16 +2805,23 @@ if risk_grid_ready:
                 fill=True,
                 fill_color="#EF4444",
                 fill_opacity=0.72,
-                tooltip=f"우선개선 후보 #{rank}",
+                tooltip=f"{target_label} 추가 설치 필요지역 #{rank}",
                 popup=folium.Popup(popup_html, max_width=300),
             ).add_to(priority_layer)
         priority_layer.add_to(map_object)
 
-        st.subheader("100m 격자 추정 안전도 분석")
+        st.subheader(f"{target_label} 추가 설치 필요지역 TOP 10")
         st.caption(
-            "생활안전지도 WMS 픽셀 강도를 창원시 내부 상대등급 1~5로 변환한 "
-            "추정치입니다. 실제 범죄 발생 건수나 공식 범죄등급이 아닙니다."
+            "Colab과 동일한 적색계열 픽셀 규칙으로 100m 격자 내 고위험영역 "
+            "비율을 계산하고, CCTV·보안등·공공 Wi-Fi 공백을 함께 평가합니다. "
+            "이 비율은 실제 범죄 발생률이 아닙니다."
         )
+        if target_facility_frames[selected_risk_profile] is None:
+            st.warning(
+                f"{target_facility_label} 좌표가 없어 현재 TOP 10은 창원시 전체 "
+                f"{target_label} 위험격자 기준입니다. 관리자 입력에서 실제 좌표 CSV를 "
+                "올리면 300m 생활권으로 자동 제한됩니다."
+            )
         risk_cell_count = int(
             (safety_analysis["estimated_risk_grade"] >= 4).sum()
         )
@@ -2779,32 +2855,64 @@ if risk_grid_ready:
             ),
         )
 
-        top_ten_table = priority_top_ten[
+        top_ten_table = installation_top_ten[
             [
+                "rank",
+                "district",
                 "latitude",
                 "longitude",
-                "estimated_risk_grade",
-                "protection_score",
-                "safety_score",
-                "safety_grade",
+                "risk_area_pct",
+                "infra_count",
+                "infra_score",
+                "cctv_present",
+                "light_present",
+                "wifi_present",
+                "police_distance_m",
+                "target_influence",
+                "target_count_300m",
+                "missing_infrastructure",
+                "reason",
             ]
         ].copy()
-        top_ten_table.insert(0, "순위", range(1, len(top_ten_table) + 1))
         top_ten_table.columns = [
             "순위",
+            "행정구",
             "위도",
             "경도",
-            "추정 범죄위험 등급",
-            "시설 보호점수",
-            "안전도",
-            "안전등급",
+            "범죄 고위험영역 비율(%)",
+            "안전 인프라 충족 개수",
+            "안전 인프라 충족점수",
+            "CCTV 충족",
+            "보안등 충족",
+            "공공 Wi-Fi 충족",
+            "최근접 파출소 거리(m)",
+            f"{target_facility_label} 300m 영향권",
+            f"300m 내 {target_facility_label} 수",
+            "부족한 안전 인프라",
+            "추가 설치 필요 이유",
         ]
         st.dataframe(
             top_ten_table.round(
-                {"위도": 6, "경도": 6, "시설 보호점수": 1, "안전도": 1}
+                {
+                    "위도": 6,
+                    "경도": 6,
+                    "범죄 고위험영역 비율(%)": 1,
+                    "안전 인프라 충족점수": 2,
+                    "최근접 파출소 거리(m)": 0,
+                }
             ),
             hide_index=True,
             use_container_width=True,
+        )
+        st.download_button(
+            f"{target_label} 추가 설치 필요지역 TOP 10 CSV 다운로드",
+            data=top_ten_table.to_csv(index=False).encode("utf-8-sig"),
+            file_name=(
+                "changwon_child_priority_top10.csv"
+                if selected_risk_profile == "어린이 버전"
+                else "changwon_elderly_priority_top10.csv"
+            ),
+            mime="text/csv",
         )
 
         st.subheader("예산 기반 안전 인프라 최적 배치")
@@ -3252,6 +3360,38 @@ if naver_map_client_id:
             route_risk_grid["bounds"] if route_risk_grid else None
         ),
         "supportSites": naver_support_sites,
+        "priorityZones": (
+            [
+                {
+                    "rank": int(row.rank),
+                    "lat": float(row.latitude),
+                    "lng": float(row.longitude),
+                    "south": float(row.latitude - analysis_grid["latitude_step"] / 2),
+                    "north": float(row.latitude + analysis_grid["latitude_step"] / 2),
+                    "west": float(row.longitude - analysis_grid["longitude_step"] / 2),
+                    "east": float(row.longitude + analysis_grid["longitude_step"] / 2),
+                    "district": str(row.district),
+                    "riskPct": float(row.risk_area_pct),
+                    "infraCount": int(row.infra_count),
+                    "infraScore": float(row.infra_score),
+                    "cctv": bool(row.cctv_present),
+                    "light": bool(row.light_present),
+                    "wifi": bool(row.wifi_present),
+                    "policeDistance": float(row.police_distance_m),
+                    "targetLabel": str(target_facility_label),
+                    "targetInfluence": (
+                        "자료 없음"
+                        if pd.isna(row.target_influence)
+                        else ("해당" if row.target_influence else "비해당")
+                    ),
+                    "missing": str(row.missing_infrastructure),
+                    "reason": str(row.reason),
+                }
+                for row in installation_top_ten.itertuples(index=False)
+            ]
+            if not installation_top_ten.empty
+            else []
+        ),
         "facilities": naver_facilities,
         "route": naver_route,
     }
