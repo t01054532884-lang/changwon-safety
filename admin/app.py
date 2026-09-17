@@ -1,4 +1,5 @@
 import json
+import importlib
 import math
 import os
 import re
@@ -28,11 +29,16 @@ from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
 from analysis.optimization import build_candidates, optimize_budget
-from analysis.priority import (
-    add_target_influence,
-    build_priority_top10,
-    prepare_target_facilities,
-)
+import analysis.priority as priority_analysis
+
+# Streamlit Cloud can rerun the entry script while retaining an older imported
+# project module after a Git deployment. Reload only when the result schema is
+# stale so the UI and analysis columns always agree.
+if getattr(priority_analysis, "PRIORITY_MODEL_VERSION", None) != "colab-v2":
+    priority_analysis = importlib.reload(priority_analysis)
+add_target_influence = priority_analysis.add_target_influence
+build_priority_top10 = priority_analysis.build_priority_top10
+prepare_target_facilities = priority_analysis.prepare_target_facilities
 from analysis.risk import red_high_risk_percentage
 from analysis.vulnerability import build_grid_analysis, merge_external_grid_data
 
@@ -2106,7 +2112,31 @@ st.caption(
     "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
 )
 
-raw_facility_layers = ["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"]
+layer_selector_columns = st.columns([2.1, 1])
+with layer_selector_columns[1]:
+    raw_facility_layers = st.multiselect(
+        "원본 시설 레이어 불러오기",
+        options=["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"],
+        default=[],
+        placeholder="필요한 시설만 선택",
+        help=(
+            "선택한 시설 좌표만 지도 브라우저로 전송합니다. "
+            "보행조명처럼 건수가 많은 레이어는 선택 시 로딩이 추가로 걸릴 수 있습니다."
+        ),
+        key="raw-facility-layers",
+    )
+with layer_selector_columns[0]:
+    if raw_facility_layers:
+        st.caption(
+            "선택한 원본 시설만 지도 오른쪽 레이어 목록에 추가됩니다: "
+            + ", ".join(raw_facility_layers)
+        )
+    else:
+        st.caption(
+            "빠른 초기 표시를 위해 CCTV·보행조명·공공 Wi-Fi·지구대/파출소 "
+            "원본 좌표는 전송하지 않습니다. 오른쪽에서 필요한 시설만 선택해 주세요."
+        )
+raw_layer_signature = "-".join(raw_facility_layers) or "none"
 
 map_object = folium.Map(
     location=[map_focus["latitude"], map_focus["longitude"]],
@@ -2162,7 +2192,7 @@ if map_focus["zoom"] > 10:
         icon=folium.Icon(color="green", icon="map-marker", prefix="fa"),
     ).add_to(map_object)
 
-if not police_frame.empty:
+if "지구대·파출소" in raw_facility_layers and not police_frame.empty:
     police_layer = folium.FeatureGroup(
         name="원본 지구대·파출소", overlay=True, control=True, show=False
     )
@@ -3221,6 +3251,7 @@ if risk_grid_ready:
                 use_container_width=True,
             )
     except Exception as error:
+        installation_top_ten = pd.DataFrame()
         st.warning(
             "원본 범죄위험 고밀도 격자를 생성하지 못했습니다. "
             f"기존 지도는 계속 사용할 수 있습니다. ({error})"
@@ -3577,6 +3608,7 @@ if naver_map_client_id:
         key=(
             f"changwon-naver-admin-v4-{selected_risk_profile}-"
             f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
+            f"{raw_layer_signature}-"
             f"{route_component_signature}"
         ),
         default=None,
@@ -3592,7 +3624,8 @@ else:
         height=820,
         key=(
             f"changwon-admin-map-v4-{selected_risk_profile}-"
-            f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}"
+            f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
+            f"{raw_layer_signature}"
         ),
         returned_objects=[],
     )

@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 
 
+PRIORITY_MODEL_VERSION = "colab-v2"
+
+
 def prepare_target_facilities(dataframe: pd.DataFrame) -> pd.DataFrame:
     """Normalize an uploaded daycare/senior-center coordinate table."""
     latitude_column = "latitude" if "latitude" in dataframe else "위도"
