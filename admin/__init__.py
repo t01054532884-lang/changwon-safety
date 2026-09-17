@@ -1,0 +1,2 @@
+"""Changwon safety administrator application."""
+
