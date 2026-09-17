@@ -157,7 +157,7 @@ def build_priority_top10(
     limit: int = 10,
     minimum_separation_m: float = 300.0,
 ) -> pd.DataFrame:
-    """Rank high-red-risk, low-infrastructure cells with transparent rules."""
+    """Apply the Colab 1-5 score model and rank contiguous priority clusters."""
     required = {
         "risk_area_pct",
         "cctv_present",
@@ -170,9 +170,14 @@ def build_priority_top10(
         raise ValueError(f"TOP 10 분석에 필요한 컬럼이 없습니다: {', '.join(sorted(missing))}")
 
     ranked = analysis.copy()
+    if ranked["target_influence"].notna().any():
+        ranked = ranked[ranked["target_influence"] == True].copy()  # noqa: E712
+
     present_columns = ["cctv_present", "light_present", "wifi_present"]
     ranked["infra_count"] = ranked[present_columns].astype(int).sum(axis=1)
     ranked["infra_score"] = (1.0 + ranked["infra_count"] * 4.0 / 3.0).round(2)
+    ranked["infra_deficit_count"] = 3 - ranked["infra_count"]
+    ranked["infra_deficit_score"] = (6.0 - ranked["infra_score"]).round(2)
     ranked["missing_infrastructure"] = ranked.apply(
         lambda row: ", ".join(
             label
@@ -183,29 +188,109 @@ def build_priority_top10(
         ) or "없음",
         axis=1,
     )
-    ranked["priority_score"] = ranked["risk_area_pct"] * (
-        1.0 + (3 - ranked["infra_count"]) / 3.0
+    # Colab 19단계: 0%는 1점, 양수 격자는 백분위 사분위에 따라 2~5점이다.
+    ranked["crime_risk_score"] = 1
+    positive = ranked["risk_area_pct"] > 0
+    percentiles = ranked.loc[positive, "risk_area_pct"].rank(
+        method="average", pct=True
     )
-    ranked = ranked[ranked["risk_area_pct"] > 0]
-    if ranked["target_influence"].notna().any():
-        ranked = ranked[ranked["target_influence"] == True]  # noqa: E712
-    ranked = ranked.sort_values(
-        ["priority_score", "risk_area_pct", "infra_count", "police_distance_m"],
-        ascending=[False, False, True, False],
-        na_position="last",
+    ranked.loc[positive, "crime_risk_score"] = np.select(
+        [percentiles <= 0.25, percentiles <= 0.50, percentiles <= 0.75],
+        [2, 3, 4],
+        default=5,
+    )
+    ranked["crime_risk_score"] = ranked["crime_risk_score"].astype(int)
+
+    # Colab 20~21단계: 위험과 부족이 동시에 클 때만 점수가 크게 상승한다.
+    ranked["priority_score"] = (
+        1.0
+        + (ranked["crime_risk_score"] - 1.0)
+        * (ranked["infra_deficit_score"] - 1.0)
+        / 4.0
+    ).round(2)
+    ranked["priority_grade"] = (
+        ranked["priority_score"].round().clip(1, 5).astype(int)
     )
 
-    selected = []
-    for row in ranked.to_dict("records"):
-        if any(
-            distance_m(row["latitude"], row["longitude"], item["latitude"], item["longitude"])
-            < minimum_separation_m
-            for item in selected
+    # Colab 22단계: 4~5등급 중 변을 맞댄 100m 격자를 하나의 구역으로 묶는다.
+    candidates = ranked[ranked["priority_grade"] >= 4].copy()
+    if candidates.empty:
+        empty_defaults = {
+            "rank": pd.Series(dtype="int64"),
+            "district": pd.Series(dtype="object"),
+            "cluster_grid_count": pd.Series(dtype="int64"),
+            "max_priority_grade": pd.Series(dtype="int64"),
+            "mean_priority_score": pd.Series(dtype="float64"),
+            "max_priority_score": pd.Series(dtype="float64"),
+            "mean_risk_pct": pd.Series(dtype="float64"),
+            "max_risk_pct": pd.Series(dtype="float64"),
+            "cluster_grid_ids": pd.Series(dtype="object"),
+            "reason": pd.Series(dtype="object"),
+        }
+        for column, values in empty_defaults.items():
+            candidates[column] = values
+        return candidates
+    if not {"row", "column"}.issubset(candidates.columns):
+        raise ValueError("연속 격자 분석에는 row와 column 컬럼이 필요합니다.")
+
+    coordinates = {
+        (int(row.row), int(row.column)): index
+        for index, row in candidates.iterrows()
+    }
+    parent = {index: index for index in candidates.index}
+
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    def union(first, second):
+        first_root, second_root = find(first), find(second)
+        if first_root != second_root:
+            parent[second_root] = first_root
+
+    for (grid_row, grid_column), index in coordinates.items():
+        for neighbor in (
+            (grid_row - 1, grid_column),
+            (grid_row + 1, grid_column),
+            (grid_row, grid_column - 1),
+            (grid_row, grid_column + 1),
         ):
-            continue
-        selected.append(row)
-        if len(selected) >= limit:
-            break
+            if neighbor in coordinates:
+                union(index, coordinates[neighbor])
+
+    candidates["cluster_key"] = [find(index) for index in candidates.index]
+    summaries = candidates.groupby("cluster_key", as_index=False).agg(
+        cluster_grid_count=("grid_id", "size"),
+        max_priority_grade=("priority_grade", "max"),
+        mean_priority_score=("priority_score", "mean"),
+        max_priority_score=("priority_score", "max"),
+        mean_risk_pct=("risk_area_pct", "mean"),
+        max_risk_pct=("risk_area_pct", "max"),
+    )
+    summaries = summaries.sort_values(
+        [
+            "max_priority_grade",
+            "mean_priority_score",
+            "cluster_grid_count",
+            "max_risk_pct",
+        ],
+        ascending=[False, False, False, False],
+    ).head(limit)
+
+    # 지도와 표에는 각 구역에서 점수가 가장 높은 대표 격자를 사용한다.
+    selected = []
+    for summary in summaries.to_dict("records"):
+        cluster = candidates[candidates["cluster_key"] == summary["cluster_key"]]
+        representative = cluster.sort_values(
+            ["priority_grade", "priority_score", "risk_area_pct", "grid_id"],
+            ascending=[False, False, False, True],
+        ).iloc[0].to_dict()
+        representative.update(summary)
+        representative["cluster_grid_ids"] = ",".join(sorted(cluster["grid_id"]))
+        selected.append(representative)
+
     result = pd.DataFrame(selected)
     if result.empty:
         return result
@@ -218,11 +303,6 @@ def build_priority_top10(
         result["district"] = ""
 
     def reason(row: pd.Series) -> str:
-        police_text = (
-            f"최근접 파출소 {row.police_distance_m:.0f}m"
-            if pd.notna(row.police_distance_m)
-            else "파출소 거리 자료 없음"
-        )
         influence_text = ""
         area_text = "창원시 내"
         if pd.notna(row.get("target_influence")):
@@ -230,10 +310,13 @@ def build_priority_top10(
             area_text = f"{target_label} 생활권 내"
         return (
             f"{target_label} 범죄 고위험영역 {row.risk_area_pct:.1f}%, "
-            f"안전 인프라 {int(row.infra_count)}/3개 충족, {police_text}{influence_text}로 "
+            f"안전 인프라 부족 {int(row.infra_deficit_count)}/3개, "
+            f"연속 고취약 격자 {int(row.cluster_grid_count)}개{influence_text}로 "
             f"{area_text} 안전 인프라 보강 우선지역"
         )
 
     result["reason"] = result.apply(reason, axis=1)
     result.insert(0, "rank", range(1, len(result) + 1))
+    # 이전 호출부의 인자는 호환성을 위해 남기되 Colab 군집 방식에서는 사용하지 않는다.
+    _ = minimum_separation_m
     return result

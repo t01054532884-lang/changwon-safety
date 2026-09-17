@@ -1959,6 +1959,62 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 
+st.subheader("지도 위치 검색")
+st.caption("주소를 검색하거나 위도·경도를 입력하면 해당 위치를 중심으로 지도를 엽니다.")
+default_map_focus = {
+    "latitude": 35.1800,
+    "longitude": 128.6200,
+    "name": "창원시",
+    "zoom": 10,
+}
+map_focus = dict(st.session_state.get("map_focus", default_map_focus))
+location_columns = st.columns([1.7, 1])
+with location_columns[0]:
+    location_choice = st_searchbox(
+        autocomplete_changwon_places,
+        label="주소 검색",
+        placeholder="장소명 또는 주소 입력 (예: 창원시청)",
+        key="map-focus-query",
+        debounce=350,
+        clear_on_submit=False,
+        edit_after_submit="option",
+    )
+    if isinstance(location_choice, dict):
+        map_focus = {
+            "latitude": float(location_choice["latitude"]),
+            "longitude": float(location_choice["longitude"]),
+            "name": str(location_choice.get("name") or "검색 위치"),
+            "zoom": 16,
+        }
+        st.session_state["map_focus"] = map_focus
+with location_columns[1]:
+    with st.form("coordinate-map-focus"):
+        coordinate_columns = st.columns(2)
+        latitude_input = coordinate_columns[0].number_input(
+            "위도", value=float(map_focus["latitude"]), format="%.6f"
+        )
+        longitude_input = coordinate_columns[1].number_input(
+            "경도", value=float(map_focus["longitude"]), format="%.6f"
+        )
+        coordinate_submitted = st.form_submit_button(
+            "좌표 위치로 이동", use_container_width=True
+        )
+    if coordinate_submitted:
+        if not (
+            CHANGWON_BOUNDS[0] <= latitude_input <= CHANGWON_BOUNDS[2]
+            and CHANGWON_BOUNDS[1] <= longitude_input <= CHANGWON_BOUNDS[3]
+        ):
+            st.error("창원시 범위 안의 위도와 경도를 입력해 주세요.")
+        else:
+            map_focus = {
+                "latitude": float(latitude_input),
+                "longitude": float(longitude_input),
+                "name": "입력 좌표",
+                "zoom": 16,
+            }
+            st.session_state["map_focus"] = map_focus
+            st.rerun()
+
 def saved_csv_source(key: str, fallback: Path | None = None):
     stored = st.session_state.get(key)
     if stored:
@@ -1980,6 +2036,7 @@ infrastructure_costs = {
 }
 
 police_coordinates: list[tuple[float, float]] = []
+police_frame = pd.DataFrame()
 police_source = police_station_file or (
     POLICE_STATION_FILE if POLICE_STATION_FILE.exists() else None
 )
@@ -2001,6 +2058,19 @@ if police_source is not None:
             police_frame[longitude_column], errors="coerce"
         )
         police_frame = police_frame.dropna(subset=["latitude", "longitude"])
+        name_column = "관서명" if "관서명" in police_frame else "name"
+        type_column = "구분" if "구분" in police_frame else None
+        address_column = "주소" if "주소" in police_frame else "address"
+        if name_column not in police_frame or address_column not in police_frame:
+            raise ValueError("관서명/name 및 주소/address 컬럼이 필요합니다.")
+        police_frame["station_name"] = police_frame[name_column].fillna("").astype(str)
+        if type_column:
+            police_frame["station_name"] = (
+                police_frame["station_name"].str.strip()
+                + " "
+                + police_frame[type_column].fillna("").astype(str).str.strip()
+            ).str.strip()
+        police_frame["address"] = police_frame[address_column].fillna("").astype(str)
         police_coordinates = list(
             police_frame[["latitude", "longitude"]].itertuples(
                 index=False, name=None
@@ -2036,11 +2106,11 @@ st.caption(
     "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
 )
 
-raw_facility_layers = ["CCTV", "보행조명", "공공 와이파이"]
+raw_facility_layers = ["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"]
 
 map_object = folium.Map(
-    location=[35.1800, 128.6200],
-    zoom_start=10,
+    location=[map_focus["latitude"], map_focus["longitude"]],
+    zoom_start=int(map_focus["zoom"]),
     min_zoom=9,
     min_lat=34.75,
     max_lat=35.55,
@@ -2083,6 +2153,37 @@ add_changwon_district_boundary_layer(
     map_object=map_object,
     file_path=CHANGWON_DISTRICTS_BOUNDARY_FILE,
 )
+
+if map_focus["zoom"] > 10:
+    folium.Marker(
+        [map_focus["latitude"], map_focus["longitude"]],
+        tooltip=map_focus["name"],
+        popup=folium.Popup(escape(map_focus["name"]), max_width=240),
+        icon=folium.Icon(color="green", icon="map-marker", prefix="fa"),
+    ).add_to(map_object)
+
+if not police_frame.empty:
+    police_layer = folium.FeatureGroup(
+        name="원본 지구대·파출소", overlay=True, control=True, show=False
+    )
+    for row in police_frame.itertuples(index=False):
+        popup_html = (
+            '<div style="width:240px;font-size:14px;line-height:1.55">'
+            f"<b>{escape(row.station_name)}</b><br>"
+            f"주소: {escape(row.address)}</div>"
+        )
+        folium.CircleMarker(
+            [row.latitude, row.longitude],
+            radius=6,
+            color="#1D4ED8",
+            weight=2,
+            fill=True,
+            fill_color="#3B82F6",
+            fill_opacity=0.9,
+            tooltip=row.station_name,
+            popup=folium.Popup(popup_html, max_width=270),
+        ).add_to(police_layer)
+    police_layer.add_to(map_object)
 
 map_object.get_root().html.add_child(
     folium.Element(
@@ -2493,7 +2594,7 @@ if pedestrian_lights:
             name="원본 보행조명(차도 가로등 제외)",
             minimum_cluster_size=10,
             cell_size=55,
-            show=True,
+            show=False,
         ).add_to(map_object)
 
 wifi_data = pd.DataFrame()
@@ -2546,7 +2647,7 @@ if not wifi_data.empty:
             name="원본 공공 와이파이",
             minimum_cluster_size=10,
             cell_size=55,
-            show=True,
+            show=False,
         ).add_to(map_object)
 
 cctv_data = pd.DataFrame()
@@ -2619,7 +2720,7 @@ else:
                 name="원본 방범용 CCTV",
                 minimum_cluster_size=10,
                 cell_size=55,
-                show=True,
+                show=False,
             ).add_to(map_object)
 
 route_risk_grid = None
@@ -2745,6 +2846,11 @@ if risk_grid_ready:
                 f'위치: {escape(row.district or "행정구 확인 불가")} '
                 f'({row.latitude:.6f}, {row.longitude:.6f})<br>'
                 f'범죄 고위험영역: {row.risk_area_pct:.1f}%<br>'
+                f'범죄 위험도: {int(row.crime_risk_score)}/5점 · '
+                f'인프라 부족도: {row.infra_deficit_score:.2f}/5점<br>'
+                f'최종 취약도: {row.priority_score:.2f}/5점 '
+                f'({int(row.priority_grade)}등급)<br>'
+                f'연속 고취약 격자: {int(row.cluster_grid_count)}개<br>'
                 f'안전 인프라: {int(row.infra_count)}/3개 '
                 f'({row.infra_score:.2f}/5점)<br>'
                 f'CCTV: {"충족" if row.cctv_present else "미충족"} · '
@@ -2778,12 +2884,30 @@ if risk_grid_ready:
                 tooltip=f"{target_label} 추가 설치 필요지역 #{rank}",
                 popup=folium.Popup(popup_html, max_width=300),
             ).add_to(priority_layer)
+            folium.Marker(
+                [row.latitude, row.longitude],
+                tooltip=f"{target_label} 추가 설치 필요지역 #{rank}",
+                icon=folium.DivIcon(
+                    html=(
+                        '<div style="display:flex;align-items:center;justify-content:center;'
+                        'width:28px;height:24px;border-radius:7px;border:2px solid #fff;'
+                        'background:#991b1b;color:#fff;font-size:12px;font-weight:900;'
+                        'box-shadow:0 1px 5px rgba(0,0,0,.4);">'
+                        f"T{rank}</div>"
+                    ),
+                    icon_size=(28, 24),
+                    icon_anchor=(14, 12),
+                ),
+            ).add_to(priority_layer)
         priority_layer.add_to(map_object)
 
         st.subheader(f"{target_label} 추가 설치 필요지역 TOP 10")
         st.caption(
             "Colab과 동일한 적색계열 픽셀 규칙으로 100m 격자 내 고위험영역 "
-            "비율을 계산하고, CCTV·보안등·공공 Wi-Fi 공백을 함께 평가합니다. "
+            "비율을 계산합니다. 범죄 위험도와 CCTV·보안등·공공 Wi-Fi 부족도를 "
+            "각 1~5점으로 바꾼 뒤 코랩의 곱셈 산식을 적용하고, 변을 맞댄 4~5등급 "
+            "격자를 연속 구역으로 묶어 TOP 10을 선정합니다. 경찰 거리는 순위에 "
+            "넣지 않습니다. "
             "이 비율은 실제 범죄 발생률이 아닙니다."
         )
         if target_facility_frames[selected_risk_profile] is None:
@@ -2804,6 +2928,14 @@ if risk_grid_ready:
                 "latitude",
                 "longitude",
                 "risk_area_pct",
+                "crime_risk_score",
+                "infra_deficit_count",
+                "infra_deficit_score",
+                "priority_score",
+                "priority_grade",
+                "cluster_grid_count",
+                "mean_priority_score",
+                "max_risk_pct",
                 "infra_count",
                 "infra_score",
                 "cctv_present",
@@ -2822,6 +2954,14 @@ if risk_grid_ready:
             "위도",
             "경도",
             "범죄 고위험영역 비율(%)",
+            "범죄 위험도(1~5)",
+            "부족 인프라 개수",
+            "인프라 부족도(1~5)",
+            "최종 취약도 점수(1~5)",
+            "최종 취약도 등급",
+            "연속 고취약 격자 수",
+            "구역 평균 취약도",
+            "구역 최대 고위험영역 비율(%)",
             "안전 인프라 충족 개수",
             "안전 인프라 충족점수",
             "CCTV 충족",
@@ -2860,7 +3000,7 @@ if risk_grid_ready:
                     f'<div class="priority-place">{escape(row.district or "행정구 확인 불가")}</div>'
                     f'<div class="priority-sub">{row.latitude:.5f}, {row.longitude:.5f}</div>'
                     f'<div class="infra-badges">{badges}</div>'
-                    f'<div class="priority-meta"><span>인프라 <b>{int(row.infra_count)}/3</b></span><span>충족점수 <b>{row.infra_score:.2f}/5</b></span>'
+                    f'<div class="priority-meta"><span>취약도 <b>{row.priority_score:.2f}/5</b></span><span>연속 격자 <b>{int(row.cluster_grid_count)}개</b></span>'
                     f'<span>파출소 <b>{row.police_distance_m:.0f}m</b></span><span>{escape(target_facility_label)} <b>300m 영향권</b></span></div>'
                     f'<div class="priority-reason">{escape(row.reason)}</div></div>',
                     unsafe_allow_html=True,
@@ -2923,19 +3063,75 @@ if risk_grid_ready:
             st.session_state["cost_light"] = int(light_cost_input)
             st.session_state["cost_wifi"] = int(wifi_cost_input)
             st.session_state["show_optimization"] = True
+            st.session_state["optimization_signature"] = selected_risk_profile
             st.rerun()
 
-        show_optimization = st.session_state.get("show_optimization", False)
+        show_optimization = (
+            st.session_state.get("show_optimization", False)
+            and st.session_state.get("optimization_signature")
+            == selected_risk_profile
+        )
+        placement_candidates = build_candidates(
+            safety_analysis,
+            {key: int(value) for key, value in infrastructure_costs.items()},
+        )
+        if not show_optimization:
+            st.subheader("최적 배치 후보 미리보기")
+            st.caption(
+                "결과 보기 전에는 우선 후보 10개만 표시합니다. "
+                "오른쪽 버튼에서 미리보기 생략 없는 전체 후보 원본 CSV를 받을 수 있습니다."
+            )
+            if placement_candidates.empty:
+                st.info("현재 조건에서 미리 볼 최적 배치 후보가 없습니다.")
+            else:
+                preview_columns = st.columns([3, 1])
+                preview_table = placement_candidates.nlargest(
+                    10, "expected_improvement"
+                )[
+                [
+                    "latitude",
+                    "longitude",
+                    "facility",
+                    "cost",
+                    "reason",
+                    "before_vulnerability",
+                    "expected_improvement",
+                ]
+                ].copy()
+                preview_table.columns = [
+                "위도",
+                "경도",
+                "추천 시설",
+                "예상 비용",
+                "추천 이유",
+                "설치 전 취약도",
+                "예상 개선 효과",
+                ]
+                preview_columns[0].dataframe(
+                    preview_table.round(
+                    {
+                        "위도": 6,
+                        "경도": 6,
+                        "설치 전 취약도": 1,
+                        "예상 개선 효과": 1,
+                    }
+                    ),
+                    hide_index=True,
+                    use_container_width=True,
+                )
+                preview_columns[1].download_button(
+                    "전체 후보 원본 CSV 다운로드",
+                    data=placement_candidates.to_csv(index=False).encode("utf-8-sig"),
+                    file_name="changwon_placement_candidates_full.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
         if show_optimization:
             st.subheader("예산 기반 안전 인프라 최적 배치")
             st.caption(
                 "상위 취약 격자별 시설 대안을 만든 뒤, 설정한 예산 안에서 "
                 "예상 취약도 개선 합계를 최대화하는 0-1 배낭 최적화를 적용합니다. "
                 "실제 설치 전에는 현장·소유권·전력·통신 조건 검토가 필요합니다."
-            )
-            placement_candidates = build_candidates(
-                safety_analysis,
-                {key: int(value) for key, value in infrastructure_costs.items()},
             )
             optimized_placements = optimize_budget(
                 placement_candidates, int(optimization_budget)
@@ -3017,6 +3213,13 @@ if risk_grid_ready:
                 hide_index=True,
                 use_container_width=True,
             )
+            st.download_button(
+                "최적 배치 전체 결과 CSV 다운로드",
+                data=result_table.to_csv(index=False).encode("utf-8-sig"),
+                file_name="changwon_optimized_placements_full.csv",
+                mime="text/csv",
+                use_container_width=True,
+            )
     except Exception as error:
         st.warning(
             "원본 범죄위험 고밀도 격자를 생성하지 못했습니다. "
@@ -3082,84 +3285,8 @@ if support_sites:
         "(CCTV 100m·보행조명 50m·공공 Wi-Fi 기준)"
     )
 
-st.subheader("안전 보행 길찾기")
-st.caption(
-    "창원시 내 장소명이나 주소를 입력하세요. 가장 짧은 경로에서 "
-    "35% 이상 크게 우회하지 않으면서 빨간 위험 격자를 덜 지나고 "
-    "안전요소 △가 많은 길을 우선 추천합니다."
-)
-naver_search_ok, naver_search_status = check_naver_local_search(
-    get_secret("NAVER_SEARCH_CLIENT_ID"),
-    get_secret("NAVER_SEARCH_CLIENT_SECRET"),
-)
-if naver_search_ok:
-    st.caption(f"✅ {naver_search_status}")
-else:
-    st.warning(naver_search_status)
-route_columns = st.columns(2)
-with route_columns[0]:
-    start_choice = st_searchbox(
-        autocomplete_changwon_places,
-        label="출발지",
-        placeholder="장소명 입력 (예: 창원NC파크)",
-        key="route-start-query",
-        debounce=350,
-        clear_on_submit=False,
-        edit_after_submit="option",
-    )
-with route_columns[1]:
-    destination_choice = st_searchbox(
-        autocomplete_changwon_places,
-        label="도착지",
-        placeholder="장소명 입력 (예: 창원대학교)",
-        key="route-destination-query",
-        debounce=350,
-        clear_on_submit=False,
-        edit_after_submit="option",
-    )
-
-route_submitted = st.button(
-    "안전 보행경로 찾기",
-    type="primary",
-    width="stretch",
-)
-
-if route_submitted:
-    try:
-        if not isinstance(start_choice, dict) or not isinstance(
-            destination_choice, dict
-        ):
-            raise ValueError("출발지와 도착지를 검색한 뒤 후보 목록에서 선택해 주세요.")
-        with st.spinner("보행로와 주변 안전요소를 비교하고 있습니다..."):
-            route_start = start_choice
-            route_destination = destination_choice
-            route_candidates = fetch_pedestrian_routes(
-                route_start,
-                route_destination,
-            )
-            calculated_at = datetime.now(ZoneInfo("Asia/Seoul"))
-            selected_route = choose_pedestrian_route(
-                route_candidates,
-                support_sites,
-                True,
-                route_risk_grid,
-            )
-            arrival_time = calculated_at + timedelta(
-                seconds=selected_route["duration"]
-            )
-            st.session_state["walking_route"] = {
-                "start": route_start,
-                "destination": route_destination,
-                "route": selected_route,
-                "calculated_at": calculated_at.strftime("%H:%M"),
-                "arrival_time": arrival_time.strftime("%H:%M"),
-                "alternative_count": len(route_candidates),
-            }
-    except Exception as error:
-        st.session_state.pop("walking_route", None)
-        st.error(f"보행경로를 만들지 못했습니다. {error}")
-
-walking_route = st.session_state.get("walking_route")
+st.session_state.pop("walking_route", None)
+walking_route = None
 if walking_route:
     selected_route = walking_route["route"]
     if not walking_route.get("calculated_at") or not walking_route.get(
@@ -3332,7 +3459,7 @@ if naver_map_client_id:
         }
         for site in support_sites
     ]
-    naver_facilities = {"cctv": [], "light": [], "wifi": []}
+    naver_facilities = {"cctv": [], "light": [], "wifi": [], "police": []}
     if "CCTV" in raw_facility_layers and not cctv_locations.empty:
         naver_facilities["cctv"] = [
             [float(row.latitude), float(row.longitude), str(row.address)]
@@ -3348,6 +3475,16 @@ if naver_map_client_id:
             [float(row.latitude), float(row.longitude), str(row.place)]
             for row in wifi_locations.itertuples(index=False)
         ]
+    if "지구대·파출소" in raw_facility_layers and not police_frame.empty:
+        naver_facilities["police"] = [
+            [
+                float(row.latitude),
+                float(row.longitude),
+                str(row.station_name),
+                str(row.address),
+            ]
+            for row in police_frame.itertuples(index=False)
+        ]
 
     naver_route = None
     if walking_route:
@@ -3358,6 +3495,12 @@ if naver_map_client_id:
         }
 
     naver_payload = {
+        "focus": {
+            "lat": float(map_focus["latitude"]),
+            "lng": float(map_focus["longitude"]),
+            "name": str(map_focus["name"]),
+            "zoom": int(map_focus["zoom"]),
+        },
         "outerBoundary": (
             load_geojson(CHANGWON_BOUNDARY_FILE)
             if CHANGWON_BOUNDARY_FILE.exists()
@@ -3386,6 +3529,11 @@ if naver_map_client_id:
                     "east": float(row.longitude + analysis_grid["longitude_step"] / 2),
                     "district": str(row.district),
                     "riskPct": float(row.risk_area_pct),
+                    "riskScore": int(row.crime_risk_score),
+                    "deficitScore": float(row.infra_deficit_score),
+                    "priorityScore": float(row.priority_score),
+                    "priorityGrade": int(row.priority_grade),
+                    "clusterGridCount": int(row.cluster_grid_count),
                     "infraCount": int(row.infra_count),
                     "infraScore": float(row.infra_score),
                     "cctv": bool(row.cctv_present),
@@ -3407,7 +3555,7 @@ if naver_map_client_id:
             else []
         ),
         "facilities": naver_facilities,
-        "route": naver_route,
+        "route": None,
     }
     route_component_signature = "empty"
     if naver_route:
@@ -3427,18 +3575,14 @@ if naver_map_client_id:
     NAVER_MAP_COMPONENT(
         html=build_naver_map_html(naver_map_client_id, naver_payload),
         key=(
-            f"changwon-naver-route-v3-{selected_risk_profile}-"
+            f"changwon-naver-admin-v4-{selected_risk_profile}-"
+            f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
             f"{route_component_signature}"
         ),
         default=None,
     )
-    if walking_route:
-        st.caption(
-            "지도 표시: 초록색 `출발` · 빨간색 `도착` · "
-            "파란 경로 위 화살표는 이동 방향입니다."
-        )
     st.caption(
-        "지도 배경: NAVER Maps · 범죄위험과 안전시설 및 보행경로는 "
+        "지도 배경: NAVER Maps · 범죄위험과 안전시설은 "
         "본 서비스의 창원시 분석 데이터입니다."
     )
 else:
@@ -3447,8 +3591,8 @@ else:
         width=None,
         height=820,
         key=(
-            f"changwon-safe-route-v3-{selected_risk_profile}-"
-            f"{'active' if walking_route else 'empty'}"
+            f"changwon-admin-map-v4-{selected_risk_profile}-"
+            f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}"
         ),
         returned_objects=[],
     )
