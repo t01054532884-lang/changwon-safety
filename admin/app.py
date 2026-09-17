@@ -1206,6 +1206,23 @@ def boundary_grid_mask(
 
 
 @st.cache_data(ttl=86_400, show_spinner=False)
+def cached_grid_safety_analysis(
+    analysis_grid: dict,
+    risk_grades: np.ndarray,
+    risk_image_bytes: bytes,
+    facilities: dict[str, list[tuple[float, float]]],
+    model_version: str = "grid-v2-vectorized-police",
+) -> pd.DataFrame:
+    """Cache the expensive facility-distance analysis across Streamlit reruns."""
+    del model_version
+    result = build_grid_analysis(analysis_grid, risk_grades, facilities)
+    result["risk_area_pct"] = red_high_risk_percentage(
+        risk_image_bytes, analysis_grid
+    )
+    return result
+
+
+@st.cache_data(ttl=86_400, show_spinner=False)
 def fetch_safemap_risk_image(
     _service_key: str,
     url: str,
@@ -2809,18 +2826,16 @@ if risk_grid_ready:
                 (float(row.latitude), float(row.longitude))
                 for row in wifi_locations.itertuples(index=False)
             ]
-            safety_analysis = build_grid_analysis(
+            safety_analysis = cached_grid_safety_analysis(
                 analysis_grid,
                 risk_grades,
+                risk_image_bytes,
                 {
                     "cctv": cctv_analysis_coordinates,
                     "light": light_analysis_coordinates,
                     "wifi": wifi_analysis_coordinates,
                     "police": police_coordinates,
                 },
-            )
-            safety_analysis["risk_area_pct"] = red_high_risk_percentage(
-                risk_image_bytes, analysis_grid
             )
             target_label = (
                 "어린이" if selected_risk_profile == "어린이 버전" else "노인"
