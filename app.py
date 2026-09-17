@@ -22,6 +22,9 @@ from naver_map import build_naver_map_html, png_data_url
 from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
+from analysis.optimization import build_candidates, optimize_budget
+from analysis.vulnerability import build_grid_analysis, merge_external_grid_data
+
 
 BASE_DIR = Path(__file__).resolve().parent
 NAVER_MAP_COMPONENT = components.declare_component(
@@ -35,6 +38,7 @@ CHANGWON_DISTRICTS_BOUNDARY_FILE = (
     BASE_DIR / "data" / "changwon_districts_boundary.geojson"
 )
 PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
+POLICE_STATION_FILE = BASE_DIR / "data" / "police_stations.csv"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -1941,6 +1945,74 @@ st.caption(
     f"현재 범죄위험 레이어: {risk_profile['title']} "
     "(생활안전지도·경찰청 제공)"
 )
+
+with st.expander("관리자: 분석 입력 및 예산 최적 배치", expanded=False):
+    st.caption(
+        "기본 파출소 자료를 사용하며 업로드한 CSV가 있으면 이를 대신 반영합니다. "
+        "외부 지표의 없는 값은 0으로 만들지 않고 결측으로 유지합니다."
+    )
+    police_station_file = st.file_uploader(
+        "파출소 위치 CSV",
+        type=["csv"],
+        help="필수 컬럼: latitude, longitude",
+    )
+    external_grid_file = st.file_uploader(
+        "격자별 외부 데이터 CSV",
+        type=["csv"],
+        help=(
+            "필수 키: grid_id. 선택 컬럼: crime_count, vulnerable_population, "
+            "repair_count, report_count"
+        ),
+    )
+    optimization_budget = st.number_input(
+        "총 예산 (원)", min_value=0, value=100_000_000, step=10_000_000
+    )
+    cost_columns = st.columns(3)
+    infrastructure_costs = {
+        "CCTV": cost_columns[0].number_input(
+            "CCTV 1개 설치비", min_value=1, value=20_000_000, step=1_000_000
+        ),
+        "보안등": cost_columns[1].number_input(
+            "보안등 1개 설치비", min_value=1, value=5_000_000, step=500_000
+        ),
+        "공공 와이파이": cost_columns[2].number_input(
+            "공공 와이파이 1개 설치비",
+            min_value=1,
+            value=3_000_000,
+            step=500_000,
+        ),
+    }
+
+police_coordinates: list[tuple[float, float]] = []
+police_source = police_station_file or (
+    POLICE_STATION_FILE if POLICE_STATION_FILE.exists() else None
+)
+if police_source is not None:
+    try:
+        police_frame = pd.read_csv(police_source)
+        latitude_column = (
+            "latitude" if "latitude" in police_frame else "위도"
+        )
+        longitude_column = (
+            "longitude" if "longitude" in police_frame else "경도"
+        )
+        if latitude_column not in police_frame or longitude_column not in police_frame:
+            raise ValueError("latitude/longitude 또는 위도/경도 컬럼이 필요합니다.")
+        police_frame["latitude"] = pd.to_numeric(
+            police_frame[latitude_column], errors="coerce"
+        )
+        police_frame["longitude"] = pd.to_numeric(
+            police_frame[longitude_column], errors="coerce"
+        )
+        police_frame = police_frame.dropna(subset=["latitude", "longitude"])
+        police_coordinates = list(
+            police_frame[["latitude", "longitude"]].itertuples(
+                index=False, name=None
+            )
+        )
+        st.success(f"파출소 위치 {len(police_coordinates):,}건을 불러왔습니다.")
+    except Exception as error:
+        st.error(f"파출소 CSV를 읽지 못했습니다: {error}")
 st.caption(
     "기본 화면에는 원본 범죄위험의 빨간 밀도와 "
     "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
@@ -2583,6 +2655,34 @@ if risk_grid_ready:
                 mode="RGBA",
             ).save(risk_grid_buffer, format="PNG")
             risk_grid_image_bytes = risk_grid_buffer.getvalue()
+            cctv_analysis_coordinates = [
+                (float(row.latitude), float(row.longitude))
+                for row in cctv_locations.itertuples(index=False)
+            ]
+            light_analysis_coordinates = [
+                (float(record[0]), float(record[1]))
+                for record in pedestrian_lights
+            ]
+            wifi_analysis_coordinates = [
+                (float(row.latitude), float(row.longitude))
+                for row in wifi_locations.itertuples(index=False)
+            ]
+            safety_analysis = build_grid_analysis(
+                analysis_grid,
+                risk_grades,
+                {
+                    "cctv": cctv_analysis_coordinates,
+                    "light": light_analysis_coordinates,
+                    "wifi": wifi_analysis_coordinates,
+                    "police": police_coordinates,
+                },
+            )
+            if external_grid_file is not None:
+                external_grid_data = pd.read_csv(external_grid_file)
+                safety_analysis = merge_external_grid_data(
+                    safety_analysis, external_grid_data
+                )
+            priority_top_ten = top_priority_cells(safety_analysis)
 
         folium.raster_layers.ImageOverlay(
             image=high_risk_grid_overlay(risk_grades, analysis_grid),
@@ -2594,6 +2694,207 @@ if risk_grid_ready:
             zindex=10,
             show=True,
         ).add_to(map_object)
+        priority_layer = folium.FeatureGroup(
+            name="우선개선 위험 Top 10",
+            overlay=True,
+            control=True,
+            show=True,
+        )
+        latitude_half_step = analysis_grid["latitude_step"] / 2
+        longitude_half_step = analysis_grid["longitude_step"] / 2
+        for rank, row in enumerate(
+            priority_top_ten.itertuples(index=False),
+            start=1,
+        ):
+            popup_html = (
+                '<div style="width:260px;font-size:14px;line-height:1.55">'
+                f'<b style="color:#991B1B">우선개선 후보 #{rank}</b><br>'
+                f'추정 범죄위험 등급: {int(row.estimated_risk_grade)}<br>'
+                f'안전도: {row.safety_score:.1f}점 '
+                f'({int(row.safety_grade)}등급)<br>'
+                f'시설 보호점수: {row.protection_score:.1f}점<br>'
+                f'CCTV {row.cctv_score:.1f} · '
+                f'보안등 {row.light_score:.1f} · '
+                f'Wi-Fi {row.wifi_score:.1f}<br>'
+                '<span style="color:#6B7280;font-size:12px">'
+                'WMS 픽셀 강도에 따른 상대 추정치이며 실제 범죄 건수가 아닙니다.'
+                '</span></div>'
+            )
+            folium.Rectangle(
+                bounds=[
+                    [
+                        row.latitude - latitude_half_step,
+                        row.longitude - longitude_half_step,
+                    ],
+                    [
+                        row.latitude + latitude_half_step,
+                        row.longitude + longitude_half_step,
+                    ],
+                ],
+                color="#7F1D1D",
+                weight=3,
+                fill=True,
+                fill_color="#EF4444",
+                fill_opacity=0.72,
+                tooltip=f"우선개선 후보 #{rank}",
+                popup=folium.Popup(popup_html, max_width=300),
+            ).add_to(priority_layer)
+        priority_layer.add_to(map_object)
+
+        st.subheader("100m 격자 추정 안전도 분석")
+        st.caption(
+            "생활안전지도 WMS 픽셀 강도를 창원시 내부 상대등급 1~5로 변환한 "
+            "추정치입니다. 실제 범죄 발생 건수나 공식 범죄등급이 아닙니다."
+        )
+        risk_cell_count = int(
+            (safety_analysis["estimated_risk_grade"] >= 4).sum()
+        )
+        low_safety_count = int((safety_analysis["safety_grade"] <= 2).sum())
+        analysis_columns = st.columns(3)
+        analysis_columns[0].metric(
+            "분석 100m 격자",
+            f"{len(safety_analysis):,}개",
+        )
+        analysis_columns[1].metric(
+            "추정 위험 4~5등급 격자",
+            f"{risk_cell_count:,}개",
+        )
+        analysis_columns[2].metric(
+            "안전도 1~2등급 격자",
+            f"{low_safety_count:,}개",
+        )
+        if not police_coordinates:
+            st.caption(
+                "파출소 자료가 없어 police_distance_m과 "
+                "police_accessibility_score는 결측입니다."
+            )
+        st.download_button(
+            "100m 격자 분석 CSV 다운로드",
+            data=safety_analysis.to_csv(index=False).encode("utf-8-sig"),
+            file_name="changwon_safety_grid_100m.csv",
+            mime="text/csv",
+            help=(
+                "이 파일의 grid_id를 범죄·취약계층·보수·신고 CSV의 "
+                "결합 키로 사용합니다."
+            ),
+        )
+
+        top_ten_table = priority_top_ten[
+            [
+                "latitude",
+                "longitude",
+                "estimated_risk_grade",
+                "protection_score",
+                "safety_score",
+                "safety_grade",
+            ]
+        ].copy()
+        top_ten_table.insert(0, "순위", range(1, len(top_ten_table) + 1))
+        top_ten_table.columns = [
+            "순위",
+            "위도",
+            "경도",
+            "추정 범죄위험 등급",
+            "시설 보호점수",
+            "안전도",
+            "안전등급",
+        ]
+        st.dataframe(
+            top_ten_table.round(
+                {"위도": 6, "경도": 6, "시설 보호점수": 1, "안전도": 1}
+            ),
+            hide_index=True,
+            use_container_width=True,
+        )
+
+        st.subheader("예산 기반 안전 인프라 최적 배치")
+        st.caption(
+            "상위 취약 격자별 시설 대안을 만든 뒤, 설정한 예산 안에서 "
+            "예상 취약도 개선 합계를 최대화하는 0-1 배낭 최적화를 적용합니다. "
+            "실제 설치 전에는 현장·소유권·전력·통신 조건 검토가 필요합니다."
+        )
+        placement_candidates = build_candidates(
+            safety_analysis,
+            {key: int(value) for key, value in infrastructure_costs.items()},
+        )
+        optimized_placements = optimize_budget(
+            placement_candidates, int(optimization_budget)
+        )
+        if optimized_placements.empty:
+            st.info("현재 예산과 시설비 조건에서 선택할 수 있는 후보가 없습니다.")
+        else:
+            recommendation_layer = folium.FeatureGroup(
+                name="예산 최적 배치 후보",
+                overlay=True,
+                control=True,
+                show=True,
+            )
+            marker_colors = {
+                "CCTV": "red",
+                "보안등": "orange",
+                "공공 와이파이": "blue",
+            }
+            for row in optimized_placements.itertuples(index=False):
+                popup_html = (
+                    '<div style="width:280px;font-size:14px;line-height:1.55">'
+                    f'<b>추천 #{row.rank} · {escape(row.facility)}</b><br>'
+                    f'예상 비용: {row.cost:,.0f}원<br>'
+                    f'추천 이유: {escape(row.reason)}<br>'
+                    f'취약도: {row.before_vulnerability:.1f} → '
+                    f'{row.after_vulnerability:.1f}'
+                    '</div>'
+                )
+                folium.Marker(
+                    [row.latitude, row.longitude],
+                    tooltip=f"추천 #{row.rank} · {row.facility}",
+                    popup=folium.Popup(popup_html, max_width=320),
+                    icon=folium.Icon(
+                        color=marker_colors.get(row.facility, "gray"),
+                        icon="plus",
+                        prefix="fa",
+                    ),
+                ).add_to(recommendation_layer)
+            recommendation_layer.add_to(map_object)
+
+            result_table = optimized_placements[
+                [
+                    "rank",
+                    "latitude",
+                    "longitude",
+                    "facility",
+                    "cost",
+                    "reason",
+                    "before_vulnerability",
+                    "after_vulnerability",
+                ]
+            ].copy()
+            result_table.columns = [
+                "추천 순위",
+                "위도",
+                "경도",
+                "추천 시설",
+                "예상 비용",
+                "추천 이유",
+                "설치 전 취약도",
+                "설치 후 취약도",
+            ]
+            st.metric(
+                "선정 총비용",
+                f"{int(optimized_placements['cost'].sum()):,}원",
+                help=f"입력 예산 {int(optimization_budget):,}원 이내",
+            )
+            st.dataframe(
+                result_table.round(
+                    {
+                        "위도": 6,
+                        "경도": 6,
+                        "설치 전 취약도": 1,
+                        "설치 후 취약도": 1,
+                    }
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
     except Exception as error:
         st.warning(
             "원본 범죄위험 고밀도 격자를 생성하지 못했습니다. "
