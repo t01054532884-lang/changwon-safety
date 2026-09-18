@@ -2133,35 +2133,7 @@ for profile_name, uploaded_file, default_file, facility_label in (
         )
     except Exception as error:
         st.error(f"{facility_label} CSV를 읽지 못했습니다: {error}")
-st.caption(
-    "기본 화면에는 원본 범죄위험의 빨간 밀도와 "
-    "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
-)
-
-layer_selector_columns = st.columns([2.1, 1])
-with layer_selector_columns[1]:
-    raw_facility_layers = st.multiselect(
-        "원본 시설 레이어 불러오기",
-        options=["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"],
-        default=[],
-        placeholder="필요한 시설만 선택",
-        help=(
-            "선택한 시설 좌표만 지도 브라우저로 전송합니다. "
-            "보행조명처럼 건수가 많은 레이어는 선택 시 로딩이 추가로 걸릴 수 있습니다."
-        ),
-        key="raw-facility-layers",
-    )
-with layer_selector_columns[0]:
-    if raw_facility_layers:
-        st.caption(
-            "선택한 원본 시설만 지도 오른쪽 레이어 목록에 추가됩니다: "
-            + ", ".join(raw_facility_layers)
-        )
-    else:
-        st.caption(
-            "빠른 초기 표시를 위해 CCTV·보행조명·공공 Wi-Fi·지구대/파출소 "
-            "원본 좌표는 전송하지 않습니다. 오른쪽에서 필요한 시설만 선택해 주세요."
-        )
+raw_facility_layers = list(st.session_state.get("raw-facility-layers", []))
 raw_layer_signature = "-".join(raw_facility_layers) or "none"
 
 map_object = folium.Map(
@@ -2956,14 +2928,6 @@ if risk_grid_ready:
         priority_layer.add_to(map_object)
 
         st.subheader(f"{target_label} 추가 설치 필요지역 TOP 10")
-        st.caption(
-            "Colab과 동일한 적색계열 픽셀 규칙으로 100m 격자 내 고위험영역 "
-            "비율을 계산합니다. 범죄 위험도와 CCTV·보안등·공공 Wi-Fi 부족도를 "
-            "각 1~5점으로 바꾼 뒤 코랩의 곱셈 산식을 적용하고, 변을 맞댄 4~5등급 "
-            "격자를 연속 구역으로 묶어 TOP 10을 선정합니다. 경찰 거리는 순위에 "
-            "넣지 않습니다. "
-            "이 비율은 실제 범죄 발생률이 아닙니다."
-        )
         if target_facility_frames[selected_risk_profile] is None:
             st.warning(
                 f"{target_facility_label} 좌표가 없어 현재 TOP 10은 창원시 전체 "
@@ -3282,6 +3246,34 @@ if risk_grid_ready:
         )
 
 map_focus = render_map_focus_controls(map_focus)
+st.caption(
+    "기본 화면에는 원본 범죄위험의 빨간 밀도와 "
+    "고위험 격자, 안전요소 3종 충족지점이 표시됩니다."
+)
+layer_selector_columns = st.columns([2.1, 1])
+with layer_selector_columns[1]:
+    st.multiselect(
+        "원본 시설 레이어 불러오기",
+        options=["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"],
+        default=[],
+        placeholder="필요한 시설만 선택",
+        help=(
+            "선택한 시설 좌표만 지도 브라우저로 전송합니다. "
+            "보행조명처럼 건수가 많은 레이어는 선택 시 로딩이 추가로 걸릴 수 있습니다."
+        ),
+        key="raw-facility-layers",
+    )
+with layer_selector_columns[0]:
+    if raw_facility_layers:
+        st.caption(
+            "선택한 원본 시설만 지도 오른쪽 레이어 목록에 추가됩니다: "
+            + ", ".join(raw_facility_layers)
+        )
+    else:
+        st.caption(
+            "빠른 초기 표시를 위해 CCTV·보행조명·공공 Wi-Fi·지구대/파출소 "
+            "원본 좌표는 전송하지 않습니다. 오른쪽에서 필요한 시설만 선택해 주세요."
+        )
 
 support_sites = build_three_factor_support_sites(
     cctv_locations=cctv_locations,
