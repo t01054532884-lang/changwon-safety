@@ -1982,8 +1982,6 @@ st.caption(
     "(생활안전지도·경찰청 제공)"
 )
 
-st.subheader("지도 위치 검색")
-st.caption("주소를 검색하거나 위도·경도를 입력하면 해당 위치를 중심으로 지도를 엽니다.")
 default_map_focus = {
     "latitude": 35.1800,
     "longitude": 128.6200,
@@ -1991,52 +1989,63 @@ default_map_focus = {
     "zoom": 10,
 }
 map_focus = dict(st.session_state.get("map_focus", default_map_focus))
-location_columns = st.columns([1.7, 1])
-with location_columns[0]:
-    location_choice = st_searchbox(
-        autocomplete_changwon_places,
-        label="주소 검색",
-        placeholder="장소명 또는 주소 입력 (예: 창원시청)",
-        key="map-focus-query",
-        debounce=350,
-        clear_on_submit=False,
-        edit_after_submit="option",
+
+
+def render_map_focus_controls(current_focus: dict) -> dict:
+    """지도 바로 위에서 주소·좌표 검색 컨트롤을 표시합니다."""
+    st.subheader("지도 위치 검색")
+    st.caption(
+        "주소를 검색하거나 위도·경도를 입력하면 해당 위치를 중심으로 지도를 엽니다."
     )
-    if isinstance(location_choice, dict):
-        map_focus = {
-            "latitude": float(location_choice["latitude"]),
-            "longitude": float(location_choice["longitude"]),
-            "name": str(location_choice.get("name") or "검색 위치"),
-            "zoom": 16,
-        }
-        st.session_state["map_focus"] = map_focus
-with location_columns[1]:
-    with st.form("coordinate-map-focus"):
-        coordinate_columns = st.columns(2)
-        latitude_input = coordinate_columns[0].number_input(
-            "위도", value=float(map_focus["latitude"]), format="%.6f"
+    selected_focus = dict(current_focus)
+    location_columns = st.columns([1.7, 1])
+    with location_columns[0]:
+        location_choice = st_searchbox(
+            autocomplete_changwon_places,
+            label="주소 검색",
+            placeholder="장소명 또는 주소 입력 (예: 창원시청)",
+            key="map-focus-query",
+            debounce=350,
+            clear_on_submit=False,
+            edit_after_submit="option",
         )
-        longitude_input = coordinate_columns[1].number_input(
-            "경도", value=float(map_focus["longitude"]), format="%.6f"
-        )
-        coordinate_submitted = st.form_submit_button(
-            "좌표 위치로 이동", use_container_width=True
-        )
-    if coordinate_submitted:
-        if not (
-            CHANGWON_BOUNDS[0] <= latitude_input <= CHANGWON_BOUNDS[2]
-            and CHANGWON_BOUNDS[1] <= longitude_input <= CHANGWON_BOUNDS[3]
-        ):
-            st.error("창원시 범위 안의 위도와 경도를 입력해 주세요.")
-        else:
-            map_focus = {
-                "latitude": float(latitude_input),
-                "longitude": float(longitude_input),
-                "name": "입력 좌표",
+        if isinstance(location_choice, dict):
+            selected_focus = {
+                "latitude": float(location_choice["latitude"]),
+                "longitude": float(location_choice["longitude"]),
+                "name": str(location_choice.get("name") or "검색 위치"),
                 "zoom": 16,
             }
-            st.session_state["map_focus"] = map_focus
-            st.rerun()
+            st.session_state["map_focus"] = selected_focus
+    with location_columns[1]:
+        with st.form("coordinate-map-focus"):
+            coordinate_columns = st.columns(2)
+            latitude_input = coordinate_columns[0].number_input(
+                "위도", value=float(selected_focus["latitude"]), format="%.6f"
+            )
+            longitude_input = coordinate_columns[1].number_input(
+                "경도", value=float(selected_focus["longitude"]), format="%.6f"
+            )
+            coordinate_submitted = st.form_submit_button(
+                "좌표 위치로 이동", use_container_width=True
+            )
+        if coordinate_submitted:
+            if not (
+                CHANGWON_BOUNDS[0] <= latitude_input <= CHANGWON_BOUNDS[2]
+                and CHANGWON_BOUNDS[1] <= longitude_input <= CHANGWON_BOUNDS[3]
+            ):
+                st.error("창원시 범위 안의 위도와 경도를 입력해 주세요.")
+            else:
+                selected_focus = {
+                    "latitude": float(latitude_input),
+                    "longitude": float(longitude_input),
+                    "name": "입력 좌표",
+                    "zoom": 16,
+                }
+                st.session_state["map_focus"] = selected_focus
+                st.rerun()
+    return selected_focus
+
 
 def saved_csv_source(key: str, fallback: Path | None = None):
     stored = st.session_state.get(key)
@@ -3271,6 +3280,8 @@ if risk_grid_ready:
             "원본 범죄위험 고밀도 격자를 생성하지 못했습니다. "
             f"기존 지도는 계속 사용할 수 있습니다. ({error})"
         )
+
+map_focus = render_map_focus_controls(map_focus)
 
 support_sites = build_three_factor_support_sites(
     cctv_locations=cctv_locations,
