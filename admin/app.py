@@ -58,6 +58,12 @@ PEDESTRIAN_LIGHT_FILE = BASE_DIR / "data" / "nonroad_lights.json"
 POLICE_STATION_FILE = BASE_DIR / "data" / "police_stations.csv"
 CHILDCARE_FILE = BASE_DIR / "data" / "childcare_centers.csv"
 SENIOR_CENTER_FILE = BASE_DIR / "data" / "senior_centers.csv"
+CHILD_TOP10_CSV_FILE = BASE_DIR / "data" / "child_top10.csv"
+CHILD_TOP10_GEOJSON_FILE = BASE_DIR / "data" / "child_top10.geojson"
+ELDERLY_TOP10_CSV_FILE = BASE_DIR / "data" / "elderly_top10.csv"
+ELDERLY_TOP10_GEOJSON_FILE = BASE_DIR / "data" / "elderly_top10.geojson"
+ALL_TOP10_CSV_FILE = BASE_DIR / "data" / "all_top10.csv"
+ALL_TOP10_GEOJSON_FILE = BASE_DIR / "data" / "all_top10.geojson"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -907,6 +913,67 @@ def load_geojson(file_path: Path) -> dict:
     """행정경계 GeoJSON을 읽습니다."""
     return json.loads(file_path.read_text(encoding="utf-8"))
 
+@st.cache_data(show_spinner=False)
+def load_final_top10(
+    csv_path: Path,
+    geojson_path: Path,
+) -> tuple[pd.DataFrame, dict]:
+    """STEP 6에서 확정한 최종 TOP10 CSV와 GeoJSON을 읽고 기본 구조를 검증합니다."""
+    if not csv_path.exists():
+        raise FileNotFoundError(f"TOP10 CSV 파일이 없습니다: {csv_path}")
+
+    if not geojson_path.exists():
+        raise FileNotFoundError(f"TOP10 GeoJSON 파일이 없습니다: {geojson_path}")
+
+    dataframe = pd.read_csv(csv_path, encoding="utf-8-sig")
+    geojson_data = json.loads(geojson_path.read_text(encoding="utf-8"))
+
+    required_columns = {
+        "target_group",
+        "cluster_rank",
+        "top10_label",
+        "cluster_id",
+        "risk_pct_mean",
+        "infra_need_mean",
+        "vulnerability_mean",
+        "grid_n",
+        "cctv_needed",
+        "light_needed",
+        "wifi_needed",
+        "primary_facility",
+        "facility_priority_order",
+        "recommendation_type",
+        "longitude",
+        "latitude",
+    }
+
+    missing_columns = required_columns.difference(dataframe.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"TOP10 CSV에 필요한 열이 없습니다: {missing}")
+
+    features = geojson_data.get("features", [])
+
+    if len(dataframe) != 10:
+        raise ValueError(
+            f"TOP10 CSV 행 수가 10개가 아닙니다: {len(dataframe)}개"
+        )
+
+    if len(features) != 10:
+        raise ValueError(
+            f"TOP10 GeoJSON feature 수가 10개가 아닙니다: {len(features)}개"
+        )
+
+    dataframe["cluster_rank"] = pd.to_numeric(
+        dataframe["cluster_rank"], errors="raise"
+    ).astype(int)
+
+    dataframe = (
+        dataframe.sort_values("cluster_rank")
+        .reset_index(drop=True)
+    )
+
+    return dataframe, geojson_data
 
 @st.cache_resource(show_spinner=False)
 def load_pedestrian_light_data(
@@ -1927,6 +1994,201 @@ def add_changwon_district_boundary_layer(
     ).add_to(map_object)
     return True
 
+def add_final_top10_layer(
+    map_object: folium.Map,
+    geojson_data: dict | None,
+    target_label: str,
+) -> bool:
+    """STEP 6에서 확정한 어린이·노인 최종 TOP10을 지도에 표시합니다."""
+    if not geojson_data or not geojson_data.get("features"):
+        return False
+
+    display_geojson = json.loads(json.dumps(geojson_data, ensure_ascii=False))
+
+    if target_label == "어린이":
+        line_color = "#C2410C"
+        fill_color = "#FB923C"
+        badge_color = "#C2410C"
+        layer_name = "어린이 최종 안전취약지역 TOP10"
+    else:
+        line_color = "#6D28D9"
+        fill_color = "#8B5CF6"
+        badge_color = "#6D28D9"
+        layer_name = "노인 최종 안전취약지역 TOP10"
+
+    for feature in display_geojson.get("features", []):
+        properties = feature.setdefault("properties", {})
+
+        risk_pct = properties.get("risk_pct_mean")
+        infra_need = properties.get("infra_need_mean")
+        vulnerability = properties.get("vulnerability_mean")
+
+        properties["risk_pct_display"] = (
+            f"{float(risk_pct):.2f}%"
+            if risk_pct is not None
+            else "정보 없음"
+        )
+        properties["infra_need_display"] = (
+            f"{float(infra_need):.4f}"
+            if infra_need is not None
+            else "정보 없음"
+        )
+        properties["vulnerability_display"] = (
+            f"{float(vulnerability):.4f}"
+            if vulnerability is not None
+            else "정보 없음"
+        )
+
+        properties["cctv_status"] = (
+            "보완 필요"
+            if bool(properties.get("cctv_needed"))
+            else "충족"
+        )
+        properties["light_status"] = (
+            "보완 필요"
+            if bool(properties.get("light_needed"))
+            else "충족"
+        )
+        properties["wifi_status"] = (
+            "보완 필요"
+            if bool(properties.get("wifi_needed"))
+            else "충족"
+        )
+
+        police_distance = properties.get("police_distance_mean_km")
+        police_reference = properties.get("police_access_reference")
+
+        if target_label == "노인" and police_distance is not None:
+            properties["police_display"] = (
+                f"{float(police_distance):.3f} km"
+                + (
+                    f" · {police_reference}"
+                    if police_reference
+                    else ""
+                )
+            )
+        else:
+            properties["police_display"] = "취약점수 미반영"
+
+    final_layer = folium.FeatureGroup(
+        name=layer_name,
+        overlay=True,
+        control=True,
+        show=True,
+    )
+
+    folium.GeoJson(
+        data=display_geojson,
+        name=layer_name,
+        style_function=lambda _: {
+            "color": line_color,
+            "weight": 4,
+            "opacity": 1,
+            "fillColor": fill_color,
+            "fillOpacity": 0.42,
+        },
+        highlight_function=lambda _: {
+            "color": line_color,
+            "weight": 6,
+            "opacity": 1,
+            "fillColor": fill_color,
+            "fillOpacity": 0.68,
+        },
+        tooltip=folium.GeoJsonTooltip(
+            fields=[
+                "top10_label",
+                "primary_facility",
+                "facility_priority_order",
+            ],
+            aliases=[
+                "최종 순위:",
+                "1순위 보완시설:",
+                "보완 순서:",
+            ],
+            labels=True,
+            sticky=False,
+        ),
+        popup=folium.GeoJsonPopup(
+            fields=[
+                "top10_label",
+                "cluster_id",
+                "risk_pct_display",
+                "infra_need_display",
+                "vulnerability_display",
+                "grid_n",
+                "cctv_status",
+                "light_status",
+                "wifi_status",
+                "primary_facility",
+                "facility_priority_order",
+                "recommendation_type",
+                "police_display",
+            ],
+            aliases=[
+                "최종 순위:",
+                "클러스터 ID:",
+                "범죄 고위험 적색영역 비율:",
+                "CRITIC 인프라 부족점수:",
+                "최종 취약점수:",
+                "포함 격자 수:",
+                "CCTV:",
+                "보안등:",
+                "공공 Wi-Fi:",
+                "1순위 보완시설:",
+                "시설 보완 순서:",
+                "보완 유형:",
+                "경찰 접근성 참고:",
+            ],
+            labels=True,
+            localize=True,
+            style=(
+                "background-color: white; "
+                "font-size: 13px; "
+                "padding: 12px; "
+                "border-radius: 10px;"
+            ),
+        ),
+    ).add_to(final_layer)
+
+    for feature in display_geojson.get("features", []):
+        properties = feature.get("properties", {})
+
+        latitude = properties.get("latitude")
+        longitude = properties.get("longitude")
+        rank = properties.get("cluster_rank")
+
+        if latitude is None or longitude is None or rank is None:
+            continue
+
+        folium.Marker(
+            location=[float(latitude), float(longitude)],
+            tooltip=str(properties.get("top10_label", f"TOP{rank}")),
+            icon=folium.DivIcon(
+                html=(
+                    '<div style="'
+                    'display:flex;'
+                    'align-items:center;'
+                    'justify-content:center;'
+                    'width:34px;'
+                    'height:28px;'
+                    'border-radius:8px;'
+                    'border:2px solid white;'
+                    f'background:{badge_color};'
+                    'color:white;'
+                    'font-size:12px;'
+                    'font-weight:900;'
+                    'box-shadow:0 2px 7px rgba(0,0,0,.38);'
+                    '">'
+                    f"T{int(rank)}"
+                    "</div>"
+                ),
+                icon_size=(34, 28),
+                icon_anchor=(17, 14),
+            ),
+        ).add_to(final_layer)
+
+    final_layer.add_to(map_object)
+    return True
 
 st.set_page_config(
     page_title="창원시 취약계층 안전 인프라 분석지도",
@@ -1981,6 +2243,34 @@ st.caption(
     f"현재 범죄위험 레이어: {risk_profile['title']} "
     "(생활안전지도·경찰청 제공)"
 )
+
+# STEP 6 최종 TOP10 결과 불러오기
+final_top10_table = pd.DataFrame()
+final_top10_geojson = None
+final_top10_target = ""
+
+try:
+    if selected_risk_profile == "어린이 버전":
+        final_top10_table, final_top10_geojson = load_final_top10(
+            CHILD_TOP10_CSV_FILE,
+            CHILD_TOP10_GEOJSON_FILE,
+        )
+        final_top10_target = "어린이"
+
+    else:
+        final_top10_table, final_top10_geojson = load_final_top10(
+            ELDERLY_TOP10_CSV_FILE,
+            ELDERLY_TOP10_GEOJSON_FILE,
+        )
+        final_top10_target = "노인"
+
+except Exception as error:
+    final_top10_table = pd.DataFrame()
+    final_top10_geojson = None
+    st.error(
+        "STEP 6 최종 TOP10 결과를 불러오지 못했습니다. "
+        f"파일 또는 컬럼을 확인해 주세요. ({error})"
+    )
 
 default_map_focus = {
     "latitude": 35.1800,
@@ -2181,6 +2471,18 @@ add_changwon_district_boundary_layer(
     map_object=map_object,
     file_path=CHANGWON_DISTRICTS_BOUNDARY_FILE,
 )
+
+# STEP 6 최종 TOP10 지도 레이어
+final_top10_layer_added = add_final_top10_layer(
+    map_object=map_object,
+    geojson_data=final_top10_geojson,
+    target_label=final_top10_target,
+)
+
+if not final_top10_layer_added:
+    st.warning(
+        "최종 TOP10 GeoJSON을 지도에 표시하지 못했습니다."
+    )
 
 if map_focus["zoom"] > 10:
     folium.Marker(
@@ -2854,195 +3156,385 @@ if risk_grid_ready:
             zindex=10,
             show=True,
         ).add_to(map_object)
-        priority_layer = folium.FeatureGroup(
-            name=f"{target_label} 추가 설치 필요지역 TOP 10",
-            overlay=True,
-            control=True,
-            show=True,
-        )
-        latitude_half_step = analysis_grid["latitude_step"] / 2
-        longitude_half_step = analysis_grid["longitude_step"] / 2
-        for rank, row in enumerate(
-            installation_top_ten.itertuples(index=False),
-            start=1,
-        ):
-            popup_html = (
-                '<div style="width:260px;font-size:14px;line-height:1.55">'
-                f'<b style="color:#991B1B">추가 설치 필요지역 #{rank}</b><br>'
-                f'위치: {escape(row.district or "행정구 확인 불가")} '
-                f'({row.latitude:.6f}, {row.longitude:.6f})<br>'
-                f'범죄 고위험영역: {row.risk_area_pct:.1f}%<br>'
-                f'범죄 위험도: {int(row.crime_risk_score)}/5점 · '
-                f'인프라 부족도: {row.infra_deficit_score:.2f}/5점<br>'
-                f'최종 취약도: {row.priority_score:.2f}/5점 '
-                f'({int(row.priority_grade)}등급)<br>'
-                f'연속 고취약 격자: {int(row.cluster_grid_count)}개<br>'
-                f'안전 인프라: {int(row.infra_count)}/3개 '
-                f'({row.infra_score:.2f}/5점)<br>'
-                f'CCTV: {"충족" if row.cctv_present else "미충족"} · '
-                f'보안등: {"충족" if row.light_present else "미충족"} · '
-                f'Wi-Fi: {"충족" if row.wifi_present else "미충족"}<br>'
-                f'최근접 파출소: {row.police_distance_m:.0f}m<br>'
-                f'{target_facility_label} 영향권: '
-                f'{"자료 없음" if pd.isna(row.target_influence) else ("해당" if row.target_influence else "비해당")}<br>'
-                f'부족 시설: {escape(row.missing_infrastructure)}<br>'
-                f'선정 이유: {escape(row.reason)}<br>'
-                '<span style="color:#6B7280;font-size:12px">'
-                'WMS 픽셀 강도에 따른 상대 추정치이며 실제 범죄 건수가 아닙니다.'
-                '</span></div>'
-            )
-            folium.Rectangle(
-                bounds=[
-                    [
-                        row.latitude - latitude_half_step,
-                        row.longitude - longitude_half_step,
-                    ],
-                    [
-                        row.latitude + latitude_half_step,
-                        row.longitude + longitude_half_step,
-                    ],
-                ],
-                color="#7F1D1D",
-                weight=3,
-                fill=True,
-                fill_color="#EF4444",
-                fill_opacity=0.72,
-                tooltip=f"{target_label} 추가 설치 필요지역 #{rank}",
-                popup=folium.Popup(popup_html, max_width=300),
-            ).add_to(priority_layer)
-            folium.Marker(
-                [row.latitude, row.longitude],
-                tooltip=f"{target_label} 추가 설치 필요지역 #{rank}",
-                icon=folium.DivIcon(
-                    html=(
-                        '<div style="display:flex;align-items:center;justify-content:center;'
-                        'width:28px;height:24px;border-radius:7px;border:2px solid #fff;'
-                        'background:#991b1b;color:#fff;font-size:12px;font-weight:900;'
-                        'box-shadow:0 1px 5px rgba(0,0,0,.4);">'
-                        f"T{rank}</div>"
-                    ),
-                    icon_size=(28, 24),
-                    icon_anchor=(14, 12),
-                ),
-            ).add_to(priority_layer)
-        priority_layer.add_to(map_object)
 
-        st.subheader(f"{target_label} 추가 설치 필요지역 TOP 10")
-        if target_facility_frames[selected_risk_profile] is None:
-            st.warning(
-                f"{target_facility_label} 좌표가 없어 현재 TOP 10은 창원시 전체 "
-                f"{target_label} 위험격자 기준입니다. 관리자 입력에서 실제 좌표 CSV를 "
-                "올리면 300m 생활권으로 자동 제한됩니다."
-            )
-        if not police_coordinates:
+                # STEP 6 최종 TOP10 결과 표시
+        if not final_top10_table.empty:
+            st.subheader(f"{final_top10_target} 최종 안전 취약지역 TOP10")
             st.caption(
-                "파출소 자료가 없어 police_distance_m과 "
-                "police_accessibility_score는 결측입니다."
+                "STEP 5에서 선정한 최종 취약지역에 STEP 6의 "
+                "시설별 보완 우선순위를 결합한 최종 분석 결과입니다."
             )
-        top_ten_table = installation_top_ten[
-            [
-                "rank",
-                "district",
-                "latitude",
-                "longitude",
-                "risk_area_pct",
-                "crime_risk_score",
-                "infra_deficit_count",
-                "infra_deficit_score",
-                "priority_score",
-                "priority_grade",
-                "cluster_grid_count",
-                "mean_priority_score",
-                "max_risk_pct",
-                "infra_count",
-                "infra_score",
-                "cctv_present",
-                "light_present",
-                "wifi_present",
-                "police_distance_m",
-                "target_influence",
-                "target_count_300m",
-                "missing_infrastructure",
-                "reason",
-            ]
-        ].copy()
-        top_ten_table.columns = [
-            "순위",
-            "행정구",
-            "위도",
-            "경도",
-            "범죄 고위험영역 비율(%)",
-            "범죄 위험도(1~5)",
-            "부족 인프라 개수",
-            "인프라 부족도(1~5)",
-            "최종 취약도 점수(1~5)",
-            "최종 취약도 등급",
-            "연속 고취약 격자 수",
-            "구역 평균 취약도",
-            "구역 최대 고위험영역 비율(%)",
-            "안전 인프라 충족 개수",
-            "안전 인프라 충족점수",
-            "CCTV 충족",
-            "보안등 충족",
-            "공공 Wi-Fi 충족",
-            "최근접 파출소 거리(m)",
-            f"{target_facility_label} 300m 영향권",
-            f"300m 내 {target_facility_label} 수",
-            "부족한 안전 인프라",
-            "추가 설치 필요 이유",
-        ]
-        st.markdown(
-            """
-            <style>
-            .priority-card{border:1px solid #dbe7e5;border-radius:18px;padding:16px 17px;margin-bottom:12px;background:#fbfdfd;box-shadow:0 5px 18px rgba(15,118,110,.06)}
-            .priority-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:11px}.priority-rank{font-weight:850;color:#0f766e}.priority-risk{padding:5px 9px;border-radius:999px;background:#fff1f0;color:#b42318;font-size:13px;font-weight:800}
-            .priority-place{font-size:17px;font-weight:850;color:#183b3a}.priority-sub{margin-top:3px;color:#667b78;font-size:13px}.infra-badges{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0}.infra-ok,.infra-miss{padding:5px 8px;border-radius:9px;font-size:13px;font-weight:750}.infra-ok{background:#e8f7f2;color:#08735f}.infra-miss{background:#fff0ee;color:#a5362c}.priority-meta{display:grid;grid-template-columns:1fr 1fr;gap:7px;color:#425d5a;font-size:13px}.priority-reason{margin-top:11px;padding-top:10px;border-top:1px solid #e6eeee;color:#294744;font-size:13px;line-height:1.55}
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-        card_columns = st.columns(2)
-        for index, row in enumerate(installation_top_ten.itertuples(index=False)):
-            badges = "".join(
-                f'<span class="{"infra-ok" if present else "infra-miss"}">{"✓" if present else "＋"} {label}</span>'
-                for label, present in (
-                    ("CCTV", row.cctv_present),
-                    ("보안등", row.light_present),
-                    ("Wi-Fi", row.wifi_present),
-                )
-            )
-            with card_columns[index % 2]:
-                st.markdown(
-                    '<div class="priority-card">'
-                    f'<div class="priority-head"><span class="priority-rank">TOP {row.rank}</span><span class="priority-risk">고위험 {row.risk_area_pct:.1f}%</span></div>'
-                    f'<div class="priority-place">{escape(row.district or "행정구 확인 불가")}</div>'
-                    f'<div class="priority-sub">{row.latitude:.5f}, {row.longitude:.5f}</div>'
-                    f'<div class="infra-badges">{badges}</div>'
-                    f'<div class="priority-meta"><span>취약도 <b>{row.priority_score:.2f}/5</b></span><span>연속 격자 <b>{int(row.cluster_grid_count)}개</b></span>'
-                    f'<span>파출소 <b>{row.police_distance_m:.0f}m</b></span><span>{escape(target_facility_label)} <b>300m 영향권</b></span></div>'
-                    f'<div class="priority-reason">{escape(row.reason)}</div></div>',
-                    unsafe_allow_html=True,
-                )
-        download_columns = st.columns(2)
-        download_columns[0].download_button(
-            f"{target_label} TOP 10 CSV",
-            data=top_ten_table.to_csv(index=False).encode("utf-8-sig"),
-            file_name=(
-                "changwon_child_priority_top10.csv"
-                if selected_risk_profile == "어린이 버전"
-                else "changwon_elderly_priority_top10.csv"
-            ),
-            mime="text/csv",
-            use_container_width=True,
-        )
-        download_columns[1].download_button(
-            "전체 100m 격자 CSV",
-            data=safety_analysis.to_csv(index=False).encode("utf-8-sig"),
-            file_name="changwon_safety_grid_100m.csv",
-            mime="text/csv",
-            use_container_width=True,
-        )
 
+            # 1. TOP10 핵심 요약
+            top10_count = len(final_top10_table)
+            light_primary_count = int(
+                (final_top10_table["primary_facility"] == "보안등").sum()
+            )
+            cctv_primary_count = int(
+                (final_top10_table["primary_facility"] == "CCTV").sum()
+            )
+            avg_risk = float(final_top10_table["risk_pct_mean"].mean())
+            avg_vulnerability = float(
+                final_top10_table["vulnerability_mean"].mean()
+            )
+
+            summary_columns = st.columns(5)
+            summary_columns[0].metric(
+                "최종 TOP10",
+                f"{top10_count}개 지역",
+            )
+            summary_columns[1].metric(
+                "보안등 1순위",
+                f"{light_primary_count}곳",
+            )
+            summary_columns[2].metric(
+                "CCTV 1순위",
+                f"{cctv_primary_count}곳",
+            )
+            summary_columns[3].metric(
+                "평균 고위험 적색영역",
+                f"{avg_risk:.1f}%",
+            )
+            summary_columns[4].metric(
+                "평균 최종 취약점수",
+                f"{avg_vulnerability:.3f}",
+            )
+
+            # 2. 카드 디자인
+            st.markdown(
+                """
+                <style>
+                .final-top10-card {
+                    border: 1px solid #dbe4ea;
+                    border-radius: 18px;
+                    padding: 17px 18px;
+                    margin-bottom: 14px;
+                    background: linear-gradient(
+                        145deg,
+                        #ffffff 0%,
+                        #f8fafc 100%
+                    );
+                    box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
+                }
+
+                .final-top10-head {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 10px;
+                    margin-bottom: 9px;
+                }
+
+                .final-top10-rank {
+                    font-size: 18px;
+                    font-weight: 900;
+                    color: #0f172a;
+                }
+
+                .final-top10-cluster {
+                    padding: 4px 9px;
+                    border-radius: 999px;
+                    background: #e2e8f0;
+                    color: #475569;
+                    font-size: 12px;
+                    font-weight: 800;
+                }
+
+                .final-top10-score {
+                    display: grid;
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 8px;
+                    margin: 11px 0;
+                }
+
+                .final-score-box {
+                    padding: 9px 8px;
+                    border-radius: 10px;
+                    background: #f8fafc;
+                    border: 1px solid #e2e8f0;
+                    text-align: center;
+                }
+
+                .final-score-label {
+                    color: #64748b;
+                    font-size: 11px;
+                    font-weight: 700;
+                }
+
+                .final-score-value {
+                    margin-top: 2px;
+                    color: #0f172a;
+                    font-size: 15px;
+                    font-weight: 900;
+                }
+
+                .final-infra-row {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                    margin: 10px 0;
+                }
+
+                .final-infra-ok,
+                .final-infra-need {
+                    padding: 5px 9px;
+                    border-radius: 9px;
+                    font-size: 12px;
+                    font-weight: 800;
+                }
+
+                .final-infra-ok {
+                    background: #dcfce7;
+                    color: #166534;
+                }
+
+                .final-infra-need {
+                    background: #fee2e2;
+                    color: #991b1b;
+                }
+
+                .final-recommend {
+                    margin-top: 11px;
+                    padding: 11px 12px;
+                    border-radius: 11px;
+                    background: #fff7ed;
+                    border: 1px solid #fed7aa;
+                    color: #9a3412;
+                    font-size: 13px;
+                    line-height: 1.55;
+                }
+
+                .final-police {
+                    margin-top: 8px;
+                    padding-top: 8px;
+                    border-top: 1px solid #e2e8f0;
+                    color: #475569;
+                    font-size: 12px;
+                }
+                </style>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            def top10_need_status(value):
+                if isinstance(value, bool):
+                    return value
+                return str(value).strip().lower() in {
+                    "true", "1", "yes", "y"
+                }
+
+            # 3. TOP10 카드
+            card_columns = st.columns(2)
+
+            for index, row in enumerate(
+                final_top10_table.itertuples(index=False)
+            ):
+                cctv_needed = top10_need_status(row.cctv_needed)
+                light_needed = top10_need_status(row.light_needed)
+                wifi_needed = top10_need_status(row.wifi_needed)
+
+                infra_badges = "".join(
+                    (
+                        f'<span class="final-infra-need">'
+                        f'＋ {label} 보완 필요'
+                        f'</span>'
+                        if needed
+                        else
+                        f'<span class="final-infra-ok">'
+                        f'✓ {label} 충족'
+                        f'</span>'
+                    )
+                    for label, needed in (
+                        ("CCTV", cctv_needed),
+                        ("보안등", light_needed),
+                        ("Wi-Fi", wifi_needed),
+                    )
+                )
+
+                police_html = ""
+
+                if final_top10_target == "노인":
+                    police_distance = getattr(
+                        row,
+                        "police_distance_mean_km",
+                        None,
+                    )
+                    police_reference = getattr(
+                        row,
+                        "police_access_reference",
+                        "",
+                    )
+
+                    if (
+                        police_distance is not None
+                        and not pd.isna(police_distance)
+                    ):
+                        police_html = (
+                            '<div class="final-police">'
+                            '<b>경찰 접근성 참고</b> · '
+                            f'{float(police_distance):.3f} km'
+                            + (
+                                f' · {escape(str(police_reference))}'
+                                if police_reference
+                                and not pd.isna(police_reference)
+                                else ""
+                            )
+                            + '<br>'
+                            '<span style="color:#64748b">'
+                            '※ 최종 취약점수 및 시설 우선순위에는 '
+                            '반영하지 않은 참고정보'
+                            '</span>'
+                            '</div>'
+                        )
+
+                with card_columns[index % 2]:
+                    st.markdown(
+                        '<div class="final-top10-card">'
+                        '<div class="final-top10-head">'
+                        f'<span class="final-top10-rank">'
+                        f'{escape(str(row.top10_label))}'
+                        '</span>'
+                        f'<span class="final-top10-cluster">'
+                        f'{escape(str(row.cluster_id))}'
+                        '</span>'
+                        '</div>'
+
+                        '<div class="final-top10-score">'
+                        '<div class="final-score-box">'
+                        '<div class="final-score-label">'
+                        '범죄 고위험 적색영역'
+                        '</div>'
+                        f'<div class="final-score-value">'
+                        f'{float(row.risk_pct_mean):.2f}%'
+                        '</div>'
+                        '</div>'
+
+                        '<div class="final-score-box">'
+                        '<div class="final-score-label">'
+                        '인프라 부족점수'
+                        '</div>'
+                        f'<div class="final-score-value">'
+                        f'{float(row.infra_need_mean):.3f}'
+                        '</div>'
+                        '</div>'
+
+                        '<div class="final-score-box">'
+                        '<div class="final-score-label">'
+                        '최종 취약점수'
+                        '</div>'
+                        f'<div class="final-score-value">'
+                        f'{float(row.vulnerability_mean):.3f}'
+                        '</div>'
+                        '</div>'
+                        '</div>'
+
+                        f'<div style="font-size:12px;color:#64748b;">'
+                        f'포함 격자: <b>{int(row.grid_n)}개</b>'
+                        '</div>'
+
+                        f'<div class="final-infra-row">'
+                        f'{infra_badges}'
+                        '</div>'
+
+                        '<div class="final-recommend">'
+                        f'<b>1순위 보완시설 · '
+                        f'{escape(str(row.primary_facility))}</b>'
+                        '<br>'
+                        f'보완 순서 · '
+                        f'{escape(str(row.facility_priority_order))}'
+                        '<br>'
+                        f'{escape(str(row.recommendation_type))}'
+                        '</div>'
+
+                        f'{police_html}'
+                        '</div>',
+                        unsafe_allow_html=True,
+                    )
+
+            # 4. 최종 결과표
+            st.markdown("#### 최종 TOP10 상세 결과")
+
+            final_display_table = final_top10_table[
+                [
+                    "cluster_rank",
+                    "cluster_id",
+                    "risk_pct_mean",
+                    "infra_need_mean",
+                    "vulnerability_mean",
+                    "grid_n",
+                    "cctv_needed",
+                    "light_needed",
+                    "wifi_needed",
+                    "primary_facility",
+                    "facility_priority_order",
+                ]
+            ].copy()
+
+            final_display_table["cctv_needed"] = (
+                final_display_table["cctv_needed"]
+                .apply(top10_need_status)
+                .map({True: "보완 필요", False: "충족"})
+            )
+            final_display_table["light_needed"] = (
+                final_display_table["light_needed"]
+                .apply(top10_need_status)
+                .map({True: "보완 필요", False: "충족"})
+            )
+            final_display_table["wifi_needed"] = (
+                final_display_table["wifi_needed"]
+                .apply(top10_need_status)
+                .map({True: "보완 필요", False: "충족"})
+            )
+
+            final_display_table.columns = [
+                "순위",
+                "클러스터",
+                "범죄 고위험 적색영역 비율(%)",
+                "CRITIC 인프라 부족점수",
+                "최종 취약점수",
+                "포함 격자 수",
+                "CCTV",
+                "보안등",
+                "공공 Wi-Fi",
+                "1순위 보완시설",
+                "시설 보완 순서",
+            ]
+
+            st.dataframe(
+                final_display_table.round(
+                    {
+                        "범죄 고위험 적색영역 비율(%)": 2,
+                        "CRITIC 인프라 부족점수": 4,
+                        "최종 취약점수": 4,
+                    }
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+            # 5. 공식 최종결과 CSV 다운로드
+            final_csv_name = (
+                "changwon_child_final_top10.csv"
+                if final_top10_target == "어린이"
+                else "changwon_elderly_final_top10.csv"
+            )
+
+            st.download_button(
+                f"{final_top10_target} 최종 TOP10 CSV 다운로드",
+                data=final_top10_table.to_csv(
+                    index=False
+                ).encode("utf-8-sig"),
+                file_name=final_csv_name,
+                mime="text/csv",
+                use_container_width=True,
+            )
+
+        else:
+            st.warning(
+                "STEP 6 최종 TOP10 데이터를 불러오지 못해 "
+                "최종 결과표를 표시할 수 없습니다."
+            )
+        
         st.subheader("데이터 갱신 및 예산 입력")
         st.caption("새 파일이나 예산을 적용한 뒤 결과 보기를 누르면 분석과 최적 배치를 다시 계산합니다.")
         with st.form("analysis-settings"):
