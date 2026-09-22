@@ -4058,43 +4058,14 @@ if naver_map_client_id:
             route_risk_grid["bounds"] if route_risk_grid else None
         ),
         "supportSites": naver_support_sites,
-        "priorityZones": (
-            [
-                {
-                    "rank": int(row.rank),
-                    "lat": float(row.latitude),
-                    "lng": float(row.longitude),
-                    "south": float(row.latitude - analysis_grid["latitude_step"] / 2),
-                    "north": float(row.latitude + analysis_grid["latitude_step"] / 2),
-                    "west": float(row.longitude - analysis_grid["longitude_step"] / 2),
-                    "east": float(row.longitude + analysis_grid["longitude_step"] / 2),
-                    "district": str(row.district),
-                    "riskPct": float(row.risk_area_pct),
-                    "riskScore": int(row.crime_risk_score),
-                    "deficitScore": float(row.infra_deficit_score),
-                    "priorityScore": float(row.priority_score),
-                    "priorityGrade": int(row.priority_grade),
-                    "clusterGridCount": int(row.cluster_grid_count),
-                    "infraCount": int(row.infra_count),
-                    "infraScore": float(row.infra_score),
-                    "cctv": bool(row.cctv_present),
-                    "light": bool(row.light_present),
-                    "wifi": bool(row.wifi_present),
-                    "policeDistance": float(row.police_distance_m),
-                    "targetLabel": str(target_facility_label),
-                    "targetInfluence": (
-                        "자료 없음"
-                        if pd.isna(row.target_influence)
-                        else ("해당" if row.target_influence else "비해당")
-                    ),
-                    "missing": str(row.missing_infrastructure),
-                    "reason": str(row.reason),
-                }
-                for row in installation_top_ten.itertuples(index=False)
-            ]
-            if not installation_top_ten.empty
-            else []
-        ),
+
+        # STEP 6에서 확정한 최종 TOP10
+        "finalTop10": final_top10_geojson,
+        "finalTop10Target": final_top10_target,
+
+        # 이전 웹 자체 TOP10은 더 이상 지도에 표시하지 않음
+        "priorityZones": [],
+        
         "facilities": naver_facilities,
         "route": None,
     }
@@ -4116,7 +4087,7 @@ if naver_map_client_id:
     NAVER_MAP_COMPONENT(
         html=build_naver_map_html(naver_map_client_id, naver_payload),
         key=(
-            f"changwon-naver-admin-v4-{selected_risk_profile}-"
+            f"changwon-naver-admin-v5-{selected_risk_profile}-"
             f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
             f"{raw_layer_signature}-"
             f"{route_component_signature}"
@@ -4133,7 +4104,7 @@ else:
         width=None,
         height=820,
         key=(
-            f"changwon-admin-map-v4-{selected_risk_profile}-"
+            f"changwon-admin-map-v5-{selected_risk_profile}-"
             f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
             f"{raw_layer_signature}"
         ),
