@@ -3697,41 +3697,74 @@ if risk_grid_ready:
                         )
 
                 with card_columns[index % 2]:
-                    st.markdown(
-                        '<div class="final-top10-card">'
+                    with st.container(border=True):
+                        header_left, header_right = st.columns(
+                            [3.2, 1.35],
+                            vertical_alignment="center",
+                        )
 
-                        '<div class="final-top10-head">'
-                        f'<span class="final-top10-rank">{escape(str(row.top10_label))}</span>'
-                        f'<span class="final-top10-cluster">{escape(str(row.cluster_id))}</span>'
-                        '</div>'
+                        with header_left:
+                            st.markdown(
+                                f'<div class="final-top10-rank">'
+                                f'{escape(str(row.top10_label))}'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
 
-                        '<div class="final-top10-body">'
+                        with header_right:
+                            if st.button(
+                                "📍 지도에서 보기",
+                                key=(
+                                    f"top10-location-button-"
+                                    f"{final_top10_target}-"
+                                    f"{row.cluster_id}"
+                                ),
+                                use_container_width=True,
+                            ):
+                                show_top10_location_dialog(
+                                    row._asdict(),
+                                    final_top10_geojson,
+                                    final_top10_target,
+                                )
 
-                        '<div class="final-score-main">'
-                        '<div class="final-score-label">최종 취약점수</div>'
-                        f'<div class="final-score-value">{float(row.vulnerability_mean):.3f}</div>'
-                        '</div>'
+                        st.markdown(
+                            '<div class="final-top10-body">'
 
-                        '<div class="final-info-row">'
+                            '<div class="final-score-main">'
+                            '<div class="final-score-label">'
+                            '최종 취약점수'
+                            '</div>'
+                            f'<div class="final-score-value">'
+                            f'{float(row.vulnerability_mean):.3f}'
+                            '</div>'
+                            '</div>'
 
-                        '<div class="final-info-section">'
-                        '<div class="final-stack-title">보완 필요 :</div>'
-                        f'<div class="final-infra-row">{infra_badges}</div>'
-                        '</div>'
+                            '<div class="final-info-row">'
 
-                        '<div class="final-info-section">'
-                        '<div class="final-stack-title">보완 순서 :</div>'
-                        f'<div class="final-priority-line">{priority_line}</div>'
-                        '</div>'
+                            '<div class="final-info-section">'
+                            '<div class="final-stack-title">'
+                            '보완 필요 :'
+                            '</div>'
+                            f'<div class="final-infra-row">'
+                            f'{infra_badges}'
+                            '</div>'
+                            '</div>'
 
-                        '</div>'
-                        '</div>'
+                            '<div class="final-info-section">'
+                            '<div class="final-stack-title">'
+                            '보완 순서 :'
+                            '</div>'
+                            f'<div class="final-priority-line">'
+                            f'{priority_line}'
+                            '</div>'
+                            '</div>'
 
-                        f'{police_html}'
+                            '</div>'
+                            '</div>'
 
-                        '</div>',
-                        unsafe_allow_html=True,
-                    )
+                            f'{police_html}',
+                            unsafe_allow_html=True,
+                        )
                     
             # 4. 최종 결과표
             st.markdown("#### 최종 TOP10 상세 결과")
