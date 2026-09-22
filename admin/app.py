@@ -3281,13 +3281,9 @@ if risk_grid_ready:
                 .final-top10-card {
                     border: 1px solid #dbe4ea;
                     border-radius: 18px;
-                    padding: 17px 18px;
+                    padding: 16px 18px;
                     margin-bottom: 14px;
-                    background: linear-gradient(
-                        145deg,
-                        #ffffff 0%,
-                        #f8fafc 100%
-                    );
+                    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
                     box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06);
                 }
 
@@ -3296,7 +3292,7 @@ if risk_grid_ready:
                     justify-content: space-between;
                     align-items: center;
                     gap: 10px;
-                    margin-bottom: 9px;
+                    margin-bottom: 10px;
                 }
 
                 .final-top10-rank {
@@ -3306,7 +3302,7 @@ if risk_grid_ready:
                 }
 
                 .final-top10-cluster {
-                    padding: 4px 9px;
+                    padding: 4px 10px;
                     border-radius: 999px;
                     background: #e2e8f0;
                     color: #475569;
@@ -3314,39 +3310,80 @@ if risk_grid_ready:
                     font-weight: 800;
                 }
 
-                .final-top10-score {
+                .final-top10-body {
                     display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 8px;
-                    margin: 11px 0;
+                    grid-template-columns: minmax(180px, 220px) 1fr;
+                    gap: 12px;
+                    align-items: stretch;
+                    margin: 8px 0 6px 0;
                 }
 
-                .final-score-box {
-                    padding: 9px 8px;
-                    border-radius: 10px;
+                .final-score-main {
+                    min-height: 118px;
+                    border-radius: 12px;
+                    border: 1px solid #dbe4ea;
                     background: #f8fafc;
-                    border: 1px solid #e2e8f0;
+                    padding: 12px 14px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
                     text-align: center;
                 }
 
                 .final-score-label {
                     color: #64748b;
-                    font-size: 11px;
-                    font-weight: 700;
+                    font-size: 12px;
+                    font-weight: 800;
                 }
 
                 .final-score-value {
-                    margin-top: 2px;
+                    margin-top: 4px;
                     color: #0f172a;
-                    font-size: 15px;
+                    font-size: 26px;
                     font-weight: 900;
+                    line-height: 1.2;
+                }
+
+                .final-score-sub {
+                    margin-top: 8px;
+                    color: #64748b;
+                    font-size: 12px;
+                    font-weight: 700;
+                }
+
+                .final-right-stack {
+                    min-height: 118px;
+                    display: grid;
+                    grid-template-rows: 1fr 1fr;
+                    gap: 8px;
+                }
+
+                .final-stack-box {
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
+                    background: #ffffff;
+                    padding: 10px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                }
+
+                .final-stack-box.priority-box {
+                    background: #fff7ed;
+                    border: 1px solid #fed7aa;
+                }
+
+                .final-stack-title {
+                    color: #64748b;
+                    font-size: 12px;
+                    font-weight: 800;
+                    margin-bottom: 6px;
                 }
 
                 .final-infra-row {
                     display: flex;
                     flex-wrap: wrap;
                     gap: 6px;
-                    margin: 10px 0;
                 }
 
                 .final-infra-ok,
@@ -3355,6 +3392,7 @@ if risk_grid_ready:
                     border-radius: 9px;
                     font-size: 12px;
                     font-weight: 800;
+                    line-height: 1.2;
                 }
 
                 .final-infra-ok {
@@ -3367,15 +3405,11 @@ if risk_grid_ready:
                     color: #991b1b;
                 }
 
-                .final-recommend {
-                    margin-top: 11px;
-                    padding: 11px 12px;
-                    border-radius: 11px;
-                    background: #fff7ed;
-                    border: 1px solid #fed7aa;
+                .final-priority-line {
                     color: #9a3412;
                     font-size: 13px;
-                    line-height: 1.55;
+                    font-weight: 800;
+                    line-height: 1.45;
                 }
 
                 .final-police {
@@ -3384,11 +3418,13 @@ if risk_grid_ready:
                     border-top: 1px solid #e2e8f0;
                     color: #475569;
                     font-size: 12px;
+                    line-height: 1.45;
                 }
                 </style>
                 """,
                 unsafe_allow_html=True,
             )
+            
             def top10_need_status(value):
                 if isinstance(value, bool):
                     return value
@@ -3406,21 +3442,32 @@ if risk_grid_ready:
                 light_needed = top10_need_status(row.light_needed)
                 wifi_needed = top10_need_status(row.wifi_needed)
 
+                # 지금처럼 유지: 보완 필요 = 빨강, 충족 = 초록
                 infra_badges = "".join(
                     (
-                        f'<span class="final-infra-need">'
-                        f'＋ {label} 보완 필요'
-                        f'</span>'
+                        f'<span class="final-infra-need">＋ {label} 보완 필요</span>'
                         if needed
                         else
-                        f'<span class="final-infra-ok">'
-                        f'✓ {label} 충족'
-                        f'</span>'
+                        f'<span class="final-infra-ok">✓ {label} 충족</span>'
                     )
                     for label, needed in (
                         ("CCTV", cctv_needed),
                         ("보안등", light_needed),
                         ("Wi-Fi", wifi_needed),
+                    )
+                )
+
+                priority_facilities = [
+                facility.strip()
+                for facility in str(row.facility_priority_order).split(">")
+                if facility.strip()
+                ]
+
+                priority_line = " · ".join(
+                    f"{rank}순위 {escape(facility)}"
+                    for rank, facility in enumerate(
+                        priority_facilities,
+                        start=1,
                     )
                 )
 
@@ -3452,74 +3499,43 @@ if risk_grid_ready:
                                 and not pd.isna(police_reference)
                                 else ""
                             )
-                            + '<br>'
-                            '<span style="color:#64748b">'
-                            '※ 최종 취약점수 및 시설 우선순위에는 '
-                            '반영하지 않은 참고정보'
-                            '</span>'
+                            + ' · 최종 취약점수에는 미반영'
                             '</div>'
                         )
 
                 with card_columns[index % 2]:
                     st.markdown(
                         '<div class="final-top10-card">'
+
                         '<div class="final-top10-head">'
-                        f'<span class="final-top10-rank">'
-                        f'{escape(str(row.top10_label))}'
-                        '</span>'
-                        f'<span class="final-top10-cluster">'
-                        f'{escape(str(row.cluster_id))}'
-                        '</span>'
+                        f'<span class="final-top10-rank">{escape(str(row.top10_label))}</span>'
+                        f'<span class="final-top10-cluster">{escape(str(row.cluster_id))}</span>'
                         '</div>'
 
-                        '<div class="final-top10-score">'
-                        '<div class="final-score-box">'
-                        '<div class="final-score-label">'
-                        '범죄 고위험 적색영역'
-                        '</div>'
-                        f'<div class="final-score-value">'
-                        f'{float(row.risk_pct_mean):.2f}%'
-                        '</div>'
+                        '<div class="final-top10-body">'
+
+                        '<div class="final-score-main">'
+                        '<div class="final-score-label">최종 취약점수</div>'
+                        f'<div class="final-score-value">{float(row.vulnerability_mean):.3f}</div>'
                         '</div>'
 
-                        '<div class="final-score-box">'
-                        '<div class="final-score-label">'
-                        '인프라 부족점수'
-                        '</div>'
-                        f'<div class="final-score-value">'
-                        f'{float(row.infra_need_mean):.3f}'
-                        '</div>'
+                        '<div class="final-right-stack">'
+
+                        '<div class="final-stack-box">'
+                        '<div class="final-stack-title">보완 필요</div>'
+                        f'<div class="final-infra-row">{infra_badges}</div>'
                         '</div>'
 
-                        '<div class="final-score-box">'
-                        '<div class="final-score-label">'
-                        '최종 취약점수'
-                        '</div>'
-                        f'<div class="final-score-value">'
-                        f'{float(row.vulnerability_mean):.3f}'
-                        '</div>'
-                        '</div>'
+                        '<div class="final-stack-box priority-box">'
+                        '<div class="final-stack-title">보완 순서</div>'
+                        f'<div class="final-priority-line">{priority_line}</div>'
                         '</div>'
 
-                        f'<div style="font-size:12px;color:#64748b;">'
-                        f'포함 격자: <b>{int(row.grid_n)}개</b>'
                         '</div>'
-
-                        f'<div class="final-infra-row">'
-                        f'{infra_badges}'
-                        '</div>'
-
-                        '<div class="final-recommend">'
-                        f'<b>1순위 보완시설 · '
-                        f'{escape(str(row.primary_facility))}</b>'
-                        '<br>'
-                        f'보완 순서 · '
-                        f'{escape(str(row.facility_priority_order))}'
-                        '<br>'
-                        f'{escape(str(row.recommendation_type))}'
                         '</div>'
 
                         f'{police_html}'
+
                         '</div>',
                         unsafe_allow_html=True,
                     )
