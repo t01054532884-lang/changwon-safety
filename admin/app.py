@@ -3312,18 +3312,18 @@ if risk_grid_ready:
 
                 .final-top10-body {
                     display: grid;
-                    grid-template-columns: minmax(180px, 220px) 1fr;
-                    gap: 12px;
+                    grid-template-columns: 150px 1fr;
+                    gap: 10px;
                     align-items: stretch;
-                    margin: 8px 0 6px 0;
+                    margin: 8px 0 5px 0;
                 }
 
                 .final-score-main {
-                    min-height: 118px;
+                    min-height: 78px;
                     border-radius: 12px;
                     border: 1px solid #dbe4ea;
                     background: #f8fafc;
-                    padding: 12px 14px;
+                    padding: 10px 12px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
@@ -3332,50 +3332,43 @@ if risk_grid_ready:
 
                 .final-score-label {
                     color: #64748b;
-                    font-size: 12px;
+                    font-size: 13px;
                     font-weight: 800;
                 }
 
                 .final-score-value {
                     margin-top: 4px;
                     color: #0f172a;
-                    font-size: 26px;
+                    font-size: 28px;
                     font-weight: 900;
-                    line-height: 1.2;
+                    line-height: 1.15;
                 }
 
-                .final-score-sub {
-                    margin-top: 8px;
-                    color: #64748b;
-                    font-size: 12px;
-                    font-weight: 700;
-                }
-
-                .final-right-stack {
-                    min-height: 118px;
+                .final-info-row {
+                    min-height: 78px;
                     display: grid;
-                    grid-template-rows: 1fr 1fr;
-                    gap: 8px;
+                    grid-template-columns: 1.15fr 1fr;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 12px;
+                    background: #ffffff;
+                    overflow: hidden;
                 }
 
-                .final-stack-box {
-                    border-radius: 12px;
-                    border: 1px solid #e2e8f0;
-                    background: #ffffff;
+                .final-info-section {
                     padding: 10px 12px;
                     display: flex;
                     flex-direction: column;
                     justify-content: center;
                 }
 
-                .final-stack-box.priority-box {
+                .final-info-section + .final-info-section {
+                    border-left: 1px solid #e2e8f0;
                     background: #fff7ed;
-                    border: 1px solid #fed7aa;
                 }
 
                 .final-stack-title {
-                    color: #64748b;
-                    font-size: 12px;
+                    color: #475569;
+                    font-size: 13px;
                     font-weight: 800;
                     margin-bottom: 6px;
                 }
@@ -3390,7 +3383,7 @@ if risk_grid_ready:
                 .final-infra-need {
                     padding: 5px 9px;
                     border-radius: 9px;
-                    font-size: 12px;
+                    font-size: 13px;
                     font-weight: 800;
                     line-height: 1.2;
                 }
@@ -3407,9 +3400,9 @@ if risk_grid_ready:
 
                 .final-priority-line {
                     color: #9a3412;
-                    font-size: 13px;
+                    font-size: 14px;
                     font-weight: 800;
-                    line-height: 1.45;
+                    line-height: 1.4;
                 }
 
                 .final-police {
@@ -3519,14 +3512,14 @@ if risk_grid_ready:
                         f'<div class="final-score-value">{float(row.vulnerability_mean):.3f}</div>'
                         '</div>'
 
-                        '<div class="final-right-stack">'
+                        '<div class="final-info-row">'
 
-                        '<div class="final-stack-box">'
+                        '<div class="final-info-section">'
                         '<div class="final-stack-title">보완 필요</div>'
                         f'<div class="final-infra-row">{infra_badges}</div>'
                         '</div>'
 
-                        '<div class="final-stack-box priority-box">'
+                        '<div class="final-info-section">'
                         '<div class="final-stack-title">보완 순서</div>'
                         f'<div class="final-priority-line">{priority_line}</div>'
                         '</div>'
