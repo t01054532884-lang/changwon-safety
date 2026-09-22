@@ -1465,10 +1465,21 @@ def red_risk_density_image(image_bytes: bytes) -> bytes:
     intensity = np.clip(signal / max(scale, 0.01), 0, 1)
     alpha = np.where(intensity > 0.03, 45 + intensity * 200, 0)
     overlay = np.zeros((*signal.shape, 4), dtype=np.uint8)
-    overlay[:, :, 0] = 220
-    overlay[:, :, 1] = np.where(intensity > 0.65, 38, 82).astype(np.uint8)
-    overlay[:, :, 2] = np.where(intensity > 0.65, 38, 82).astype(np.uint8)
-    overlay[:, :, 3] = alpha.astype(np.uint8)
+
+# 원본 WMS 위험 신호는 주황/코랄 계열로 표시
+# 100m 고위험 격자의 적색과 시각적으로 구분한다.
+overlay[:, :, 0] = 249
+overlay[:, :, 1] = np.where(
+    intensity > 0.65,
+    82,
+    146,
+).astype(np.uint8)
+overlay[:, :, 2] = np.where(
+    intensity > 0.65,
+    20,
+    60,
+).astype(np.uint8)
+overlay[:, :, 3] = alpha.astype(np.uint8)
     output = BytesIO()
     Image.fromarray(overlay, mode="RGBA").save(output, format="PNG")
     return output.getvalue()
