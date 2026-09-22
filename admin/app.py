@@ -1420,24 +1420,39 @@ def risk_signal_for_grid(
     )
     return signal, grades
 
-
-def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
+def high_risk_grid_overlay(
+    risk_grades: np.ndarray,
+    grid: dict,
+) -> np.ndarray:
     """원본 WMS 상대 위험도가 높은 격자만 빨간색으로 강조합니다."""
-    overlay = np.zeros((*grid["mask"].shape, 4), dtype=np.uint8)
+    overlay = np.zeros(
+        (*grid["mask"].shape, 4),
+        dtype=np.uint8,
+    )
+
     high_risk = risk_grades >= 4
     highest_risk = risk_grades >= 5
-    overlay[grid["rows"][high_risk], grid["columns"][high_risk]] = (
-    220,
-    38,
-    38,
-    190,
-)
-overlay[grid["rows"][highest_risk], grid["columns"][highest_risk]] = (
-    127,
-    29,
-    29,
-    235,
-)
+
+    overlay[
+        grid["rows"][high_risk],
+        grid["columns"][high_risk],
+    ] = (
+        220,
+        38,
+        38,
+        190,
+    )
+
+    overlay[
+        grid["rows"][highest_risk],
+        grid["columns"][highest_risk],
+    ] = (
+        127,
+        29,
+        29,
+        235,
+    )
+
     return overlay
 
 def red_risk_density_image(image_bytes: bytes) -> bytes:
