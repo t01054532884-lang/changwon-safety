@@ -1836,6 +1836,97 @@ def geocode_changwon(place: str) -> dict:
         "name": candidates[0]["name"],
     }
 
+@st.cache_data(ttl=86_400, show_spinner=False)
+def reverse_geocode_changwon(
+    latitude: float,
+    longitude: float,
+) -> str:
+    """TOP10 중심좌표를 대표 주소로 변환합니다."""
+    client_id = get_naver_map_client_id()
+    client_secret = get_secret("NAVER_MAP_CLIENT_SECRET")
+
+    if not client_id or not client_secret:
+        return "대표 주소 확인 불가"
+
+    parameters = urlencode(
+        {
+            "coords": f"{longitude},{latitude}",
+            "sourcecrs": "EPSG:4326",
+            "orders": "roadaddr,addr,admcode",
+            "output": "json",
+        }
+    )
+
+    request = Request(
+        "https://naveropenapi.apigw.ntruss.com/"
+        f"map-reversegeocode/v2/gc?{parameters}",
+        headers={
+            "x-ncp-apigw-api-key-id": client_id,
+            "x-ncp-apigw-api-key": client_secret,
+            "Accept": "application/json",
+        },
+    )
+
+    try:
+        with urlopen(request, timeout=15) as response:
+            payload = json.loads(
+                response.read().decode("utf-8")
+            )
+    except Exception:
+        return "대표 주소 확인 불가"
+
+    results = payload.get("results", [])
+
+    if not results:
+        return "대표 주소 확인 불가"
+
+    # 도로명 주소를 우선 사용하고,
+    # 없으면 지번/행정동 주소를 사용합니다.
+    result = results[0]
+
+    region = result.get("region", {})
+    land = result.get("land", {})
+
+    region_parts = []
+
+    for key in ("area1", "area2", "area3", "area4"):
+        name = str(
+            region.get(key, {}).get("name", "")
+        ).strip()
+
+        if name:
+            region_parts.append(name)
+
+    road_name = str(
+        land.get("name", "")
+    ).strip()
+
+    number1 = str(
+        land.get("number1", "")
+    ).strip()
+
+    number2 = str(
+        land.get("number2", "")
+    ).strip()
+
+    address_parts = region_parts.copy()
+
+    if road_name:
+        address_parts.append(road_name)
+
+    if number1:
+        lot_number = number1
+
+        if number2:
+            lot_number += f"-{number2}"
+
+        address_parts.append(lot_number)
+
+    address = " ".join(
+        part for part in address_parts if part
+    ).strip()
+
+    return address or "대표 주소 확인 불가"
 
 @st.cache_data(ttl=3_600, show_spinner=False)
 def fetch_pedestrian_routes(start: dict, destination: dict) -> list[dict]:
