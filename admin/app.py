@@ -1512,18 +1512,25 @@ def red_risk_density_image(image_bytes: bytes) -> bytes:
 
     # 생활안전지도 원본 위험 신호는 주황/코랄 계열로 표현
     # 100m 고위험 격자의 진한 적색과 시각적으로 구분한다.
-    overlay[:, :, 0] = 249
-    overlay[:, :, 1] = np.where(
-        intensity > 0.65,
-        82,
-        146,
-    ).astype(np.uint8)
-    overlay[:, :, 2] = np.where(
-        intensity > 0.65,
-        20,
-        60,
-    ).astype(np.uint8)
-    overlay[:, :, 3] = alpha.astype(np.uint8)
+   overlay[:, :, 0] = np.where(
+    intensity > 0.65,
+    217,
+    251,
+).astype(np.uint8)
+
+overlay[:, :, 1] = np.where(
+    intensity > 0.65,
+    119,
+    191,
+).astype(np.uint8)
+
+overlay[:, :, 2] = np.where(
+    intensity > 0.65,
+    6,
+    36,
+).astype(np.uint8)
+
+overlay[:, :, 3] = alpha.astype(np.uint8)
 
     output = BytesIO()
     Image.fromarray(
