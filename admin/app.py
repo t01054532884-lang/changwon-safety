@@ -1427,17 +1427,17 @@ def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
     high_risk = risk_grades >= 4
     highest_risk = risk_grades >= 5
     overlay[grid["rows"][high_risk], grid["columns"][high_risk]] = (
-        239,
-        68,
-        68,
-        165,
-    )
-    overlay[grid["rows"][highest_risk], grid["columns"][highest_risk]] = (
-        127,
-        29,
-        29,
-        225,
-    )
+    220,
+    38,
+    38,
+    190,
+)
+overlay[grid["rows"][highest_risk], grid["columns"][highest_risk]] = (
+    127,
+    29,
+    29,
+    235,
+)
     return overlay
 
 def red_risk_density_image(image_bytes: bytes) -> bytes:
