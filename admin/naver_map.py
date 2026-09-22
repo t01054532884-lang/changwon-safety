@@ -45,8 +45,14 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
 
 <div class="legend-row">
   <span class="dot"
-        style="background:#EF4444;border:2px solid #7F1D1D;border-radius:2px"></span>
-  고위험 100m 격자
+        style="background:#DC2626;border:2px solid #991B1B;border-radius:2px"></span>
+  4등급 고위험 100m 격자
+</div>
+
+<div class="legend-row">
+  <span class="dot"
+        style="background:#7F1D1D;border:2px solid #450A0A;border-radius:2px"></span>
+  5등급 최고위험 100m 격자
 </div>
     <div class="legend-row">
   <span id="final-top10-swatch"
@@ -267,7 +273,7 @@ if(legendLabel){
     const risk=addGround(
   DATA.riskImage,
   DATA.riskBounds,
-  .38
+  .62
 );
 
 if(risk){
@@ -275,7 +281,7 @@ if(risk){
 
   addControl(
     "risk",
-    "생활안전지도 위험 신호",
+    "생활안전지도 위험 신호 (참고)",
     false,
     v=>risk.setMap(v?map:null)
   );
