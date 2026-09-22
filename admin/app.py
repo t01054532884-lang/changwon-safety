@@ -1440,51 +1440,87 @@ def high_risk_grid_overlay(risk_grades: np.ndarray, grid: dict) -> np.ndarray:
     )
     return overlay
 
-
 def red_risk_density_image(image_bytes: bytes) -> bytes:
-    """생활안전지도 WMS 밝기를 투명한 빨간 위험 밀도 PNG로 바꿉니다."""
+    """생활안전지도 WMS 위험 신호를 투명한 주황/코랄 PNG로 변환합니다."""
     pixels = np.asarray(
         Image.open(BytesIO(image_bytes)).convert("RGBA"),
         dtype=np.float32,
     )
+
     luminance = (
         0.2126 * pixels[:, :, 0]
         + 0.7152 * pixels[:, :, 1]
         + 0.0722 * pixels[:, :, 2]
     ) / 255
+
     raw_signal = luminance * (pixels[:, :, 3] / 255)
+
     rounded_signal = np.round(raw_signal, 3)
     unique_signal, signal_counts = np.unique(
         rounded_signal,
         return_counts=True,
     )
-    background = float(unique_signal[np.argmax(signal_counts)])
-    signal = np.maximum(0, raw_signal - background)
+
+    background = float(
+        unique_signal[np.argmax(signal_counts)]
+    )
+
+    signal = np.maximum(
+        0,
+        raw_signal - background,
+    )
+
     positive = signal[signal > 0.01]
-    scale = float(np.quantile(positive, 0.97)) if positive.size else 1
-    intensity = np.clip(signal / max(scale, 0.01), 0, 1)
-    alpha = np.where(intensity > 0.03, 45 + intensity * 200, 0)
-    overlay = np.zeros((*signal.shape, 4), dtype=np.uint8)
 
-# 원본 WMS 위험 신호는 주황/코랄 계열로 표시
-# 100m 고위험 격자의 적색과 시각적으로 구분한다.
-overlay[:, :, 0] = 249
-overlay[:, :, 1] = np.where(
-    intensity > 0.65,
-    82,
-    146,
-).astype(np.uint8)
-overlay[:, :, 2] = np.where(
-    intensity > 0.65,
-    20,
-    60,
-).astype(np.uint8)
-overlay[:, :, 3] = alpha.astype(np.uint8)
+    scale = (
+        float(np.quantile(positive, 0.97))
+        if positive.size
+        else 1
+    )
+
+    intensity = np.clip(
+        signal / max(scale, 0.01),
+        0,
+        1,
+    )
+
+    alpha = np.where(
+        intensity > 0.03,
+        35 + intensity * 145,
+        0,
+    )
+
+    overlay = np.zeros(
+        (*signal.shape, 4),
+        dtype=np.uint8,
+    )
+
+    # 생활안전지도 원본 위험 신호는 주황/코랄 계열로 표현
+    # 100m 고위험 격자의 진한 적색과 시각적으로 구분한다.
+    overlay[:, :, 0] = 249
+    overlay[:, :, 1] = np.where(
+        intensity > 0.65,
+        82,
+        146,
+    ).astype(np.uint8)
+    overlay[:, :, 2] = np.where(
+        intensity > 0.65,
+        20,
+        60,
+    ).astype(np.uint8)
+    overlay[:, :, 3] = alpha.astype(np.uint8)
+
     output = BytesIO()
-    Image.fromarray(overlay, mode="RGBA").save(output, format="PNG")
+    Image.fromarray(
+        overlay,
+        mode="RGBA",
+    ).save(
+        output,
+        format="PNG",
+    )
+
     return output.getvalue()
-
-
+    
 def clean_place_text(value: object) -> str:
     """검색 API가 반환한 HTML 태그와 엔티티를 제거합니다."""
     return unescape(re.sub(r"<[^>]+>", "", str(value or ""))).strip()
