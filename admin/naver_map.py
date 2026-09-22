@@ -38,7 +38,12 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   <div class="legend panel">
     <div class="panel-title">안전 분석 표시</div>
     <div class="legend-row"><span class="dot risk"></span>범죄위험 밀도·고위험 격자</div>
-    <div class="legend-row"><span class="dot" style="background:#ef4444;border:2px solid #7f1d1d;border-radius:2px"></span>추가 설치 필요지역 TOP 10</div>
+    <div class="legend-row">
+  <span id="final-top10-swatch"
+        class="dot"
+        style="background:#fb923c;border:2px solid #c2410c;border-radius:2px"></span>
+  <span id="final-top10-legend-label">최종 안전취약지역 TOP 10</span>
+</div>
     <div class="legend-row"><span class="triangle">△</span>안전요소 3종 충족</div>
     <div class="legend-row"><span class="boundary"></span>창원시 행정경계</div>
   </div>
@@ -61,6 +66,185 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   function openInfo(marker,html){infoWindow.setContent('<div class="info">'+html+'</div>');infoWindow.open(map,marker);}
   function supportMarker(site){const content='<div class="safe-triangle"><svg width="29" height="27" viewBox="0 0 30 28"><polygon points="15,2 28,26 2,26" fill="none" stroke="#fff" stroke-width="6" stroke-linejoin="round"/><polygon points="15,2 28,26 2,26" fill="rgba(22,163,74,.08)" stroke="#16A34A" stroke-width="3" stroke-linejoin="round"/></svg></div>';const marker=new naver.maps.Marker({position:new naver.maps.LatLng(site.lat,site.lng),map,title:"안전요소 3종 충족",icon:{content,size:new naver.maps.Size(30,28),anchor:new naver.maps.Point(15,27)},zIndex:120});naver.maps.Event.addListener(marker,"click",()=>openInfo(marker,'<b style="color:#15803d">안전요소 3종 충족 △</b><br>CCTV 최근접 '+Math.round(site.cctvDistance)+'m<br>보행조명 최근접 '+Math.round(site.lightDistance)+'m<br>공공 Wi-Fi: '+esc(site.place)+'<br>주소: '+esc(site.address)));return marker;}
   function priorityZone(zone){const position=new naver.maps.LatLng(zone.lat,zone.lng);const bounds=new naver.maps.LatLngBounds(new naver.maps.LatLng(zone.south,zone.west),new naver.maps.LatLng(zone.north,zone.east));const rectangle=new naver.maps.Rectangle({map,bounds,strokeColor:"#7f1d1d",strokeWeight:3,strokeOpacity:1,fillColor:"#ef4444",fillOpacity:.7,clickable:true,zIndex:145});const label=new naver.maps.Marker({map,position,clickable:false,zIndex:146,icon:{content:'<div style="display:flex;align-items:center;justify-content:center;width:28px;height:24px;border-radius:7px;border:2px solid #fff;background:#991b1b;color:#fff;font-size:12px;font-weight:900;box-shadow:0 1px 5px rgba(0,0,0,.4)">T'+zone.rank+'</div>',size:new naver.maps.Size(28,24),anchor:new naver.maps.Point(14,12)}});naver.maps.Event.addListener(rectangle,"click",()=>{const anchor=new naver.maps.Marker({position,map:null});openInfo(anchor,'<b style="color:#991b1b">추가 설치 필요지역 #'+zone.rank+'</b><br>위치: '+esc(zone.district||"행정구 확인 불가")+'<br>범죄 고위험영역: '+zone.riskPct.toFixed(1)+'% ('+zone.riskScore+'/5점)<br>인프라 부족도: '+zone.deficitScore.toFixed(2)+'/5점<br>최종 취약도: '+zone.priorityScore.toFixed(2)+'/5점 ('+zone.priorityGrade+'등급)<br>연속 고취약 격자: '+zone.clusterGridCount+'개<br>안전 인프라: '+zone.infraCount+'/3개 ('+zone.infraScore.toFixed(2)+'/5점)<br>CCTV: '+(zone.cctv?"충족":"미충족")+' · 보안등: '+(zone.light?"충족":"미충족")+' · Wi-Fi: '+(zone.wifi?"충족":"미충족")+'<br>최근접 파출소: '+Math.round(zone.policeDistance)+'m<br>'+esc(zone.targetLabel)+' 영향권: '+esc(zone.targetInfluence)+'<br>부족 시설: '+esc(zone.missing)+'<br>선정 이유: '+esc(zone.reason))});return [rectangle,label];}
+ 
+function finalTop10Layer(){
+  const geojson=DATA.finalTop10;
+  if(!geojson||!geojson.features?.length)return [];
+
+  const isChild=DATA.finalTop10Target==="어린이";
+  const strokeColor=isChild?"#C2410C":"#6D28D9";
+  const fillColor=isChild?"#FB923C":"#8B5CF6";
+  const badgeColor=isChild?"#C2410C":"#6D28D9";
+  const targetLabel=DATA.finalTop10Target||"";
+
+  const legendSwatch=document.getElementById("final-top10-swatch");
+const legendLabel=document.getElementById("final-top10-legend-label");
+
+if(legendSwatch){
+  legendSwatch.style.background=fillColor;
+  legendSwatch.style.borderColor=strokeColor;
+}
+
+if(legendLabel){
+  legendLabel.textContent=
+    (targetLabel?targetLabel+" ":"")+
+    "최종 안전취약지역 TOP 10";
+}
+  
+  const layer=new naver.maps.Data({map});
+  layer.addGeoJson(geojson);
+
+  layer.setStyle({
+    strokeColor:strokeColor,
+    strokeWeight:4,
+    strokeOpacity:1,
+    fillColor:fillColor,
+    fillOpacity:.42,
+    clickable:true,
+    zIndex:145
+  });
+
+  naver.maps.Event.addListener(layer,"mouseover",e=>{
+    layer.overrideStyle(e.feature,{
+      strokeWeight:6,
+      fillOpacity:.68
+    });
+  });
+
+  naver.maps.Event.addListener(layer,"mouseout",e=>{
+    layer.revertStyle(e.feature);
+  });
+
+  naver.maps.Event.addListener(layer,"click",e=>{
+    const f=e.feature;
+
+    const label=f.getProperty("top10_label")||"TOP10";
+    const cluster=f.getProperty("cluster_id")||"-";
+    const risk=Number(f.getProperty("risk_pct_mean")||0);
+    const infra=Number(f.getProperty("infra_need_mean")||0);
+    const vulnerability=Number(f.getProperty("vulnerability_mean")||0);
+    const gridN=Number(f.getProperty("grid_n")||0);
+
+    const cctvNeeded=Boolean(f.getProperty("cctv_needed"));
+    const lightNeeded=Boolean(f.getProperty("light_needed"));
+    const wifiNeeded=Boolean(f.getProperty("wifi_needed"));
+
+    const primary=f.getProperty("primary_facility")||"-";
+    const order=f.getProperty("facility_priority_order")||"-";
+    const recommendType=f.getProperty("recommendation_type")||"-";
+
+    const policeDistance=f.getProperty("police_distance_mean_km");
+    const policeReference=f.getProperty("police_access_reference");
+
+    let policeHtml="";
+    if(
+      DATA.finalTop10Target==="노인" &&
+      policeDistance!==null &&
+      policeDistance!==undefined
+    ){
+      policeHtml=
+        '<br><span style="color:#475569"><b>경찰 접근성 참고</b>: '+
+        Number(policeDistance).toFixed(3)+' km'+
+        (policeReference?' · '+esc(policeReference):'')+
+        '</span>'+
+        '<br><span style="color:#64748b;font-size:11px">'+
+        '※ 최종 취약점수와 시설 우선순위에는 미반영'+
+        '</span>';
+    }
+
+    const statusBadge=(needed,labelText)=>
+      '<span style="display:inline-block;margin:2px 4px 2px 0;padding:3px 7px;border-radius:7px;'+
+      (needed
+        ?'background:#fee2e2;color:#991b1b'
+        :'background:#dcfce7;color:#166534')+
+      ';font-weight:800">'+
+      (needed?'＋ ':'✓ ')+esc(labelText)+(needed?' 보완 필요':' 충족')+
+      '</span>';
+
+    infoWindow.setContent(
+      '<div class="info" style="min-width:300px">'+
+      '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center">'+
+      '<b style="color:'+strokeColor+';font-size:15px">'+esc(label)+'</b>'+
+      '<span style="color:#64748b;font-weight:800">'+esc(cluster)+'</span>'+
+      '</div>'+
+      '<hr style="border:0;border-top:1px solid #e2e8f0;margin:8px 0">'+
+      '<b>범죄 고위험 적색영역 비율</b>: '+risk.toFixed(2)+'%<br>'+
+      '<b>CRITIC 인프라 부족점수</b>: '+infra.toFixed(4)+'<br>'+
+      '<b>최종 취약점수</b>: '+vulnerability.toFixed(4)+'<br>'+
+      '<b>포함 격자</b>: '+gridN+'개<br>'+
+      '<div style="margin:8px 0">'+
+      statusBadge(cctvNeeded,"CCTV")+
+      statusBadge(lightNeeded,"보안등")+
+      statusBadge(wifiNeeded,"공공 Wi-Fi")+
+      '</div>'+
+      '<div style="padding:9px 10px;border-radius:9px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412">'+
+      '<b>1순위 보완시설: '+esc(primary)+'</b><br>'+
+      '보완 순서: '+esc(order)+'<br>'+
+      esc(recommendType)+
+      '</div>'+
+      policeHtml+
+      '</div>'
+    );
+
+    const lat=f.getProperty("latitude");
+    const lng=f.getProperty("longitude");
+    const position=e.coord||(
+      lat!=null&&lng!=null
+        ?new naver.maps.LatLng(Number(lat),Number(lng))
+        :map.getCenter()
+    );
+
+    infoWindow.setPosition(position);
+    infoWindow.open(map);
+  });
+
+  const labels=(geojson.features||[]).map(feature=>{
+    const p=feature.properties||{};
+
+    if(
+      p.latitude==null ||
+      p.longitude==null ||
+      p.cluster_rank==null
+    )return null;
+
+    const primary=String(p.primary_facility||"");
+
+    const symbol=
+      primary==="보안등"?"💡":
+      primary==="CCTV"?"📹":
+      primary.includes("Wi-Fi")||primary.includes("와이파이")
+        ?"Wi-Fi":"";
+
+    return new naver.maps.Marker({
+      map,
+      position:new naver.maps.LatLng(
+        Number(p.latitude),
+        Number(p.longitude)
+      ),
+      title:
+        (p.top10_label||("TOP "+p.cluster_rank))+
+        " · 1순위 "+primary,
+      clickable:false,
+      zIndex:146,
+      icon:{
+        content:
+          '<div style="'+
+          'display:flex;align-items:center;justify-content:center;'+
+          'min-width:54px;height:28px;padding:0 7px;'+
+          'border-radius:8px;border:2px solid white;'+
+          'background:'+badgeColor+';color:white;'+
+          'font-size:11px;font-weight:900;white-space:nowrap;'+
+          'box-shadow:0 2px 7px rgba(0,0,0,.38)">'+
+          'TOP '+Number(p.cluster_rank)+(symbol?' · '+symbol:'')+
+          '</div>',
+        size:new naver.maps.Size(66,28),
+        anchor:new naver.maps.Point(33,14)
+      }
+    });
+  }).filter(Boolean);
+
+  return [layer,...labels];
+}  
   function markerContent(kind,count){const symbols={cctv:"C",light:"L",wifi:"W",police:"P"};return '<div class="facility-marker '+kind+'">'+(count>1?count:symbols[kind])+'</div>';}
   function clearFacility(kind){(groups[kind]||[]).forEach(m=>m.setMap(null));groups[kind]=[];}
   function redrawFacility(kind){clearFacility(kind);if(!facilityState[kind])return;const points=DATA.facilities[kind]||[];if(!points.length)return;const zoom=map.getZoom();const bounds=map.getBounds();const cell=zoom>=17?0.00002:0.035/Math.pow(2,Math.max(0,zoom-10));const buckets=new Map();for(const point of points){const pos=new naver.maps.LatLng(point[0],point[1]);if(bounds&&!bounds.hasLatLng(pos))continue;const key=Math.floor(point[0]/cell)+":"+Math.floor(point[1]/cell);let bucket=buckets.get(key);if(!bucket){bucket={lat:0,lng:0,count:0,label:point[2]||"",address:point[3]||""};buckets.set(key,bucket)}bucket.lat+=point[0];bucket.lng+=point[1];bucket.count++}for(const bucket of buckets.values()){const marker=new naver.maps.Marker({position:new naver.maps.LatLng(bucket.lat/bucket.count,bucket.lng/bucket.count),map,title:bucket.count>1?bucket.count+"개 시설":bucket.label,icon:{content:markerContent(kind,bucket.count),size:new naver.maps.Size(30,26),anchor:new naver.maps.Point(15,13)},zIndex:90});if(bucket.label)naver.maps.Event.addListener(marker,"click",()=>openInfo(marker,kind==="police"&&bucket.count===1?'<b>'+esc(bucket.label)+'</b><br>주소: '+esc(bucket.address):'<b>'+esc(bucket.label)+'</b><br>'+(bucket.count>1?"주변 시설 "+bucket.count+"개":"원본 시설 위치")));groups[kind].push(marker)}}
@@ -76,6 +260,20 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
     const districts=makeDataLayer(DATA.districtBoundary,feature=>{const color=districtColors[feature.getProperty("name")]||"#475569";return{strokeColor:color,strokeWeight:4,strokeOpacity:.96,fillColor:color,fillOpacity:.035}});if(districts)addControl("districts","창원시 5개 구 경계",true,v=>districts.setMap(v?map:null));
     groups.support=(DATA.supportSites||[]).map(supportMarker);if(groups.support.length)addControl("support","안전요소 3종 충족 △",true,v=>setObjects(groups.support,v));
     groups.priority=(DATA.priorityZones||[]).map(priorityZone);if(groups.priority.length)addControl("priority","추가 설치 필요지역 TOP 10",true,v=>setObjects(groups.priority,v));
+    groups.finalTop10=finalTop10Layer();
+
+if(groups.finalTop10.length){
+  const finalLabel=
+    (DATA.finalTop10Target?DATA.finalTop10Target+" ":"")+
+    "최종 안전취약지역 TOP 10";
+
+  addControl(
+    "finalTop10",
+    finalLabel,
+    true,
+    v=>setObjects(groups.finalTop10,v)
+  );
+}
     const labels={cctv:"원본 방범용 CCTV",light:"원본 보행조명",wifi:"원본 공공 Wi-Fi",police:"원본 지구대·파출소"};for(const kind of ["cctv","light","wifi","police"]){if((DATA.facilities[kind]||[]).length){facilityState[kind]=false;addControl(kind,labels[kind],false,v=>{facilityState[kind]=v;redrawFacility(kind)})}}
     if(DATA.route&&DATA.route.coordinates?.length){
       const path=DATA.route.coordinates.map(p=>new naver.maps.LatLng(p[0],p[1]));
