@@ -254,11 +254,54 @@ if(legendLabel){
     naver=window.naver;
     status.textContent="네이버 지도와 안전 데이터를 불러오는 중…";
     const focus=DATA.focus||{lat:35.18,lng:128.62,zoom:10,name:"창원시"};map=new naver.maps.Map("changwon-naver-map",{center:new naver.maps.LatLng(focus.lat,focus.lng),zoom:focus.zoom||10,mapTypeControl:true,zoomControl:true,zoomControlOptions:{position:naver.maps.Position.LEFT_CENTER},scaleControl:true});infoWindow=new naver.maps.InfoWindow({borderWidth:0,backgroundColor:"transparent",anchorSize:new naver.maps.Size(12,8)});if((focus.zoom||10)>10)new naver.maps.Marker({map,position:new naver.maps.LatLng(focus.lat,focus.lng),title:focus.name||"검색 위치",zIndex:180});
-    const risk=addGround(DATA.riskImage,DATA.riskBounds,.82);if(risk)addControl("risk","원본 범죄위험 빨간 밀도",true,v=>risk.setMap(v?map:null));
-    const grid=addGround(DATA.riskGridImage,DATA.riskBounds,1);if(grid)addControl("grid","고위험 100m 격자",true,v=>grid.setMap(v?map:null));
+    const risk=addGround(DATA.riskImage,DATA.riskBounds,.48);
+if(risk){
+  risk.setMap(null);
+  addControl(
+    "risk",
+    "원본 범죄위험 빨간 밀도",
+    false,
+    v=>risk.setMap(v?map:null)
+  );
+}
+
+const grid=addGround(DATA.riskGridImage,DATA.riskBounds,.82);
+if(grid){
+  addControl(
+    "grid",
+    "고위험 100m 격자",
+    true,
+    v=>grid.setMap(v?map:null)
+  );
+}
     const outer=makeDataLayer(DATA.outerBoundary,{strokeColor:"#312E81",strokeWeight:5,strokeOpacity:.95,fillColor:"#312E81",fillOpacity:.02});if(outer)addControl("outer","창원시 외곽경계",true,v=>outer.setMap(v?map:null));
-    const districts=makeDataLayer(DATA.districtBoundary,feature=>{const color=districtColors[feature.getProperty("name")]||"#475569";return{strokeColor:color,strokeWeight:4,strokeOpacity:.96,fillColor:color,fillOpacity:.035}});if(districts)addControl("districts","창원시 5개 구 경계",true,v=>districts.setMap(v?map:null));
-    groups.support=(DATA.supportSites||[]).map(supportMarker);if(groups.support.length)addControl("support","안전요소 3종 충족 △",true,v=>setObjects(groups.support,v));
+    const districts=makeDataLayer(
+  DATA.districtBoundary,
+  feature=>{
+    const color=districtColors[feature.getProperty("name")]||"#475569";
+
+    return{
+      strokeColor:color,
+      strokeWeight:5,
+      strokeOpacity:1,
+      fillColor:color,
+      fillOpacity:.025,
+      zIndex:135
+    };
+  }
+);
+
+if(districts){
+  districts.setMap(null);
+  districts.setMap(map);
+
+  addControl(
+    "districts",
+    "창원시 5개 구 경계",
+    true,
+    v=>districts.setMap(v?map:null)
+  );
+}
     groups.priority=(DATA.priorityZones||[]).map(priorityZone);if(groups.priority.length)addControl("priority","추가 설치 필요지역 TOP 10",true,v=>setObjects(groups.priority,v));
     groups.finalTop10=finalTop10Layer();
 
