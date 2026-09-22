@@ -3347,7 +3347,7 @@ if risk_grid_ready:
                 .final-info-row {
                     min-height: 78px;
                     display: grid;
-                    grid-template-columns: 1.15fr 1fr;
+                    grid-template-rows: 1fr 1fr;
                     border: 1px solid #e2e8f0;
                     border-radius: 12px;
                     background: #ffffff;
@@ -3355,27 +3355,33 @@ if risk_grid_ready:
                 }
 
                 .final-info-section {
-                    padding: 10px 12px;
+                    padding: 8px 12px;
                     display: flex;
-                    flex-direction: column;
-                    justify-content: center;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 10px;
+                    min-width: 0;
                 }
 
                 .final-info-section + .final-info-section {
-                    border-left: 1px solid #e2e8f0;
+                    border-top: 1px solid #e2e8f0;
                     background: #fff7ed;
                 }
 
                 .final-stack-title {
+                    flex: 0 0 auto;
+                    min-width: 72px;
                     color: #475569;
-                    font-size: 13px;
-                    font-weight: 800;
-                    margin-bottom: 6px;
+                    font-size: 14px;
+                    font-weight: 900;
+                    margin: 0;
+                    white-space: nowrap;
                 }
 
                 .final-infra-row {
                     display: flex;
-                    flex-wrap: wrap;
+                    flex-wrap: nowrap;
+                    align-items: center;
                     gap: 6px;
                 }
 
@@ -3383,7 +3389,7 @@ if risk_grid_ready:
                 .final-infra-need {
                     padding: 5px 9px;
                     border-radius: 9px;
-                    font-size: 13px;
+                    font-size: 14px;
                     font-weight: 800;
                     line-height: 1.2;
                 }
@@ -3400,7 +3406,7 @@ if risk_grid_ready:
 
                 .final-priority-line {
                     color: #9a3412;
-                    font-size: 14px;
+                    font-size: 15px;
                     font-weight: 800;
                     line-height: 1.4;
                 }
@@ -3410,7 +3416,7 @@ if risk_grid_ready:
                     padding-top: 8px;
                     border-top: 1px solid #e2e8f0;
                     color: #475569;
-                    font-size: 12px;
+                    font-size: 13px;
                     line-height: 1.45;
                 }
                 </style>
@@ -3515,12 +3521,12 @@ if risk_grid_ready:
                         '<div class="final-info-row">'
 
                         '<div class="final-info-section">'
-                        '<div class="final-stack-title">보완 필요</div>'
+                        '<div class="final-stack-title">보완 필요 :</div>'
                         f'<div class="final-infra-row">{infra_badges}</div>'
                         '</div>'
 
                         '<div class="final-info-section">'
-                        '<div class="final-stack-title">보완 순서</div>'
+                        '<div class="final-stack-title">보완 순서 :</div>'
                         f'<div class="final-priority-line">{priority_line}</div>'
                         '</div>'
 
