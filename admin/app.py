@@ -2360,6 +2360,109 @@ st.set_page_config(
     layout="wide",
 )
 
+@st.dialog("안전취약지역 위치", width="large")
+def show_top10_location_dialog(
+    row_data: dict,
+    geojson_data: dict | None,
+    target_label: str,
+) -> None:
+    """선택한 TOP10 클러스터의 실제 영역과 대표 위치를 표시합니다."""
+    cluster_id = str(row_data.get("cluster_id", ""))
+    top10_label = str(row_data.get("top10_label", "TOP10"))
+
+    latitude = float(row_data["latitude"])
+    longitude = float(row_data["longitude"])
+
+    selected_feature = None
+
+    if geojson_data:
+        for feature in geojson_data.get("features", []):
+            properties = feature.get("properties", {})
+
+            if str(properties.get("cluster_id", "")) == cluster_id:
+                selected_feature = feature
+                break
+
+    representative_address = reverse_geocode_changwon(
+        latitude,
+        longitude,
+    )
+
+    st.markdown(f"### {top10_label}")
+    st.caption(
+        "선정된 안전취약지역의 실제 클러스터 영역을 "
+        "지도에서 확대해 표시합니다."
+    )
+
+    location_map = folium.Map(
+        location=[latitude, longitude],
+        zoom_start=17,
+        tiles="OpenStreetMap",
+        control_scale=True,
+    )
+
+    if target_label == "어린이":
+        line_color = "#C2410C"
+        fill_color = "#FB923C"
+    else:
+        line_color = "#6D28D9"
+        fill_color = "#8B5CF6"
+
+    if selected_feature is not None:
+        selected_layer = folium.GeoJson(
+            data=selected_feature,
+            name=top10_label,
+            style_function=lambda _: {
+                "color": line_color,
+                "weight": 4,
+                "opacity": 1,
+                "fillColor": fill_color,
+                "fillOpacity": 0.42,
+            },
+            highlight_function=lambda _: {
+                "color": line_color,
+                "weight": 6,
+                "opacity": 1,
+                "fillColor": fill_color,
+                "fillOpacity": 0.65,
+            },
+        )
+
+        selected_layer.add_to(location_map)
+
+        cluster_bounds = selected_layer.get_bounds()
+
+        if cluster_bounds:
+            location_map.fit_bounds(
+                cluster_bounds,
+                padding=(35, 35),
+            )
+
+    folium.Marker(
+        location=[latitude, longitude],
+        tooltip=f"{top10_label} 중심 위치",
+        icon=folium.Icon(
+            color="red",
+            icon="map-marker",
+            prefix="fa",
+        ),
+    ).add_to(location_map)
+
+    st_folium(
+        location_map,
+        width=None,
+        height=430,
+        key=f"top10-location-{target_label}-{cluster_id}",
+        returned_objects=[],
+    )
+
+    st.markdown(
+        f"""
+        **대표 위치** · {escape(representative_address)}  
+        **중심 좌표** · {latitude:.6f}, {longitude:.6f}
+        """
+    )
+
 st.markdown(
     """
     <style>
