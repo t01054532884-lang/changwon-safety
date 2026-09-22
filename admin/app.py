@@ -24,7 +24,12 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from admin.naver_map import build_naver_map_html, png_data_url
+import admin.naver_map as naver_map_renderer
+
+naver_map_renderer = importlib.reload(naver_map_renderer)
+build_naver_map_html = naver_map_renderer.build_naver_map_html
+png_data_url = naver_map_renderer.png_data_url
+
 from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
