@@ -2468,9 +2468,12 @@ st.markdown(
         overflow-x: hidden;
     }
 
-    [data-testid="stDialog"] > div[role="dialog"] {
-        width: 92vw !important;
-        max-width: 1400px !important;
+    [data-testid="stDialog"] div[role="dialog"] {
+        width: 94vw !important;
+        max-width: 1550px !important;
+        height: 90vh !important;
+        max-height: 90vh !important;
+        overflow-y: auto !important;
     }
     </style>
     """,
