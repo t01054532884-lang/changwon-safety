@@ -28,6 +28,9 @@ import admin.naver_map as naver_map_renderer
 
 naver_map_renderer = importlib.reload(naver_map_renderer)
 build_naver_map_html = naver_map_renderer.build_naver_map_html
+build_naver_location_map_html = (
+    naver_map_renderer.build_naver_location_map_html
+)
 png_data_url = naver_map_renderer.png_data_url
 
 from PIL import Image, ImageDraw
@@ -2394,66 +2397,21 @@ def show_top10_location_dialog(
         "지도에서 확대해 표시합니다."
     )
 
-    location_map = folium.Map(
-        location=[latitude, longitude],
-        zoom_start=17,
-        tiles="OpenStreetMap",
-        control_scale=True,
-    )
-
-    if target_label == "어린이":
-        line_color = "#C2410C"
-        fill_color = "#FB923C"
-    else:
-        line_color = "#6D28D9"
-        fill_color = "#8B5CF6"
-
-    if selected_feature is not None:
-        selected_layer = folium.GeoJson(
-            data=selected_feature,
-            name=top10_label,
-            style_function=lambda _: {
-                "color": line_color,
-                "weight": 4,
-                "opacity": 1,
-                "fillColor": fill_color,
-                "fillOpacity": 0.42,
-            },
-            highlight_function=lambda _: {
-                "color": line_color,
-                "weight": 6,
-                "opacity": 1,
-                "fillColor": fill_color,
-                "fillOpacity": 0.65,
-            },
-        )
-
-        selected_layer.add_to(location_map)
-
-        cluster_bounds = selected_layer.get_bounds()
-
-        if cluster_bounds:
-            location_map.fit_bounds(
-                cluster_bounds,
-                padding=(35, 35),
-            )
-
-    folium.Marker(
-        location=[latitude, longitude],
-        tooltip=f"{top10_label} 중심 위치",
-        icon=folium.Icon(
-            color="red",
-            icon="map-marker",
-            prefix="fa",
+    NAVER_MAP_COMPONENT(
+        html=build_naver_location_map_html(
+            get_naver_map_client_id(),
+            selected_feature,
+            latitude,
+            longitude,
+            target_label,
+            top10_label,
         ),
-    ).add_to(location_map)
-
-    st_folium(
-        location_map,
-        width=None,
         height=430,
-        key=f"top10-location-{target_label}-{cluster_id}",
-        returned_objects=[],
+        key=(
+            f"top10-naver-location-"
+            f"{target_label}-{cluster_id}"
+        ),
+        default=None,
     )
 
     st.markdown(
@@ -4401,6 +4359,7 @@ if naver_map_client_id:
 
     NAVER_MAP_COMPONENT(
         html=build_naver_map_html(naver_map_client_id, naver_payload),
+        height=820,
         key=(
             f"changwon-naver-admin-v5-{selected_risk_profile}-"
             f"{map_focus['latitude']:.5f}-{map_focus['longitude']:.5f}-"
