@@ -407,10 +407,16 @@ def build_naver_location_map_html(
     longitude: float,
     target_label: str,
     top10_label: str,
+    cctv_points: list[dict] | None = None,
 ) -> str:
     """TOP10 위치 모달용 간단한 NAVER 지도를 생성합니다."""
     feature_json = json.dumps(
         feature,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("<", "\\u003c")
+    cctv_json = json.dumps(
+        cctv_points or [],
         ensure_ascii=False,
         separators=(",", ":"),
     ).replace("<", "\\u003c")
@@ -501,6 +507,7 @@ html, body {
     const LINE_COLOR = "__LINE_COLOR__";
     const FILL_COLOR = "__FILL_COLOR__";
     const TOP10_LABEL = "__TOP10_LABEL__";
+    const CCTV_POINTS = __CCTV_POINTS__;
 
     let initialized = false;
 
@@ -621,6 +628,61 @@ html, body {
                 }
             }
 
+            CCTV_POINTS.forEach(function (point) {
+                const position = new naver.maps.LatLng(
+                    Number(point.lat),
+                    Number(point.lng)
+                );
+
+                const marker = new naver.maps.Marker({
+                    map: map,
+                    position: position,
+                    title: "CCTV",
+                    zIndex: 170,
+                    icon: {
+                        content:
+                            '<div style="' +
+                            'display:flex;' +
+                            'align-items:center;' +
+                            'justify-content:center;' +
+                            'width:24px;' +
+                            'height:24px;' +
+                            'border-radius:50%;' +
+                            'border:2px solid white;' +
+                            'background:#DC2626;' +
+                            'color:white;' +
+                            'font-size:10px;' +
+                            'font-weight:900;' +
+                            'box-shadow:0 1px 5px rgba(0,0,0,.35)">' +
+                            'C' +
+                            '</div>',
+                        size: new naver.maps.Size(24, 24),
+                        anchor: new naver.maps.Point(12, 12)
+                    }
+                });
+
+                if (point.address) {
+                    const info = new naver.maps.InfoWindow({
+                        content:
+                            '<div style="' +
+                            'padding:8px 10px;' +
+                            'font-size:12px;' +
+                            'line-height:1.5">' +
+                            '<b>CCTV</b><br>' +
+                            String(point.address) +
+                            '</div>'
+                    });
+
+                    naver.maps.Event.addListener(
+                        marker,
+                        "click",
+                        function () {
+                            info.open(map, marker);
+                        }
+                    );
+                }
+            });
+            
             new naver.maps.Marker({
                 map: map,
                 position: center,
@@ -707,5 +769,12 @@ html, body {
             "__TOP10_LABEL__",
             str(top10_label).replace('"', '\\"'),
         )
+        .replace(
+            "__TOP10_LABEL__",
+            str(top10_label).replace('"', '\\"'),
+        )
+        .replace("__CCTV_POINTS__", cctv_json)
+        .replace("__CLIENT_ID__", safe_client_id)
+    )
         .replace("__CLIENT_ID__", safe_client_id)
     )
