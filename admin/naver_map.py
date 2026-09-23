@@ -769,12 +769,6 @@ html, body {
             "__TOP10_LABEL__",
             str(top10_label).replace('"', '\\"'),
         )
-        .replace(
-            "__TOP10_LABEL__",
-            str(top10_label).replace('"', '\\"'),
-        )
         .replace("__CCTV_POINTS__", cctv_json)
-        .replace("__CLIENT_ID__", safe_client_id)
-    )
         .replace("__CLIENT_ID__", safe_client_id)
     )
