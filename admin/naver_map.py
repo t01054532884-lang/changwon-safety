@@ -549,62 +549,73 @@ html, body {
                 FEATURE.geometry &&
                 FEATURE.geometry.coordinates
             ) {
-                const layer = new naver.maps.Data({
-                    map: map
-                });
-
-                layer.addGeoJson(FEATURE);
-
-                layer.setStyle({
-                    strokeColor: LINE_COLOR,
-                    strokeWeight: 4,
-                    strokeOpacity: 1,
-                    fillColor: FILL_COLOR,
-                    fillOpacity: 0.42,
-                    clickable: false,
-                    zIndex: 150
-                });
-
                 const bounds =
                     new naver.maps.LatLngBounds();
 
-                function extendBounds(coordinates) {
-                    if (
-                        Array.isArray(coordinates) &&
-                        coordinates.length >= 2 &&
-                        typeof coordinates[0] === "number" &&
-                        typeof coordinates[1] === "number"
-                    ) {
-                        bounds.extend(
+                function makePath(ring) {
+                    return ring.map(function (coordinate) {
+                        const lng = Number(coordinate[0]);
+                        const lat = Number(coordinate[1]);
+
+                        const point =
                             new naver.maps.LatLng(
-                                Number(coordinates[1]),
-                                Number(coordinates[0])
-                            )
-                        );
+                                lat,
+                                lng
+                            );
 
+                        bounds.extend(point);
                         coordinateCount += 1;
-                        return;
-                    }
 
-                    if (Array.isArray(coordinates)) {
-                        coordinates.forEach(
-                            extendBounds
-                        );
-                    }
+                        return point;
+                    });
                 }
 
-                extendBounds(
-                    FEATURE.geometry.coordinates
-                );
+                function drawPolygon(rings) {
+                    const paths = rings.map(
+                        function (ring) {
+                            return makePath(ring);
+                        }
+                    );
+
+                    new naver.maps.Polygon({
+                        map: map,
+                        paths: paths,
+                        strokeColor: LINE_COLOR,
+                        strokeWeight: 4,
+                        strokeOpacity: 1,
+                        fillColor: FILL_COLOR,
+                        fillOpacity: 0.42,
+                        clickable: false,
+                        zIndex: 150
+                    });
+                }
+
+                if (
+                    FEATURE.geometry.type === "Polygon"
+                ) {
+                    drawPolygon(
+                        FEATURE.geometry.coordinates
+                    );
+                }
+
+                if (
+                    FEATURE.geometry.type === "MultiPolygon"
+                ) {
+                    FEATURE.geometry.coordinates.forEach(
+                        function (polygon) {
+                            drawPolygon(polygon);
+                        }
+                    );
+                }
 
                 if (coordinateCount > 0) {
                     map.fitBounds(
                         bounds,
                         {
-                            top: 45,
-                            right: 45,
-                            bottom: 45,
-                            left: 45
+                            top: 55,
+                            right: 55,
+                            bottom: 55,
+                            left: 55
                         }
                     );
                 }
