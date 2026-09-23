@@ -2397,6 +2397,27 @@ def show_top10_location_dialog(
         "지도에서 확대해 표시합니다."
     )
 
+        nearby_cctv = []
+
+    if not cctv_locations.empty:
+        for cctv_row in cctv_locations.itertuples(index=False):
+            distance = distance_in_meters(
+                latitude,
+                longitude,
+                float(cctv_row.latitude),
+                float(cctv_row.longitude),
+            )
+
+            if distance <= 100:
+                nearby_cctv.append(
+                    {
+                        "lat": float(cctv_row.latitude),
+                        "lng": float(cctv_row.longitude),
+                        "address": str(cctv_row.address),
+                        "distance": round(distance, 1),
+                    }
+                )
+                
     NAVER_MAP_COMPONENT(
         html=build_naver_location_map_html(
             get_naver_map_client_id(),
@@ -2405,6 +2426,7 @@ def show_top10_location_dialog(
             longitude,
             target_label,
             top10_label,
+            nearby_cctv,
         ),
         height=430,
         key=(
@@ -2413,7 +2435,9 @@ def show_top10_location_dialog(
         ),
         default=None,
     )
-
+    st.caption(
+        f"CCTV · 분석 기준 100m 이내 {len(nearby_cctv)}곳"
+    )
     st.markdown(
         f"""
         **대표 위치** · {escape(representative_address)}  
