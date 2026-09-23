@@ -634,11 +634,31 @@ html, body {
                     Number(point.lng)
                 );
 
+                const inAnalysisRange =
+                    Boolean(point.in_analysis_range);
+
+                const markerBackground =
+                    inAnalysisRange
+                        ? "#DC2626"
+                        : "#FCA5A5";
+
+                const markerBorder =
+                    inAnalysisRange
+                        ? "#991B1B"
+                        : "#DC2626";
+
+                const markerText =
+                    inAnalysisRange
+                        ? "#FFFFFF"
+                        : "#7F1D1D";
+
                 const marker = new naver.maps.Marker({
                     map: map,
                     position: position,
-                    title: "CCTV",
-                    zIndex: 170,
+                    title: inAnalysisRange
+                        ? "CCTV · 분석 기준 100m 이내"
+                        : "CCTV · 주변 300m 이내",
+                    zIndex: inAnalysisRange ? 175 : 165,
                     icon: {
                         content:
                             '<div style="' +
@@ -648,12 +668,15 @@ html, body {
                             'width:24px;' +
                             'height:24px;' +
                             'border-radius:50%;' +
-                            'border:2px solid white;' +
-                            'background:#DC2626;' +
-                            'color:white;' +
+                            'border:2px solid ' +
+                            markerBorder + ';' +
+                            'background:' +
+                            markerBackground + ';' +
+                            'color:' +
+                            markerText + ';' +
                             'font-size:10px;' +
                             'font-weight:900;' +
-                            'box-shadow:0 1px 5px rgba(0,0,0,.35)">' +
+                            'box-shadow:0 1px 5px rgba(0,0,0,.28)">' +
                             'C' +
                             '</div>',
                         size: new naver.maps.Size(24, 24),
@@ -661,27 +684,43 @@ html, body {
                     }
                 });
 
-                if (point.address) {
-                    const info = new naver.maps.InfoWindow({
-                        content:
-                            '<div style="' +
-                            'padding:8px 10px;' +
-                            'font-size:12px;' +
-                            'line-height:1.5">' +
-                            '<b>CCTV</b><br>' +
-                            String(point.address) +
-                            '</div>'
-                    });
+                const rangeLabel =
+                    inAnalysisRange
+                        ? "분석 기준 100m 이내"
+                        : "주변 참고 100~300m";
 
-                    naver.maps.Event.addListener(
-                        marker,
-                        "click",
-                        function () {
-                            info.open(map, marker);
-                        }
-                    );
-                }
+                const info = new naver.maps.InfoWindow({
+                    content:
+                        '<div style="' +
+                        'padding:9px 11px;' +
+                        'font-size:12px;' +
+                        'line-height:1.55">' +
+                        '<b>CCTV</b><br>' +
+                        rangeLabel + '<br>' +
+                        '중심점 거리 · ' +
+                        Number(point.distance).toFixed(1) +
+                        'm' +
+                        (
+                            point.address
+                                ? '<br>' + String(point.address)
+                                : ''
+                        ) +
+                        '</div>'
+                });
+
+                naver.maps.Event.addListener(
+                    marker,
+                    "click",
+                    function () {
+                        info.open(map, marker);
+                    }
+                );
             });
+
+            if (CCTV_POINTS.length > 0) {
+                map.setCenter(center);
+                map.setZoom(16);
+            }
             
             new naver.maps.Marker({
                 map: map,
