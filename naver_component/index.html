@@ -19,9 +19,17 @@
 
       window.addEventListener("message", (event) => {
         if (event.data?.type !== "streamlit:render") return;
+
         const html = event.data?.args?.html;
+        const height = Number(event.data?.args?.height) || 820;
+
         if (!html) return;
-        streamlitMessage("streamlit:setFrameHeight", { height: 820 });
+
+        streamlitMessage(
+          "streamlit:setFrameHeight",
+          { height },
+        );
+
         document.open();
         document.write(html);
         document.close();
