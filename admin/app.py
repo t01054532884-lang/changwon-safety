@@ -2408,13 +2408,14 @@ def show_top10_location_dialog(
                 float(cctv_row.longitude),
             )
 
-            if distance <= 100:
+            if distance <= 300:
                 nearby_cctv.append(
                     {
                         "lat": float(cctv_row.latitude),
                         "lng": float(cctv_row.longitude),
                         "address": str(cctv_row.address),
                         "distance": round(distance, 1),
+                        "in_analysis_range": distance <= 100,
                     }
                 )
                 
@@ -2435,8 +2436,15 @@ def show_top10_location_dialog(
         ),
         default=None,
     )
+    analysis_cctv_count = sum(
+        1
+        for point in nearby_cctv
+        if point["in_analysis_range"]
+    )
+
     st.caption(
-        f"CCTV · 분석 기준 100m 이내 {len(nearby_cctv)}곳"
+        f"CCTV · 분석 기준 100m 이내 {analysis_cctv_count}곳"
+        f" · 주변 300m 이내 {len(nearby_cctv)}곳"
     )
     st.markdown(
         f"""
