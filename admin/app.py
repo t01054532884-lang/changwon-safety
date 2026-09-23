@@ -2370,11 +2370,6 @@ def show_top10_location_dialog(
     target_label: str,
 ) -> None:
     """선택한 TOP10 클러스터의 실제 영역과 대표 위치를 표시합니다."""
-
-    st.markdown(
-        '<span class="top10-big-dialog"></span>',
-        unsafe_allow_html=True,
-    )
     
     cluster_id = str(row_data.get("cluster_id", ""))
     top10_label = str(row_data.get("top10_label", "TOP10"))
@@ -2474,17 +2469,16 @@ st.markdown(
         overflow-x: hidden;
     }
 
-    div[data-testid="stDialog"]
-    div[role="dialog"]:has(.top10-big-dialog) {
-        width: 92vw !important;
-        max-width: 1400px !important;
+div[data-testid="stDialog"] div[role="dialog"] {
+    width: 92vw !important;
+    max-width: 1400px !important;
 
-        height: 86vh !important;
-        min-height: 86vh !important;
-        max-height: 86vh !important;
+    height: calc(100vh - 32px) !important;
+    min-height: calc(100vh - 32px) !important;
+    max-height: calc(100vh - 32px) !important;
 
-        overflow-y: auto !important;
-    }
+    overflow-y: auto !important;
+}
     </style>
     """,
     unsafe_allow_html=True,
