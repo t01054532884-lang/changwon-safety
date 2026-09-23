@@ -485,11 +485,79 @@ html, body {
     font-weight: 800;
     text-align: center;
 }
+#top10-facility-legend {
+    position: absolute;
+    z-index: 900;
+    top: 12px;
+    right: 12px;
+    min-width: 165px;
+    padding: 9px 10px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: 0 3px 12px rgba(15, 23, 42, 0.14);
+    color: #334155;
+    font-size: 11px;
+}
+
+.top10-legend-title {
+    margin-bottom: 6px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.top10-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-top: 5px;
+    white-space: nowrap;
+}
+
+.top10-legend-cctv {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #991b1b;
+    background: #dc2626;
+    font-size: 13px;
+}
+
+.top10-legend-cctv-near {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 2px solid #dc2626;
+    background: #fca5a5;
+    font-size: 13px;
+}
 </style>
 
 <div id="top10-location-shell">
     <div id="top10-location-map"></div>
 
+    <div id="top10-facility-legend">
+        <div class="top10-legend-title">
+            주변 안전시설
+        </div>
+
+        <div class="top10-legend-row">
+            <span class="top10-legend-cctv">📹</span>
+            <span>CCTV · 분석 기준 100m</span>
+        </div>
+
+        <div class="top10-legend-row">
+            <span class="top10-legend-cctv-near">📹</span>
+            <span>CCTV · 주변 100~300m</span>
+        </div>
+    </div>
     <div id="top10-location-status">
         NAVER 지도를 불러오는 중…
     </div>
@@ -674,10 +742,10 @@ html, body {
                             markerBackground + ';' +
                             'color:' +
                             markerText + ';' +
-                            'font-size:10px;' +
+                            'font-size:13px;' +
                             'font-weight:900;' +
                             'box-shadow:0 1px 5px rgba(0,0,0,.28)">' +
-                            'C' +
+                            '📹' +
                             '</div>',
                         size: new naver.maps.Size(24, 24),
                         anchor: new naver.maps.Point(12, 12)
