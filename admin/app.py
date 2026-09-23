@@ -2397,7 +2397,7 @@ def show_top10_location_dialog(
         "지도에서 확대해 표시합니다."
     )
 
-        nearby_cctv = []
+    nearby_cctv = []
 
     if not cctv_locations.empty:
         for cctv_row in cctv_locations.itertuples(index=False):
