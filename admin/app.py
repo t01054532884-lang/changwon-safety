@@ -1858,7 +1858,7 @@ def reverse_geocode_changwon(
     )
 
     request = Request(
-        "https://naveropenapi.apigw.ntruss.com/"
+        "https://maps.apigw.ntruss.com/"
         f"map-reversegeocode/v2/gc?{parameters}",
         headers={
             "x-ncp-apigw-api-key-id": client_id,
