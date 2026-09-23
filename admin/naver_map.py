@@ -399,3 +399,302 @@ if(groups.finalTop10.length){
     return template.replace("__PAYLOAD__", payload_json).replace(
         "__CLIENT_ID__", safe_client_id
     )
+
+def build_naver_location_map_html(
+    client_id: str,
+    feature: dict | None,
+    latitude: float,
+    longitude: float,
+    target_label: str,
+    top10_label: str,
+) -> str:
+    """TOP10 위치 모달용 간단한 NAVER 지도를 생성합니다."""
+    feature_json = json.dumps(
+        feature,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).replace("<", "\\u003c")
+
+    safe_client_id = quote(client_id, safe="")
+
+    line_color = (
+        "#C2410C"
+        if target_label == "어린이"
+        else "#6D28D9"
+    )
+    fill_color = (
+        "#FB923C"
+        if target_label == "어린이"
+        else "#8B5CF6"
+    )
+
+    template = r"""
+<style>
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 430px;
+    overflow: hidden;
+}
+
+#top10-location-shell {
+    position: relative;
+    width: 100%;
+    height: 430px;
+    background: #eef2f7;
+    font-family: Pretendard, "Noto Sans KR", sans-serif;
+}
+
+#top10-location-map {
+    width: 100%;
+    height: 100%;
+}
+
+#top10-location-status {
+    position: absolute;
+    z-index: 1000;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 10px 14px;
+    border-radius: 9px;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 3px 14px rgba(15,23,42,.18);
+    color: #334155;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+#top10-location-error {
+    position: absolute;
+    inset: 0;
+    z-index: 1100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: #f8fafc;
+    color: #b91c1c;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+}
+</style>
+
+<div id="top10-location-shell">
+    <div id="top10-location-map"></div>
+
+    <div id="top10-location-status">
+        NAVER 지도를 불러오는 중…
+    </div>
+
+    <div id="top10-location-error">
+        NAVER 지도를 불러오지 못했습니다.
+    </div>
+</div>
+
+<script>
+(function () {
+    const FEATURE = __FEATURE__;
+    const LATITUDE = __LATITUDE__;
+    const LONGITUDE = __LONGITUDE__;
+    const LINE_COLOR = "__LINE_COLOR__";
+    const FILL_COLOR = "__FILL_COLOR__";
+    const TOP10_LABEL = "__TOP10_LABEL__";
+
+    let initialized = false;
+
+    const status = document.getElementById(
+        "top10-location-status"
+    );
+
+    const errorBox = document.getElementById(
+        "top10-location-error"
+    );
+
+    function fail(message) {
+        status.style.display = "none";
+        errorBox.innerHTML = message;
+        errorBox.style.display = "flex";
+    }
+
+    function initializeMap() {
+        try {
+            const naver = window.naver;
+
+            const center = new naver.maps.LatLng(
+                LATITUDE,
+                LONGITUDE
+            );
+
+            const map = new naver.maps.Map(
+                "top10-location-map",
+                {
+                    center: center,
+                    zoom: 17,
+                    zoomControl: true,
+                    zoomControlOptions: {
+                        position:
+                            naver.maps.Position.LEFT_CENTER
+                    },
+                    scaleControl: true,
+                    mapTypeControl: false
+                }
+            );
+
+            let coordinateCount = 0;
+
+            if (
+                FEATURE &&
+                FEATURE.geometry &&
+                FEATURE.geometry.coordinates
+            ) {
+                const layer = new naver.maps.Data({
+                    map: map
+                });
+
+                layer.addGeoJson(FEATURE);
+
+                layer.setStyle({
+                    strokeColor: LINE_COLOR,
+                    strokeWeight: 4,
+                    strokeOpacity: 1,
+                    fillColor: FILL_COLOR,
+                    fillOpacity: 0.42,
+                    clickable: false,
+                    zIndex: 150
+                });
+
+                const bounds =
+                    new naver.maps.LatLngBounds();
+
+                function extendBounds(coordinates) {
+                    if (
+                        Array.isArray(coordinates) &&
+                        coordinates.length >= 2 &&
+                        typeof coordinates[0] === "number" &&
+                        typeof coordinates[1] === "number"
+                    ) {
+                        bounds.extend(
+                            new naver.maps.LatLng(
+                                Number(coordinates[1]),
+                                Number(coordinates[0])
+                            )
+                        );
+
+                        coordinateCount += 1;
+                        return;
+                    }
+
+                    if (Array.isArray(coordinates)) {
+                        coordinates.forEach(
+                            extendBounds
+                        );
+                    }
+                }
+
+                extendBounds(
+                    FEATURE.geometry.coordinates
+                );
+
+                if (coordinateCount > 0) {
+                    map.fitBounds(
+                        bounds,
+                        {
+                            top: 45,
+                            right: 45,
+                            bottom: 45,
+                            left: 45
+                        }
+                    );
+                }
+            }
+
+            new naver.maps.Marker({
+                map: map,
+                position: center,
+                title: TOP10_LABEL + " 중심 위치",
+                zIndex: 180
+            });
+
+            initialized = true;
+            status.style.display = "none";
+
+        } catch (error) {
+            console.error(error);
+
+            fail(
+                "NAVER 지도 초기화 중 오류가 발생했습니다."
+            );
+        }
+    }
+
+    window.navermap_authFailure = function () {
+        fail(
+            "NAVER 지도 인증에 실패했습니다.<br>" +
+            "Web Dynamic Map 설정을 확인해 주세요."
+        );
+    };
+
+    if (
+        window.naver &&
+        window.naver.maps
+    ) {
+        initializeMap();
+
+    } else {
+        const script =
+            document.createElement("script");
+
+        script.src =
+            "https://oapi.map.naver.com/openapi/v3/maps.js" +
+            "?ncpKeyId=__CLIENT_ID__";
+
+        script.async = true;
+
+        script.onload = function () {
+            if (
+                window.naver &&
+                window.naver.maps
+            ) {
+                initializeMap();
+            } else {
+                fail(
+                    "NAVER 지도 SDK를 불러오지 못했습니다."
+                );
+            }
+        };
+
+        script.onerror = function () {
+            fail(
+                "NAVER 지도 SDK 연결에 실패했습니다."
+            );
+        };
+
+        document.head.appendChild(script);
+
+        setTimeout(function () {
+            if (!initialized) {
+                fail(
+                    "NAVER 지도 연결 시간이 초과되었습니다."
+                );
+            }
+        }, 10000);
+    }
+})();
+</script>
+"""
+
+    return (
+        template
+        .replace("__FEATURE__", feature_json)
+        .replace("__LATITUDE__", str(float(latitude)))
+        .replace("__LONGITUDE__", str(float(longitude)))
+        .replace("__LINE_COLOR__", line_color)
+        .replace("__FILL_COLOR__", fill_color)
+        .replace(
+            "__TOP10_LABEL__",
+            str(top10_label).replace('"', '\\"'),
+        )
+        .replace("__CLIENT_ID__", safe_client_id)
+    )
