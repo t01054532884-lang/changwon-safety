@@ -88,12 +88,66 @@ def optimize_budget(
     result = candidates.iloc[list(reversed(selected_indexes))].copy()
     if result.empty:
         return result
+    # 같은 격자에 여러 시설이 선정되면 감소량을 합산한다.
+    total_improvement = result.groupby("grid_id")["expected_improvement"].transform("sum")
     result["after_vulnerability"] = np.maximum(
         0.0,
-        result["before_vulnerability"] - result["expected_improvement"],
+        result["before_vulnerability"] - total_improvement,
     )
     result = result.sort_values(
         ["expected_improvement", "cost"], ascending=[False, True]
     ).reset_index(drop=True)
     result.insert(0, "rank", range(1, len(result) + 1))
     return result
+
+
+# ---------------------------------------------------------------------------
+# Colab 최종 분석(STEP 4~5)과 동일한 산식 기반 후보 생성
+#   취약점수 = (범죄 고위험 적색영역 비율 / 100) × CRITIC 인프라 부족점수
+#   시설 f 설치 시 감소량 = 위험점수 × CRITIC 가중치_f  (산식이 선형이라 정확히 일치)
+# ---------------------------------------------------------------------------
+CRITIC_WEIGHTS = {
+    "어린이": {"CCTV": 0.3549, "보안등": 0.4615, "공공 와이파이": 0.1836},
+    "노인": {"CCTV": 0.3540, "보안등": 0.4699, "공공 와이파이": 0.1761},
+}
+NEED_COLUMNS = {
+    "CCTV": "need_cctv",
+    "보안등": "need_light",
+    "공공 와이파이": "need_wifi",
+}
+
+
+def build_candidates_colab(
+    grid: pd.DataFrame,
+    costs: dict[str, int],
+    target_label: str,
+    max_cells: int = 500,
+) -> pd.DataFrame:
+    """Colab 생활권 격자(취약점수 > 0)에서 부족한 시설별 설치 대안을 만든다."""
+    weights = CRITIC_WEIGHTS[target_label]
+    base = grid[grid["vulnerability_score"] > 0].nlargest(
+        max_cells, "vulnerability_score"
+    )
+    candidates = []
+    for row in base.to_dict("records"):
+        for facility, need_column in NEED_COLUMNS.items():
+            if int(row[need_column]) != 1 or int(costs.get(facility, 0)) <= 0:
+                continue
+            improvement = float(row["risk_score"]) * weights[facility]
+            candidates.append(
+                {
+                    "candidate_id": f"{row['grid_id']}:{need_column}",
+                    "grid_id": row["grid_id"],
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                    "facility": facility,
+                    "cost": int(costs[facility]),
+                    "expected_improvement": improvement,
+                    "before_vulnerability": float(row["vulnerability_score"]),
+                    "reason": (
+                        f"고위험영역 {row['risk_pct']:.1f}%, {facility} 없음 "
+                        f"(CRITIC 가중치 {weights[facility]:.3f})"
+                    ),
+                }
+            )
+    return pd.DataFrame(candidates)
