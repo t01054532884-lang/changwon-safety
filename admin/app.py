@@ -36,7 +36,11 @@ png_data_url = naver_map_renderer.png_data_url
 from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
-from analysis.optimization import build_candidates_colab, optimize_budget
+import analysis.optimization as optimization_module
+if not hasattr(optimization_module, "build_candidates_colab"):
+    optimization_module = importlib.reload(optimization_module)
+build_candidates_colab = optimization_module.build_candidates_colab
+optimize_budget = optimization_module.optimize_budget
 import analysis.priority as priority_analysis
 
 # Streamlit Cloud can rerun the entry script while retaining an older imported
