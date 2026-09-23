@@ -2463,8 +2463,14 @@ st.markdown(
         padding-right: 1rem !important;
         padding-bottom: 1rem !important;
     }
+
     [data-testid="stAppViewContainer"] {
         overflow-x: hidden;
+    }
+
+    [data-testid="stDialog"] > div[role="dialog"] {
+        width: 92vw !important;
+        max-width: 1400px !important;
     }
     </style>
     """,
