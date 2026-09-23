@@ -36,7 +36,7 @@ png_data_url = naver_map_renderer.png_data_url
 from PIL import Image, ImageDraw
 from streamlit_folium import st_folium
 
-from analysis.optimization import build_candidates, optimize_budget
+from analysis.optimization import build_candidates_colab, optimize_budget
 import analysis.priority as priority_analysis
 
 # Streamlit Cloud can rerun the entry script while retaining an older imported
@@ -72,6 +72,10 @@ ELDERLY_TOP10_CSV_FILE = BASE_DIR / "data" / "elderly_top10.csv"
 ELDERLY_TOP10_GEOJSON_FILE = BASE_DIR / "data" / "elderly_top10.geojson"
 ALL_TOP10_CSV_FILE = BASE_DIR / "data" / "all_top10.csv"
 ALL_TOP10_GEOJSON_FILE = BASE_DIR / "data" / "all_top10.geojson"
+COLAB_GRID_FILES = {
+    "어린이": BASE_DIR / "data" / "child_grid_colab.csv",
+    "노인": BASE_DIR / "data" / "elderly_grid_colab.csv",
+}
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -1279,6 +1283,17 @@ def boundary_grid_mask(
         "longitude_step": longitude_step,
     }
 
+
+@st.cache_data(show_spinner=False)
+def load_colab_grid(path: str) -> pd.DataFrame:
+    """Colab에서 내보낸 생활권 격자 CSV를 읽습니다."""
+    grid = pd.read_csv(path, encoding="utf-8-sig")
+    required = {"grid_id", "latitude", "longitude", "risk_pct", "risk_score",
+                "need_cctv", "need_light", "need_wifi", "vulnerability_score"}
+    missing = required.difference(grid.columns)
+    if missing:
+        raise ValueError(f"Colab 격자 CSV에 필요한 열이 없습니다: {sorted(missing)}")
+    return grid
 
 @st.cache_data(ttl=86_400, show_spinner=False)
 def cached_grid_safety_analysis(
@@ -3407,15 +3422,6 @@ if risk_grid_ready:
                 safety_analysis = merge_external_grid_data(
                     safety_analysis, external_grid_data
                 )
-            installation_top_ten = build_priority_top10(
-                safety_analysis,
-                target_label,
-                (
-                    load_geojson(CHANGWON_DISTRICTS_BOUNDARY_FILE)
-                    if CHANGWON_DISTRICTS_BOUNDARY_FILE.exists()
-                    else None
-                ),
-            )
 
         folium.raster_layers.ImageOverlay(
             image=high_risk_grid_overlay(risk_grades, analysis_grid),
@@ -3899,9 +3905,11 @@ if risk_grid_ready:
             and st.session_state.get("optimization_signature")
             == selected_risk_profile
         )
-        placement_candidates = build_candidates(
-            safety_analysis,
+        colab_grid = load_colab_grid(str(COLAB_GRID_FILES[final_top10_target]))
+        placement_candidates = build_candidates_colab(
+            colab_grid,
             {key: int(value) for key, value in infrastructure_costs.items()},
+            final_top10_target,
         )
         if not show_optimization:
             st.subheader("최적 배치 후보 미리보기")
@@ -3940,8 +3948,8 @@ if risk_grid_ready:
                     {
                         "위도": 6,
                         "경도": 6,
-                        "설치 전 취약도": 1,
-                        "예상 개선 효과": 1,
+                        "설치 전 취약도": 4,
+                        "예상 개선 효과": 4,
                     }
                     ),
                     hide_index=True,
@@ -3986,8 +3994,8 @@ if risk_grid_ready:
                     f'<b>추천 #{row.rank} · {escape(row.facility)}</b><br>'
                     f'예상 비용: {row.cost:,.0f}원<br>'
                     f'추천 이유: {escape(row.reason)}<br>'
-                    f'취약도: {row.before_vulnerability:.1f} → '
-                    f'{row.after_vulnerability:.1f}'
+                    f'취약점수: {row.before_vulnerability:.3f} → '
+                    f'{row.after_vulnerability:.3f}'
                     '</div>'
                 )
                 folium.Marker(
@@ -4034,8 +4042,8 @@ if risk_grid_ready:
                     {
                         "위도": 6,
                         "경도": 6,
-                        "설치 전 취약도": 1,
-                        "설치 후 취약도": 1,
+                        "설치 전 취약도": 4,
+                        "설치 후 취약도": 4,
                     }
                 ),
                 hide_index=True,
