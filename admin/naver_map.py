@@ -490,8 +490,8 @@ html, body {
     z-index: 900;
     top: 12px;
     right: 12px;
-    min-width: 165px;
-    padding: 9px 10px;
+    min-width: 135px;
+    padding: 8px 9px;
     border: 1px solid #cbd5e1;
     border-radius: 10px;
     background: rgba(255, 255, 255, 0.96);
@@ -501,7 +501,7 @@ html, body {
 }
 
 .top10-legend-title {
-    margin-bottom: 6px;
+    margin-bottom: 5px;
     color: #0f172a;
     font-size: 12px;
     font-weight: 900;
@@ -511,32 +511,56 @@ html, body {
     display: flex;
     align-items: center;
     gap: 7px;
-    margin-top: 5px;
+    margin-top: 4px;
     white-space: nowrap;
 }
 
-.top10-legend-cctv {
+.top10-legend-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     border-radius: 50%;
-    border: 2px solid #991b1b;
-    background: #dc2626;
-    font-size: 13px;
+    flex: 0 0 21px;
+    font-size: 12px;
 }
 
-.top10-legend-cctv-near {
+.top10-legend-icon.cctv {
+    border: 2px solid #991b1b;
+    background: #dc2626;
+}
+
+.top10-legend-divider {
+    margin: 7px 0 5px 0;
+    border-top: 1px solid #e2e8f0;
+}
+
+.top10-range-row {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
+    gap: 6px;
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.top10-range-dot {
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
-    border: 2px solid #dc2626;
+    flex: 0 0 9px;
+}
+
+.top10-range-dot.strong {
+    background: #dc2626;
+    border: 1px solid #991b1b;
+}
+
+.top10-range-dot.soft {
     background: #fca5a5;
-    font-size: 13px;
+    border: 1px solid #dc2626;
 }
 </style>
 
@@ -549,13 +573,20 @@ html, body {
         </div>
 
         <div class="top10-legend-row">
-            <span class="top10-legend-cctv">📹</span>
-            <span>CCTV · 분석 기준 100m</span>
+            <span class="top10-legend-icon cctv">📹</span>
+            <span>CCTV</span>
         </div>
 
-        <div class="top10-legend-row">
-            <span class="top10-legend-cctv-near">📹</span>
-            <span>CCTV · 주변 100~300m</span>
+        <div class="top10-legend-divider"></div>
+
+        <div class="top10-range-row">
+            <span class="top10-range-dot strong"></span>
+            <span>진한색 · 분석 기준 내</span>
+        </div>
+
+        <div class="top10-range-row">
+            <span class="top10-range-dot soft"></span>
+            <span>연한색 · 300m 주변 참고</span>
         </div>
     </div>
     <div id="top10-location-status">
