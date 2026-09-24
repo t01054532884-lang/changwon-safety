@@ -17,6 +17,11 @@ const state = {
   recommendedPlaces: [], // 도서관/공원/지구대 등 홈 화면 추천시설
   destinations: [], // 안심경로 도착지 검색용 장소 목록(도서관/공원/파출소/어린이집/경로당/랜드마크)
   routeDestination: null, // 안심경로에서 선택된 도착지 {name, lat, lng}
+  // 안심경로 출발지 수동 지정(2026-09-25 추가): null이면 기존처럼 실시간 위치(state.location)를
+  // 그대로 출발지로 쓰고, 값이 있으면(사용자가 "✏️ 수정"으로 직접 검색해 고른 장소) 그 좌표를
+  // 출발지로 쓴다. state.location은 홈 탭/위험신고 등 다른 곳에서도 계속 쓰이므로 건드리지 않고
+  // 별도 필드로 분리했다.
+  routeStart: null, // {name, lat, lng} | null
   routeResult: null, // 최근 /api/route 응답
   selectedRouteType: "safe",
   activeTab: "home",
@@ -496,6 +501,118 @@ function mergeDestinationResults(local, remote, limit = 10) {
   return merged.slice(0, limit);
 }
 
+// 2026-09-25 추가: "출발지를 항상 내 현재 위치로만 쓰는데, 다른 곳에서 출발하는 경로도
+// 찾아보고 싶다"는 요청 — 출발지 옆 "✏️ 수정" 버튼을 누르면 도착지와 똑같은 방식(목록 검색
+// → Tmap POI 검색 → 지오코딩)으로 출발지를 직접 검색해서 고를 수 있게 한다. 목록 맨 위에는
+// 항상 "📍 내 현재 위치" 항목을 고정으로 넣어서 언제든 실시간 위치로 되돌릴 수 있게 했다.
+function initRouteStartAutocomplete() {
+  const input = document.getElementById("route-start");
+  const list = document.getElementById("route-start-suggestions");
+  const editBtn = document.getElementById("btn-edit-start");
+  let searchToken = 0;
+
+  function displayCurrentStart() {
+    input.value = state.routeStart ? state.routeStart.name : "내 현재 위치";
+  }
+
+  function closeList() { list.hidden = true; list.innerHTML = ""; }
+
+  function exitEditMode() {
+    input.readOnly = true;
+    displayCurrentStart();
+    closeList();
+  }
+
+  function selectUseCurrentLocation() {
+    state.routeStart = null;
+    exitEditMode();
+  }
+
+  function selectStart(place) {
+    state.routeStart = { name: place.name, lat: place.lat, lng: place.lng };
+    exitEditMode();
+  }
+
+  function enterEditMode() {
+    input.readOnly = false;
+    input.value = "";
+    input.focus();
+    renderList([]);
+  }
+
+  function renderList(places) {
+    list.innerHTML = "";
+
+    const pinned = document.createElement("li");
+    pinned.innerHTML = `<span>📍 내 현재 위치</span><small>실시간 위치</small>`;
+    pinned.addEventListener("mousedown", (e) => { e.preventDefault(); selectUseCurrentLocation(); });
+    list.appendChild(pinned);
+
+    if (!places.length && input.value.trim()) {
+      const empty = document.createElement("li");
+      empty.className = "suggestion-empty";
+      empty.textContent = "일치하는 장소가 없어요";
+      list.appendChild(empty);
+    } else {
+      places.forEach(p => {
+        const style = DEST_CATEGORY_STYLE[p.category] || { emoji: "📍", label: p.category };
+        const li = document.createElement("li");
+        li.innerHTML = `<span>${style.emoji} ${p.name}</span><small>${style.label}</small>`;
+        li.addEventListener("mousedown", (e) => { e.preventDefault(); selectStart(p); });
+        list.appendChild(li);
+      });
+    }
+    list.hidden = false;
+  }
+
+  input.addEventListener("input", async () => {
+    const myToken = ++searchToken;
+    const query = input.value;
+
+    const localMatches = searchLocalDestinations(query);
+    renderList(localMatches);
+
+    if (!query.trim()) return;
+    const remoteMatches = await searchTmapPlaces(query);
+    if (myToken !== searchToken) return;
+    renderList(mergeDestinationResults(localMatches, remoteMatches));
+  });
+
+  // 도착지처럼 Enter로도 바로 확정할 수 있게: 목록에 없어도 한 번 더(로컬→Tmap POI→지오코딩)
+  // 찾아본 뒤 가장 앞 결과를 출발지로 확정한다.
+  input.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const rawQuery = input.value.trim();
+    if (!rawQuery) { selectUseCurrentLocation(); return; }
+
+    editBtn.disabled = true;
+    const [localMatches, remoteMatches] = await Promise.all([
+      Promise.resolve(searchLocalDestinations(rawQuery, 1)),
+      searchTmapPlaces(rawQuery, 1),
+    ]);
+    let place = localMatches[0] || remoteMatches[0] || null;
+    if (!place) {
+      const geocoded = await geocodeAddress(rawQuery);
+      if (geocoded) place = { ...geocoded, category: "address" };
+    }
+    editBtn.disabled = false;
+
+    if (place) {
+      selectStart(place);
+    } else {
+      setRouteStatus("입력하신 출발지를 찾지 못했어요. 목록에서 골라보거나 다른 이름으로 다시 시도해주세요.", true);
+    }
+  });
+
+  input.addEventListener("blur", () => setTimeout(() => { if (!input.readOnly) exitEditMode(); }, 150));
+
+  editBtn.addEventListener("click", () => {
+    if (input.readOnly) enterEditMode();
+    else exitEditMode();
+  });
+}
+
 function initRouteAutocomplete() {
   const input = document.getElementById("route-end");
   const list = document.getElementById("route-end-suggestions");
@@ -564,7 +681,7 @@ function renderRouteResult(data) {
   routeLayers.clearLayers();
 
   L.circleMarker([data.start.lat, data.start.lng], { radius: 7, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.95, weight: 3 })
-    .addTo(routeLayers).bindPopup("출발지");
+    .addTo(routeLayers).bindPopup(state.routeStart ? `출발지 · ${state.routeStart.name}` : "출발지 · 내 현재 위치");
   L.circleMarker([data.end.lat, data.end.lng], { radius: 7, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 0.95, weight: 3 })
     .addTo(routeLayers).bindPopup(state.routeDestination ? state.routeDestination.name : "도착지");
 
@@ -616,11 +733,18 @@ function highlightRouteType(type) {
   if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
 }
 
+// 안심경로 출발지 좌표를 돌려준다: 사용자가 "✏️ 수정"으로 직접 고른 장소가 있으면 그걸,
+// 없으면 기존처럼 실시간 위치를 쓴다.
+function getRouteStartPoint() {
+  return state.routeStart || state.location;
+}
+
 // dest(좌표가 있는 장소 객체)로 실제 경로를 계산해서 그려준다. "경로 찾기" 버튼과
 // 저장(북마크) 탭에서 저장해둔 장소를 클릭했을 때 둘 다 이 함수를 공유해서 쓴다.
 async function computeAndRenderRoute(dest) {
-  if (!state.location) {
-    setRouteStatus("현재 위치 정보가 없어 경로를 계산할 수 없어요. 위치 권한을 확인해주세요.", true);
+  const start = getRouteStartPoint();
+  if (!start) {
+    setRouteStatus("현재 위치 정보가 없어 경로를 계산할 수 없어요. 위치 권한을 확인하거나 출발지를 직접 검색해주세요.", true);
     return;
   }
 
@@ -632,7 +756,7 @@ async function computeAndRenderRoute(dest) {
   document.getElementById("route-options").hidden = true;
 
   const ageGroup = state.profile.ageGroup || "adult";
-  const url = `${SAFETY_API_BASE}/api/route?start_lat=${state.location.lat}&start_lng=${state.location.lng}` +
+  const url = `${SAFETY_API_BASE}/api/route?start_lat=${start.lat}&start_lng=${start.lng}` +
     `&end_lat=${dest.lat}&end_lng=${dest.lng}&age_group=${ageGroup}`;
 
   try {
@@ -665,6 +789,7 @@ async function goToSavedPlace(place) {
 }
 
 function initRouteForm() {
+  initRouteStartAutocomplete();
   initRouteAutocomplete();
 
   document.getElementById("btn-find-route").addEventListener("click", async () => {
