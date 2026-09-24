@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 import folium
 import numpy as np
-import pandas as pd    "노인": BASE_DIR / "data" / "elderly_grid_colab.csv",
+import pandas as pd
 
 import streamlit as st
 import streamlit.components.v1 as components
