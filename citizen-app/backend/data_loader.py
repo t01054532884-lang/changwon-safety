@@ -93,3 +93,22 @@ def load_top10(kind: str) -> list[dict]:
 
 def load_boundary() -> dict:
     return json.loads((REPO_DATA / "changwon_boundary.geojson").read_text(encoding="utf-8"))
+
+
+# ---------- Stage 7: Colab 노트북 최종 취약도 격자 ----------
+# OOEZ.ipynb(STEP0~6)에서 어린이/노인 생활권(300m) 격자 전체에 대해 CRITIC 가중치로
+# 산출한 실제 통계분석 결과. vulnerability_score = risk_score(범죄 고위험영역 비율) ×
+# infra_need_score(CCTV/보안등/Wi-Fi 결핍도)로, 0(문제 없음)~약 0.55~0.78(가장 심각) 범위다.
+# 대부분(90%+)의 격자는 0이고(=이 분석에서 특별히 위험하다고 표시되지 않은 지역), 소수의
+# 격자만 실제로 유의미한 값을 갖는다 — 그래서 로딩 시 0을 걸러내 배열을 작게 유지한다.
+def load_vulnerability_grid(kind: str) -> np.ndarray:
+    """kind: 'child' | 'elderly'. 반환: (lat, lon, vulnerability_score) N×3 배열,
+    vulnerability_score > 0인 격자만 포함(0인 격자는 '위험 신호 없음'과 동일하므로 제외)."""
+    path = REPO_DATA / f"{kind}_grid_colab.csv"
+    if not path.exists():
+        return np.zeros((0, 3), dtype=float)
+    df = pd.read_csv(path)
+    df = df[df["vulnerability_score"] > 0]
+    if df.empty:
+        return np.zeros((0, 3), dtype=float)
+    return df[["latitude", "longitude", "vulnerability_score"]].to_numpy(dtype=float)
