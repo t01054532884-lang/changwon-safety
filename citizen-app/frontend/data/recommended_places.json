@@ -1,0 +1,393 @@
+{
+  "places": [
+    {
+      "category": "library",
+      "name": "경상남도교육청 창원도서관",
+      "lat": 35.2257457,
+      "lng": 128.6638635
+    },
+    {
+      "category": "library",
+      "name": "상남도서관",
+      "lat": 35.2138254,
+      "lng": 128.6953575
+    },
+    {
+      "category": "library",
+      "name": "경남대표도서관",
+      "lat": 35.249278,
+      "lng": 128.682592
+    },
+    {
+      "category": "library",
+      "name": "창원중앙도서관",
+      "lat": 35.2334942,
+      "lng": 128.6790201
+    },
+    {
+      "category": "library",
+      "name": "성산도서관",
+      "lat": 35.2021394,
+      "lng": 128.7077471
+    },
+    {
+      "category": "library",
+      "name": "경상남도교육청 마산도서관",
+      "lat": 35.2132344,
+      "lng": 128.5847209
+    },
+    {
+      "category": "library",
+      "name": "창원도서관 별관",
+      "lat": 35.2261151,
+      "lng": 128.6634602
+    },
+    {
+      "category": "library",
+      "name": "경상남도교육청 마산지혜의바다도서관",
+      "lat": 35.2564014,
+      "lng": 128.5982656
+    },
+    {
+      "category": "library",
+      "name": "고향의 봄 도서관",
+      "lat": 35.2566599,
+      "lng": 128.6184846
+    },
+    {
+      "category": "library",
+      "name": "명곡도서관",
+      "lat": 35.25321,
+      "lng": 128.6484426
+    },
+    {
+      "category": "park",
+      "name": "용지문화공원",
+      "lat": 35.2299728,
+      "lng": 128.6870137
+    },
+    {
+      "category": "park",
+      "name": "용지호수공원",
+      "lat": 35.2322934,
+      "lng": 128.6804805
+    },
+    {
+      "category": "park",
+      "name": "용지공원",
+      "lat": 35.231024,
+      "lng": 128.684556
+    },
+    {
+      "category": "park",
+      "name": "대상공원(빅트리)",
+      "lat": 35.2288246,
+      "lng": 128.662432
+    },
+    {
+      "category": "park",
+      "name": "올림픽공원",
+      "lat": 35.2252637,
+      "lng": 128.6596514
+    },
+    {
+      "category": "park",
+      "name": "습지공원",
+      "lat": 35.205661,
+      "lng": 128.6934366
+    },
+    {
+      "category": "park",
+      "name": "창원광장",
+      "lat": 35.2263473,
+      "lng": 128.6822048
+    },
+    {
+      "category": "park",
+      "name": "중앙체육공원",
+      "lat": 35.2172927,
+      "lng": 128.6718727
+    },
+    {
+      "category": "park",
+      "name": "기업사랑공원",
+      "lat": 35.2094912,
+      "lng": 128.6865472
+    },
+    {
+      "category": "park",
+      "name": "창원만남의광장",
+      "lat": 35.2337992,
+      "lng": 128.6670333
+    },
+    {
+      "category": "park",
+      "name": "대원근린공원",
+      "lat": 35.229971,
+      "lng": 128.6521913
+    },
+    {
+      "category": "park",
+      "name": "반송공원",
+      "lat": 35.2390207,
+      "lng": 128.6733703
+    },
+    {
+      "category": "park",
+      "name": "대상공원(대원동)",
+      "lat": 35.2374141,
+      "lng": 128.653186
+    },
+    {
+      "category": "park",
+      "name": "가음정공원",
+      "lat": 35.216821,
+      "lng": 128.6998979
+    },
+    {
+      "category": "park",
+      "name": "대원레포츠공원",
+      "lat": 35.2313403,
+      "lng": 128.6501618
+    },
+    {
+      "category": "park",
+      "name": "장미공원",
+      "lat": 35.2065968,
+      "lng": 128.6918018
+    },
+    {
+      "category": "police",
+      "name": "신월",
+      "lat": 35.2275862,
+      "lng": 128.6926822,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "가음정",
+      "lat": 35.2084122,
+      "lng": 128.6974935,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "중앙",
+      "lat": 35.2268364,
+      "lng": 128.6764934,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "반송",
+      "lat": 35.2354505,
+      "lng": 128.6699187,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "사파",
+      "lat": 35.2156019,
+      "lng": 128.7088261,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "신촌",
+      "lat": 35.1839834,
+      "lng": 128.6394168,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "명곡",
+      "lat": 35.2443812,
+      "lng": 128.6510299,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "의창",
+      "lat": 35.26011505,
+      "lng": 128.6276164,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "팔용",
+      "lat": 35.236661,
+      "lng": 128.6433915,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "동읍",
+      "lat": 35.2787703,
+      "lng": 128.6891872,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "북면",
+      "lat": 35.31786885,
+      "lng": 128.6027248,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "대산",
+      "lat": 35.3367264,
+      "lng": 128.7085791,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "신마산",
+      "lat": 35.1844524,
+      "lng": 128.5575471,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "완월",
+      "lat": 35.1920707,
+      "lng": 128.563524,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "남성",
+      "lat": 35.2032111,
+      "lng": 128.5701732,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "오동",
+      "lat": 35.2119696,
+      "lng": 128.5748242,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "교방",
+      "lat": 35.2130335,
+      "lng": 128.5645971,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "구산",
+      "lat": 35.12021471,
+      "lng": 128.5802672,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "진동",
+      "lat": 35.1171357,
+      "lng": 128.489231,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "진전",
+      "lat": 35.1021283,
+      "lng": 128.4191294,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "합성",
+      "lat": 35.2384536,
+      "lng": 128.585638,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "양덕",
+      "lat": 35.2216352,
+      "lng": 128.5909861,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "석전",
+      "lat": 35.2306921,
+      "lng": 128.5752243,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "산호",
+      "lat": 35.2180363,
+      "lng": 128.5818453,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "회원",
+      "lat": 35.2182153,
+      "lng": 128.5644165,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "삼계",
+      "lat": 35.2321766,
+      "lng": 128.5012944,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "중리",
+      "lat": 35.2490288,
+      "lng": 128.5236835,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "덕산",
+      "lat": 35.14492545,
+      "lng": 128.7039607,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "용원",
+      "lat": 35.1007058,
+      "lng": 128.8143439,
+      "sub": "지구대"
+    },
+    {
+      "category": "police",
+      "name": "충무",
+      "lat": 35.1497147,
+      "lng": 128.6606274,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "경화",
+      "lat": 35.1538396,
+      "lng": 128.6881925,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "웅동",
+      "lat": 35.1255914,
+      "lng": 128.7824168,
+      "sub": "파출소"
+    },
+    {
+      "category": "police",
+      "name": "자은",
+      "lat": 35.154174,
+      "lng": 128.7132688,
+      "sub": "파출소"
+    }
+  ],
+  "source": "Google Places(도서관/공원) + changwon-safety 저장소(파출소/지구대)",
+  "generated_at": "2026-09-24"
+}

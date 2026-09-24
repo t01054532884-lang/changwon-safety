@@ -1,0 +1,16 @@
+{
+  "name": "창원 안심길",
+  "short_name": "안심길",
+  "description": "창원시 안전 인프라 분석을 바탕으로 안전한 경로와 주변 안전도를 안내하는 시민용 앱",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#1d4ed8",
+  "lang": "ko",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

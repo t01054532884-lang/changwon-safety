@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>창원 안심길</title>
+<meta name="theme-color" content="#1d4ed8" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="vendor/leaflet/leaflet.css" />
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ===================== 온보딩 ===================== -->
+  <div id="onboarding" class="onboarding">
+    <div class="onboarding-card">
+
+      <section class="ob-step" data-step="location">
+        <div class="ob-icon">📍</div>
+        <h1>내 주변 안전 정보를 보려면</h1>
+        <p class="ob-desc">실시간 위치를 허용해주세요.<br>홈 화면과 안심경로, 위험신고에 사용됩니다.</p>
+        <button class="btn-primary" id="btn-allow-location">위치 허용하고 시작하기</button>
+        <button class="btn-text" id="btn-skip-location">나중에 허용할게요</button>
+      </section>
+
+      <section class="ob-step" data-step="age" hidden>
+        <div class="ob-icon">🧑‍🤝‍🧑</div>
+        <h1>연령대를 선택해주세요</h1>
+        <p class="ob-desc">선택한 연령대에 맞는 생활권 안전 분석을 보여드려요.</p>
+        <div class="choice-grid" id="age-choices">
+          <button class="choice-card" data-value="child">🧒<span>어린이·청소년</span><small>어린이 생활권 분석 적용</small></button>
+          <button class="choice-card" data-value="adult">🧑<span>성인</span><small>전체 지역 안전 분석 적용</small></button>
+          <button class="choice-card" data-value="senior">🧓<span>고령자</span><small>노인 생활권 분석 적용</small></button>
+        </div>
+      </section>
+
+      <section class="ob-step" data-step="gender" hidden>
+        <div class="ob-icon">🙋</div>
+        <h1>성별을 선택해주세요</h1>
+        <p class="ob-desc">더 정확한 안전 안내를 위해서만 사용하고, 별도로 저장·공유하지 않아요.</p>
+        <div class="choice-grid choice-grid-3" id="gender-choices">
+          <button class="choice-card" data-value="female"><span>여성</span></button>
+          <button class="choice-card" data-value="male"><span>남성</span></button>
+          <button class="choice-card" data-value="none"><span>선택 안 함</span></button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- ===================== 앱 본체 ===================== -->
+  <div id="app" class="app" hidden>
+
+    <header class="app-header">
+      <span class="app-title">창원 안심길</span>
+      <button class="profile-chip" id="profile-chip">🧒 어린이 모드</button>
+    </header>
+
+    <main class="app-main">
+
+      <!-- 홈 -->
+      <section class="tab-panel" id="tab-home" data-tab="home">
+        <div id="map-home" class="map"></div>
+
+        <div class="floating-card nearby-card nearby-card-compact">
+          <div class="nearby-title">내 주변 안전시설 · 추천시설</div>
+          <ul id="nearby-list" class="nearby-list"></ul>
+        </div>
+      </section>
+
+      <!-- 안심경로 -->
+      <section class="tab-panel" id="tab-route" data-tab="route" hidden>
+        <div class="route-form">
+          <label class="route-field">
+            <span>출발지</span>
+            <input id="route-start" type="text" value="내 현재 위치" readonly />
+          </label>
+          <label class="route-field route-field-autocomplete">
+            <span>도착지</span>
+            <input id="route-end" type="text" placeholder="도서관·공원·어린이집·경로당 등 장소를 검색해보세요" autocomplete="off" />
+            <ul id="route-end-suggestions" class="suggestion-list" hidden></ul>
+          </label>
+          <p class="route-hint">아직 자유 주소 검색은 지원하지 않아요. 목록에서 장소를 선택해주세요.</p>
+          <button class="btn-primary" id="btn-find-route" disabled>경로 찾기</button>
+        </div>
+
+        <p class="route-status" id="route-status" hidden></p>
+
+        <div id="route-map" class="map map-short"></div>
+
+        <div class="route-options" id="route-options" hidden>
+          <button class="route-option" data-type="fast">
+            <div class="route-option-head"><span>⚡ 최단</span><span class="route-time">-</span></div>
+            <div class="route-option-sub">거리 우선 · 안전도 참고용</div>
+          </button>
+          <button class="route-option" data-type="balanced">
+            <div class="route-option-head"><span>⚖️ 균형</span><span class="route-time">-</span></div>
+            <div class="route-option-sub">거리와 안전도를 함께 고려</div>
+          </button>
+          <button class="route-option" data-type="safe">
+            <div class="route-option-head"><span>🛡️ 안심 우선</span><span class="route-time">-</span></div>
+            <div class="route-option-sub">시간이 더 걸려도 가장 안전한 길</div>
+          </button>
+        </div>
+      </section>
+
+      <!-- 위험신고 -->
+      <section class="tab-panel" id="tab-report" data-tab="report" hidden>
+        <form id="report-form" class="report-form">
+          <div class="report-location">
+            <span>📍 신고 위치</span>
+            <strong id="report-location-text">위치 확인 중…</strong>
+          </div>
+
+          <label class="report-field">
+            <span>신고 유형 <em>필수</em></span>
+            <select id="report-type" required>
+              <option value="" disabled selected>선택해주세요</option>
+              <option value="dark_alley">어둡고 인적 드문 골목</option>
+              <option value="broken_facility">파손된 시설(가로등·CCTV 등)</option>
+              <option value="suspicious_person">불안한 사람·행동</option>
+              <option value="traffic">교통·보행 위험</option>
+              <option value="etc">기타 위험 상황</option>
+            </select>
+          </label>
+
+          <label class="report-field">
+            <span>사진 첨부 <em>(사진 또는 내용 중 1개 이상 필수)</em></span>
+            <input id="report-image" type="file" accept="image/*" capture="environment" />
+            <img id="report-image-preview" class="report-image-preview" hidden />
+          </label>
+
+          <label class="report-field">
+            <span>상황 설명</span>
+            <textarea id="report-desc" rows="4" placeholder="어떤 위험이 있었는지 알려주세요"></textarea>
+          </label>
+
+          <button type="submit" class="btn-primary" id="btn-submit-report" disabled>신고 접수하기</button>
+          <p class="report-note">접수된 신고는 관리자 웹의 신고 접수함으로 전달됩니다.</p>
+        </form>
+
+        <div class="report-toast" id="report-toast" hidden>✅ 신고가 접수되었어요. 안전한 창원을 위해 알려주셔서 감사합니다.</div>
+      </section>
+
+      <!-- 저장 -->
+      <section class="tab-panel" id="tab-save" data-tab="save" hidden>
+        <div class="empty-state">
+          <div class="empty-icon">🔖</div>
+          <p>아직 저장한 경로나 장소가 없어요.</p>
+          <p class="empty-sub">안심경로에서 마음에 드는 경로를 저장해보세요.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <nav class="bottom-nav">
+      <button class="nav-item is-active" data-tab="home"><span class="nav-icon">🏠</span><span>홈</span></button>
+      <button class="nav-item" data-tab="route"><span class="nav-icon">🧭</span><span>안심경로</span></button>
+      <button class="nav-item nav-item-report" data-tab="report"><span class="nav-icon">🚨</span><span>위험신고</span></button>
+      <button class="nav-item" data-tab="save"><span class="nav-icon">📌</span><span>저장</span></button>
+    </nav>
+
+  </div>
+
+<script src="vendor/leaflet/leaflet.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

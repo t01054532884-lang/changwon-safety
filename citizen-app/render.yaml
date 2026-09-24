@@ -1,0 +1,24 @@
+# Render Blueprint — 창원 안심길 시민 앱 (프론트엔드 + 백엔드 통합 배포)
+#
+# 사용법(사용자 측 1회 작업):
+#   1) https://render.com 가입(무료) → New → Blueprint
+#   2) 이 저장소(changwon-safety) 연결, 이 파일(citizen-app/render.yaml)을 자동 인식
+#   3) Apply 클릭 → 몇 분 뒤 https://<서비스이름>.onrender.com 같은 공개 주소 발급
+#      (그 주소 하나로 앱 화면과 /api/safety, /api/route가 전부 같이 열림 —
+#       Tmap 등 외부 API 앱 등록 시 이 주소를 "서비스 URL"로 쓰면 됨)
+#
+# 무료 티어 참고: 일정 시간 요청이 없으면 슬립 상태가 되고, 다음 요청 때 다시
+# 깨어나는 데 수십 초 정도 걸릴 수 있음(콜드 스타트). 데모/공모전 심사 직전에는
+# 한 번 미리 접속해서 깨워두는 걸 추천.
+
+services:
+  - type: web
+    name: changwon-ansimgil
+    runtime: python
+    plan: free
+    rootDir: citizen-app/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
