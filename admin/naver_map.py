@@ -40,19 +40,29 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
     <div class="legend-row">
   <span class="dot"
         style="background:#F97316;border:2px solid #C2410C"></span>
-  생활안전지도 위험 신호
+  원본 범죄위험 지도 (경찰청)
+</div>
+
+<div class="legend-row" style="margin-top:8px;font-weight:900">
+  분석 격자 · 적색영역 비율
 </div>
 
 <div class="legend-row">
   <span class="dot"
-        style="background:#DC2626;border:2px solid #991B1B;border-radius:2px"></span>
-  4등급 고위험 100m 격자
+        style="background:#FCA5A5;border:2px solid #F87171;border-radius:2px"></span>
+  10% 미만
 </div>
 
 <div class="legend-row">
   <span class="dot"
-        style="background:#7F1D1D;border:2px solid #450A0A;border-radius:2px"></span>
-  5등급 최고위험 100m 격자
+        style="background:#EF4444;border:2px solid #B91C1C;border-radius:2px"></span>
+  10 ~ 25%
+</div>
+
+<div class="legend-row">
+  <span class="dot"
+        style="background:#991B1B;border:2px solid #450A0A;border-radius:2px"></span>
+  25% 이상
 </div>
     <div class="legend-row">
   <span id="final-top10-swatch"
@@ -430,25 +440,60 @@ if(risk){
 
   addControl(
     "risk",
-    "생활안전지도 위험 신호 (참고)",
+    "원본 범죄위험 지도 (경찰청·참고)",
     false,
     v=>risk.setMap(v?map:null)
   );
 }
 
-const grid=addGround(
-  DATA.riskGridImage,
-  DATA.riskBounds,
-  .90
-);
+const colabRiskGrid=DATA.colabRiskGrid&&DATA.colabRiskGrid.features
+  &&DATA.colabRiskGrid.features.length?DATA.colabRiskGrid:null;
 
-if(grid){
+if(colabRiskGrid){
+  const riskLayer=new naver.maps.Data({map});
+  riskLayer.addGeoJson(colabRiskGrid);
+  riskLayer.setStyle(feature=>{
+    const pct=Number(feature.getProperty("risk_pct")||0);
+    const color=pct>=25?"#991B1B":pct>=10?"#EF4444":"#FCA5A5";
+    return{
+      strokeColor:color,
+      strokeWeight:1,
+      strokeOpacity:.9,
+      fillColor:color,
+      fillOpacity:pct>=25?.75:pct>=10?.6:.45,
+      clickable:false,
+      zIndex:140
+    };
+  });
+
+  const reattachRiskGrid=()=>{
+    riskLayer.setMap(null);
+    riskLayer.setMap(map);
+  };
+  naver.maps.Event.once(map,"idle",reattachRiskGrid);
+  setTimeout(reattachRiskGrid,800);
+
   addControl(
     "grid",
-    "고위험 100m 격자 (4~5등급)",
+    "분석 격자 · 적색영역 비율 (Colab)",
     true,
-    v=>grid.setMap(v?map:null)
+    v=>riskLayer.setMap(v?map:null)
   );
+}else{
+  const grid=addGround(
+    DATA.riskGridImage,
+    DATA.riskBounds,
+    .90
+  );
+
+  if(grid){
+    addControl(
+      "grid",
+      "고위험 100m 격자 (4~5등급)",
+      true,
+      v=>grid.setMap(v?map:null)
+    );
+  }
 }
 
 const outer=makeDataLayer(
