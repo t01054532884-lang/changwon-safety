@@ -264,6 +264,39 @@ if(legendLabel){
     infoWindow.open(map);
   });
 
+  const top10LabelIcon=(rank,compact)=>{
+    if(compact){
+      return{
+        content:
+          '<div style="display:flex;align-items:center;justify-content:center;'+
+          'width:20px;height:20px;border-radius:50%;border:1.5px solid white;'+
+          'background:'+badgeColor+';color:white;font-size:11px;font-weight:900;'+
+          'box-shadow:0 1px 4px rgba(0,0,0,.35)">'+
+          Number(rank)+
+          '</div>',
+        size:new naver.maps.Size(20,20),
+        anchor:new naver.maps.Point(10,10)
+      };
+    }
+    return{
+      content:
+        '<div style="width:52px;text-align:center">'+
+        '<div style="position:relative;display:inline-block;'+
+        'padding:3px 7px;border-radius:6px;border:1.5px solid white;'+
+        'background:'+badgeColor+';color:white;'+
+        'font-size:10px;font-weight:900;line-height:12px;white-space:nowrap;'+
+        'box-shadow:0 1px 4px rgba(0,0,0,.35)">'+
+        'TOP '+Number(rank)+
+        '<span style="position:absolute;left:50%;bottom:-6px;'+
+        'transform:translateX(-50%);width:0;height:0;'+
+        'border-left:5px solid transparent;border-right:5px solid transparent;'+
+        'border-top:6px solid '+badgeColor+'"></span>'+
+        '</div></div>',
+      size:new naver.maps.Size(52,27),
+      anchor:new naver.maps.Point(26,27)
+    };
+  };
+  
   const labels=(geojson.features||[]).map(feature=>{
     const p=feature.properties||{};
 
@@ -306,24 +339,9 @@ if(legendLabel){
         " · 1순위 "+primary,
       clickable:true,
       zIndex:146,
-      icon:{
-        content:
-          '<div style="width:52px;text-align:center">'+
-          '<div style="position:relative;display:inline-block;'+
-          'padding:3px 7px;border-radius:6px;border:1.5px solid white;'+
-          'background:'+badgeColor+';color:white;'+
-          'font-size:10px;font-weight:900;line-height:12px;white-space:nowrap;'+
-          'box-shadow:0 1px 4px rgba(0,0,0,.35)">'+
-          'TOP '+Number(p.cluster_rank)+
-          '<span style="position:absolute;left:50%;bottom:-6px;'+
-          'transform:translateX(-50%);width:0;height:0;'+
-          'border-left:5px solid transparent;border-right:5px solid transparent;'+
-          'border-top:6px solid '+badgeColor+'"></span>'+
-          '</div></div>',
-        size:new naver.maps.Size(52,27),
-        anchor:new naver.maps.Point(26,27)
-      }
+      icon:top10LabelIcon(p.cluster_rank,map.getZoom()<=13)
     });
+    labelMarker.top10Rank=Number(p.cluster_rank);
 
     naver.maps.Event.addListener(labelMarker,"click",()=>{
       infoWindow.close();
@@ -341,6 +359,16 @@ if(legendLabel){
 
     return labelMarker;
   }).filter(Boolean);
+
+  let compactLabels=map.getZoom()<=13;
+  naver.maps.Event.addListener(map,"zoom_changed",()=>{
+    const compact=map.getZoom()<=13;
+    if(compact===compactLabels)return;
+    compactLabels=compact;
+    labels.forEach(marker=>{
+      marker.setIcon(top10LabelIcon(marker.top10Rank,compact));
+    });
+  });
 
   return [layer,...labels];
 }  
