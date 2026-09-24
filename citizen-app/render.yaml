@@ -22,3 +22,5 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: TMAP_APP_KEY
+        sync: false  # Render 대시보드 > Environment 탭에서 직접 입력(저장소에는 절대 커밋하지 않음)
