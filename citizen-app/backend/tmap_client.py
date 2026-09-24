@@ -17,6 +17,7 @@ import requests
 TMAP_APP_KEY = os.environ.get("TMAP_APP_KEY", "").strip()
 TMAP_URL = "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&format=json"
 TMAP_POI_URL = "https://apis.openapi.sk.com/tmap/pois"
+TMAP_GEOCODE_URL = "https://apis.openapi.sk.com/tmap/geo/fullAddrGeo"
 TIMEOUT_S = 6.0
 
 
@@ -184,3 +185,105 @@ def search_pois(keyword: str, count: int = 8, center_lat: Optional[float] = None
         results.append({"name": name, "lat": lat, "lng": lng, "address": address})
 
     return results
+
+
+def geocode_address(address: str) -> Optional[dict]:
+    """Tmap 지오코딩(주소→좌표 변환) API.
+
+    사용자 피드백(2026-09-24): "도착지 검색이 왜 자유주소검색을 막아놨냐" —
+    실제로 search_pois()는 destinations.json과 마찬가지로 "이름이 있는 장소"를
+    찾는 방식이라, "창원시 성산구 중앙대로 151"처럼 이름 없는 순수 도로명/지번 주소를
+    그대로 입력하면 검색이 안 될 수 있다. 이 함수는 그 경우를 위한 별도 경로다.
+
+    사용자가 도로명주소/지번주소 중 어느 쪽으로 입력했는지, 건물번호를 포함했는지
+    미리 알 수 없으므로 Tmap의 addressFlag 네 가지(F00·F02·F01·F03)를 순서대로
+    시도해서 좌표가 나오는 첫 결과를 쓴다.
+
+    ⚠️ 참고: search_pois()와 마찬가지로 이 API의 정확한 응답 필드명은 실시간 문서
+    열람이 안 되는 환경에서 일반적으로 알려진 형태를 근거로 방어적으로 작성한 것이라,
+    실제 배포 환경에서 처음 호출해보기 전까지 100% 확신할 수 없다. 네 가지 형식을
+    다 시도해도 "구조 자체가 이상해서" 실패하면(HTTP 오류/JSON 파싱 실패) TmapError로
+    원본 응답을 담아 던지고, 반대로 구조는 정상인데 "그냥 이 주소를 못 찾은 것"이면
+    (좌표 후보가 0개) 에러가 아니라 None을 반환한다.
+
+    반환: {"name": str, "lat": float, "lng": float, "address": str} | None (못 찾음).
+    구조적 실패 시 TmapError.
+    """
+    if not TMAP_APP_KEY:
+        raise TmapError("TMAP_APP_KEY 환경변수가 설정되지 않았습니다.")
+
+    structural_errors: list[str] = []
+
+    for flag in ("F00", "F02", "F01", "F03"):
+        params = {
+            "version": "1",
+            "format": "json",
+            "fullAddr": address,
+            "coordType": "WGS84GEO",
+            "addressFlag": flag,
+        }
+        try:
+            resp = requests.get(
+                TMAP_GEOCODE_URL, params=params,
+                headers={"appKey": TMAP_APP_KEY}, timeout=TIMEOUT_S,
+            )
+        except requests.RequestException as exc:
+            structural_errors.append(f"[{flag}] 네트워크 오류: {exc}")
+            continue
+
+        if resp.status_code != 200:
+            structural_errors.append(f"[{flag}] HTTP {resp.status_code} {resp.text[:200]}")
+            continue
+
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            structural_errors.append(f"[{flag}] JSON 파싱 실패: {exc}")
+            continue
+
+        coord_info = data.get("coordinateInfo")
+        if not isinstance(coord_info, dict):
+            structural_errors.append(f"[{flag}] coordinateInfo 없음: {str(data)[:300]}")
+            continue
+
+        candidates = coord_info.get("coordinate")
+        if isinstance(candidates, dict):
+            candidates = [candidates]
+        if not candidates:
+            continue  # 구조는 정상, 이 형식으로는 그냥 결과가 없음 -> 다음 flag 시도
+
+        c = candidates[0]
+        lat_raw = c.get("newLat") or c.get("lat") or c.get("noorLat")
+        lng_raw = c.get("newLon") or c.get("lon") or c.get("noorLon")
+        if lat_raw is None or lng_raw is None:
+            structural_errors.append(f"[{flag}] 좌표 필드 없음: {str(c)[:300]}")
+            continue
+        try:
+            lat = float(lat_raw)
+            lng = float(lng_raw)
+        except (TypeError, ValueError):
+            structural_errors.append(f"[{flag}] 좌표 값 파싱 실패: {lat_raw}, {lng_raw}")
+            continue
+        if lat == 0.0 and lng == 0.0:
+            continue
+
+        name_parts = [c.get("bldNm"), c.get("roadName")]
+        addr_parts = [c.get("upperAddrName"), c.get("middleAddrName"), c.get("lowerAddrName"), c.get("roadName")]
+        seen_addr = []
+        for p in addr_parts:
+            if p and p not in seen_addr:
+                seen_addr.append(p)
+        return {
+            "name": " ".join(p for p in name_parts if p) or address,
+            "lat": lat,
+            "lng": lng,
+            "address": " ".join(seen_addr) or address,
+        }
+
+    if len(structural_errors) == 4:
+        # 네 가지 시도 전부 "구조 자체가 이상해서" 실패 -> 우리 파싱 가정이 틀렸을
+        # 가능성이 높으니, 조용히 None을 반환하는 대신 원본 응답을 실어서 던진다.
+        raise TmapError("Tmap 지오코딩 응답 구조가 예상과 다릅니다: " + " | ".join(structural_errors))
+
+    # 일부는 구조가 정상이었지만(그냥 결과 0개), 진짜로 이 주소를 못 찾은 것
+    return None

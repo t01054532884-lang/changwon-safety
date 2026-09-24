@@ -378,6 +378,7 @@ const DEST_CATEGORY_STYLE = {
   senior_center: { color: "#ca8a04", emoji: "🏠", label: "경로당" },
   landmark: { color: "#0f766e", emoji: "📍", label: "주요 장소" },
   tmap_poi: { color: "#7c3aed", emoji: "🔍", label: "검색결과" },
+  address: { color: "#0891b2", emoji: "🏠", label: "주소" },
 };
 
 const ROUTE_TYPE_COLOR = { fast: "#94a3b8", balanced: "#f97316", safe: "#16a34a" };
@@ -443,6 +444,26 @@ async function searchTmapPlaces(query, limit = 6) {
   }
 }
 
+// 2026-09-24: "도착지는 왜 자유주소검색을 막아놨냐"는 지적 — 실제로는 두 가지가 겹쳐서
+// 막고 있었다. (1) destinations.json/Tmap POI 검색 둘 다 "이름이 있는 장소"를 찾는
+// 방식이라, "창원시 성산구 중앙대로 151" 같은 순수 도로명/지번 주소는 애초에 검색 결과에
+// 안 뜰 수 있었고, (2) 그것과 별개로 "경로 찾기" 버튼이 목록에서 클릭으로 골라야만
+// 눌리게 돼 있어서, 설령 주소가 검색됐어도 클릭 안 하고 그냥 엔터/버튼을 누르면 막혔다.
+// 이 함수는 (1)을 풀기 위한 것 — Tmap의 주소→좌표 변환(지오코딩) API를 호출한다.
+async function geocodeAddress(query) {
+  try {
+    const url = `${SAFETY_API_BASE}/api/geocode-address?q=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.error) console.warn("[geocode-address] 실패(무시):", data.error);
+    return data.found ? data.place : null;
+  } catch (e) {
+    console.warn("[geocode-address] 요청 실패(무시):", e);
+    return null;
+  }
+}
+
 function mergeDestinationResults(local, remote, limit = 10) {
   const seen = new Set(local.map(p => p.name));
   const merged = local.slice();
@@ -487,8 +508,13 @@ function initRouteAutocomplete() {
   }
 
   input.addEventListener("input", async () => {
-    findBtn.disabled = true;
     state.routeDestination = null;
+    // 2026-09-24 수정: 예전엔 여기서 버튼을 무조건 비활성화하고 목록 클릭으로만 다시
+    // 켰는데, 그러면 이름/주소를 정확히 입력해도 클릭을 안 하면 "경로 찾기" 자체를
+    // 누를 수 없었다("자유주소검색을 막아놨다"는 지적의 원인 중 하나). 이제는 입력한
+    // 글자가 있으면 버튼을 눌러서 시도라도 해볼 수 있게 하고, 실제 매칭/지오코딩은
+    // 버튼 클릭 시점에 처리한다.
+    findBtn.disabled = !input.value.trim();
     const myToken = ++searchToken;
     const query = input.value;
 
@@ -569,10 +595,40 @@ function initRouteForm() {
   initRouteAutocomplete();
 
   document.getElementById("btn-find-route").addEventListener("click", async () => {
-    const dest = state.routeDestination;
+    const endInput = document.getElementById("route-end");
+    let dest = state.routeDestination;
+    const rawQuery = endInput.value.trim();
+
+    // 목록에서 클릭으로 고르지 않고 텍스트만 입력한 채로 눌렀을 때: (2026-09-24 수정)
+    // 예전엔 여기서 바로 막았는데, 이러면 정확한 이름/주소를 입력해도 클릭을 안 하면
+    // 무조건 실패했다. 이제는 누른 시점에 한 번 더 찾아본다 — 목록/Tmap 장소 검색으로
+    // 안 걸리면 마지막으로 Tmap 지오코딩(순수 주소)까지 시도한다.
+    if (!dest && rawQuery) {
+      const btn0 = document.getElementById("btn-find-route");
+      btn0.disabled = true;
+      setRouteStatus("입력하신 내용으로 장소를 찾는 중…");
+
+      const [localMatches, remoteMatches] = await Promise.all([
+        Promise.resolve(searchLocalDestinations(rawQuery, 1)),
+        searchTmapPlaces(rawQuery, 1),
+      ]);
+      dest = localMatches[0] || remoteMatches[0] || null;
+
+      if (!dest) {
+        const geocoded = await geocodeAddress(rawQuery);
+        if (geocoded) dest = { ...geocoded, category: "address" };
+      }
+
+      if (dest) {
+        state.routeDestination = dest;
+        endInput.value = dest.name;
+      }
+      btn0.disabled = false;
+    }
+
     if (!dest) {
-      setRouteStatus("목록에서 도착지를 선택해주세요.", true);
-      document.getElementById("route-end").focus();
+      setRouteStatus("입력하신 장소/주소를 찾지 못했어요. 다른 이름이나 정확한 주소로 다시 시도해주세요.", true);
+      endInput.focus();
       return;
     }
     if (!state.location) {

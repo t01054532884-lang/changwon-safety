@@ -86,6 +86,21 @@ def search_place(
         return {"source": "none", "places": [], "error": str(exc)}
 
 
+@app.get("/api/geocode-address")
+def geocode_address(q: str = Query(..., min_length=1)):
+    """자유 주소 검색(지오코딩). destinations.json에도 없고 Tmap POI 검색(장소명 기반)에도
+    안 걸리는 순수 도로명/지번 주소(예: "창원시 성산구 중앙대로 151")를 그대로 입력했을 때,
+    그 주소의 좌표를 찾기 위한 엔드포인트. 프론트엔드는 목록/POI 검색이 둘 다 실패했을 때만
+    이걸 마지막으로 호출한다."""
+    try:
+        result = tmap_client.geocode_address(q)
+    except tmap_client.TmapError as exc:
+        return {"found": False, "error": str(exc)}
+    if result is None:
+        return {"found": False}
+    return {"found": True, "place": result}
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "cctv": len(FACILITIES["cctv"]["coords"]), "light": len(FACILITIES["light"]["coords"]),
