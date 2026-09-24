@@ -2382,6 +2382,30 @@ st.set_page_config(
     layout="wide",
 )
 
+def add_top10_addresses(geojson_data: dict | None) -> dict | None:
+    """TOP10 GeoJSON에 지도 요약용 대표 주소를 붙입니다."""
+    if not geojson_data:
+        return geojson_data
+
+    result = json.loads(json.dumps(geojson_data, ensure_ascii=False))
+
+    for feature in result.get("features", []):
+        properties = feature.setdefault("properties", {})
+        latitude = properties.get("latitude")
+        longitude = properties.get("longitude")
+
+        if latitude is None or longitude is None:
+            continue
+
+        address = reverse_geocode_changwon(float(latitude), float(longitude))
+        properties["address"] = (
+            ""
+            if address == "대표 주소 확인 불가"
+            else address.replace("경상남도 창원시 ", "").strip()
+        )
+
+    return result
+    
 def _feature_polygons(feature: dict | None) -> list:
     """GeoJSON Polygon/MultiPolygon을 폴리곤 목록으로 바꿉니다."""
     if not feature:
@@ -4468,7 +4492,7 @@ if naver_map_client_id:
         "supportSites": naver_support_sites,
 
         # STEP 6에서 확정한 최종 TOP10
-        "finalTop10": final_top10_geojson,
+        "finalTop10": add_top10_addresses(final_top10_geojson),
         "finalTop10Target": final_top10_target,
 
         # 이전 웹 자체 TOP10은 더 이상 지도에 표시하지 않음
