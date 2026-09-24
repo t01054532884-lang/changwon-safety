@@ -168,7 +168,14 @@ if(legendLabel){
     facility_priority_order:f.getProperty("facility_priority_order")
   });
 
-  naver.maps.Event.addListener(map,"click",()=>hoverInfo.close());
+  const top10LabelMarkers={};
+  let top10InfoOpenedAt=0;
+  naver.maps.Event.addListener(map,"click",()=>{
+    hoverInfo.close();
+    if(Date.now()-top10InfoOpenedAt>400){
+      infoWindow.close();
+    }
+  });
   
   naver.maps.Event.addListener(layer,"mouseover",e=>{
     layer.overrideStyle(e.feature,{
@@ -247,16 +254,17 @@ if(legendLabel){
       '</div>'
     );
 
-    const lat=f.getProperty("latitude");
-    const lng=f.getProperty("longitude");
-    const position=e.coord||(
-      lat!=null&&lng!=null
-        ?new naver.maps.LatLng(Number(lat),Number(lng))
-        :map.getCenter()
-    );
+    top10InfoOpenedAt=Date.now();
+    const anchorMarker=top10LabelMarkers[String(f.getProperty("cluster_id"))];
 
-    infoWindow.setPosition(position);
-    infoWindow.open(map);
+    if(anchorMarker){
+      infoWindow.open(map,anchorMarker);
+    }else{
+      infoWindow.setPosition(
+        e.coord||new naver.maps.LatLng(centerLat,centerLng)
+      );
+      infoWindow.open(map);
+    }
   });
 
   const top10LabelIcon=(rank,compact)=>{
@@ -337,6 +345,7 @@ if(legendLabel){
       icon:top10LabelIcon(p.cluster_rank,map.getZoom()<=13)
     });
     labelMarker.top10Rank=Number(p.cluster_rank);
+    top10LabelMarkers[String(p.cluster_id)]=labelMarker;
 
     naver.maps.Event.addListener(labelMarker,"click",()=>{
       infoWindow.close();
@@ -349,6 +358,12 @@ if(legendLabel){
       }else{
         map.setCenter(target);
         map.setZoom(17);
+      }
+      const clickedFeature=layer.getAllFeatures().find(item=>
+        String(item.getProperty("cluster_id"))===String(p.cluster_id)
+      );
+      if(clickedFeature){
+        naver.maps.Event.trigger(layer,"click",{feature:clickedFeature});
       }
     });
 
