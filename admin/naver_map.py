@@ -231,36 +231,19 @@ if(legendLabel){
     const centerLat=Number(f.getProperty("latitude")||0);
     const centerLng=Number(f.getProperty("longitude")||0);
 
-    const statBox=(title,value)=>
-      '<div style="flex:1;padding:7px 8px;border-radius:9px;background:#f8fafc;'+
-      'border:1px solid #e2e8f0;text-align:center">'+
-      '<div style="color:#64748b;font-size:11px;font-weight:800">'+title+'</div>'+
-      '<div style="color:#0f172a;font-size:17px;font-weight:900">'+value+'</div>'+
-      '</div>';
-
     infoWindow.setContent(
-      '<div class="info" style="min-width:290px;background:#ffffff;'+
-      'border:1px solid #cbd5e1;border-radius:12px;'+
-      'box-shadow:0 4px 16px rgba(15,23,42,.18)">'+
-      '<b style="color:'+strokeColor+';font-size:15px">'+esc(label)+'</b><br>'+
-      (address?'📍 '+esc(address)+'<br>':'')+
-      '<span style="color:#64748b;font-size:11px">'+
-      '위도 '+centerLat.toFixed(6)+' · 경도 '+centerLng.toFixed(6)+
+      '<div class="info" style="background:#ffffff;border:1px solid #cbd5e1;'+
+      'border-radius:10px;box-shadow:0 3px 12px rgba(15,23,42,.18);'+
+      'padding:8px 11px;white-space:nowrap">'+
+      '<b style="color:'+strokeColor+';font-size:14px">'+esc(label)+'</b><br>'+
+      '📍 '+(
+        address
+          ?esc(address)
+          :centerLat.toFixed(5)+', '+centerLng.toFixed(5)
+      )+'<br>'+
+      '<span style="color:#9a3412;font-weight:800">'+
+      '1순위 보완: '+esc(primary)+
       '</span>'+
-      '<div style="display:flex;gap:6px;margin:8px 0">'+
-      statBox("범죄 고위험 적색영역",risk.toFixed(1)+'%')+
-      statBox("최종 취약점수",vulnerability.toFixed(3))+
-      '</div>'+
-      '<div style="padding:8px 10px;border-radius:9px;background:#fff7ed;'+
-      'border:1px solid #fed7aa;color:#9a3412">'+
-      '<div style="margin-bottom:4px">'+
-      statusBadge(cctvNeeded,"CCTV")+
-      statusBadge(lightNeeded,"보안등")+
-      statusBadge(wifiNeeded,"Wi-Fi")+
-      '</div>'+
-      '<b>보완 순서</b>: '+esc(order)+
-      '</div>'+
-      policeHtml+
       '</div>'
     );
 
