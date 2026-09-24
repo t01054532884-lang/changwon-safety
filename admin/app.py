@@ -3339,8 +3339,8 @@ pedestrian_lights = pedestrian_light_payload["records"]
 if pedestrian_lights:
     coverage = "·".join(pedestrian_light_payload.get("coverage", []))
     st.caption(
-        f"보행조명 데이터 제공 범위: {coverage} 공개 관리시스템 "
-        "(차도 가로등 제외)"
+        f"보안등 데이터 제공 범위: {coverage} 공개 관리시스템 "
+        "(가로등·공원등 제외)"
     )
 
     if "보행조명" in raw_facility_layers:
@@ -3444,7 +3444,7 @@ else:
         first_column, second_column, third_column, fourth_column = st.columns(4)
         first_column.metric("CCTV 데이터", f"{total_count:,}대")
         second_column.metric("CCTV 위치", f"{unique_location_count:,}곳")
-        third_column.metric("보행조명 데이터", f"{len(pedestrian_lights):,}개")
+        third_column.metric("보안등 데이터", f"{len(pedestrian_lights):,}개")
         fourth_column.metric("Wi-Fi 데이터", f"{len(wifi_data):,}개")
 
         if "CCTV" in raw_facility_layers:
@@ -4151,11 +4151,12 @@ with layer_selector_columns[1]:
     st.multiselect(
         "원본 시설 레이어 불러오기",
         options=["CCTV", "보행조명", "공공 와이파이", "지구대·파출소"],
+        format_func=lambda option: "보안등" if option == "보행조명" else option,
         default=[],
         placeholder="필요한 시설만 선택",
         help=(
             "선택한 시설 좌표만 지도 브라우저로 전송합니다. "
-            "보행조명처럼 건수가 많은 레이어는 선택 시 로딩이 추가로 걸릴 수 있습니다."
+            "보안등처럼 건수가 많은 레이어는 선택 시 로딩이 추가로 걸릴 수 있습니다."
         ),
         key="raw-facility-layers",
     )
@@ -4163,11 +4164,14 @@ with layer_selector_columns[0]:
     if raw_facility_layers:
         st.caption(
             "선택한 원본 시설만 지도 오른쪽 레이어 목록에 추가됩니다: "
-            + ", ".join(raw_facility_layers)
+            + ", ".join(
+                "보안등" if layer == "보행조명" else layer
+                for layer in raw_facility_layers
+            )
         )
     else:
         st.caption(
-            "빠른 초기 표시를 위해 CCTV·보행조명·공공 Wi-Fi·지구대/파출소 "
+            "빠른 초기 표시를 위해 CCTV·보안등·공공 Wi-Fi·지구대/파출소 "
             "원본 좌표는 전송하지 않습니다. 오른쪽에서 필요한 시설만 선택해 주세요."
         )
 
@@ -4189,7 +4193,7 @@ if support_sites:
             '<b style="color:#15803D">안전요소 3종 충족 △</b><br>'
             f'CCTV 최근접: {site["cctv_distance"]:.0f}m '
             '(100m 기준)<br>'
-            f'보행조명 최근접: {site["light_distance"]:.0f}m '
+            f'보안등 최근접: {site["light_distance"]:.0f}m '
             '(50m 기준)<br>'
             f'공공 Wi-Fi: {escape(site["wifi_place"])}<br>'
             f'주소: {escape(site["wifi_address"])}<br>'
@@ -4227,7 +4231,7 @@ if support_sites:
     support_layer.add_to(map_object)
     st.caption(
         f"안전요소 3종 충족 200m 격자: {len(support_sites):,}곳 "
-        "(CCTV 100m·보행조명 50m·공공 Wi-Fi 기준)"
+        "(CCTV 100m·보안등 50m·공공 Wi-Fi 기준)"
     )
 
 st.session_state.pop("walking_route", None)
@@ -4412,7 +4416,7 @@ if naver_map_client_id:
         ]
     if "보행조명" in raw_facility_layers:
         naver_facilities["light"] = [
-            [float(record[0]), float(record[1]), f"{record[2]} 보행조명"]
+            [float(record[0]), float(record[1]), f"{record[2]} 보안등"]
             for record in pedestrian_lights
         ]
     if "공공 와이파이" in raw_facility_layers and not wifi_locations.empty:
