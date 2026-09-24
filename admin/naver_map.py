@@ -109,7 +109,9 @@ if(legendLabel){
 }
   
   const layer=new naver.maps.Data({map});
-  layer.addGeoJson(geojson);
+  const top10Geojson=Object.assign({},geojson);
+  delete top10Geojson.crs;
+  layer.addGeoJson(top10Geojson);
 
   layer.setStyle({
     strokeColor:strokeColor,
@@ -246,7 +248,7 @@ if(legendLabel){
     const labelLatitude=
       Number.isFinite(topLatitude)?topLatitude:Number(p.latitude);
 
-    return new naver.maps.Marker({
+    const labelMarker=new naver.maps.Marker({
       map,
       position:new naver.maps.LatLng(
         labelLatitude,
@@ -255,7 +257,7 @@ if(legendLabel){
       title:
         (p.top10_label||("TOP "+p.cluster_rank))+
         " · 1순위 "+primary,
-      clickable:false,
+      clickable:true,
       zIndex:146,
       icon:{
         content:
@@ -275,6 +277,21 @@ if(legendLabel){
         anchor:new naver.maps.Point(26,27)
       }
     });
+
+    naver.maps.Event.addListener(labelMarker,"click",()=>{
+      const target=new naver.maps.LatLng(
+        Number(p.latitude),
+        Number(p.longitude)
+      );
+      if(typeof map.morph==="function"){
+        map.morph(target,17);
+      }else{
+        map.setCenter(target);
+        map.setZoom(17);
+      }
+    });
+
+    return labelMarker;
   }).filter(Boolean);
 
   return [layer,...labels];
