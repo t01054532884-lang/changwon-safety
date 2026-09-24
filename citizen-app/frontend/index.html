@@ -78,9 +78,13 @@
       <!-- 안심경로 -->
       <section class="tab-panel" id="tab-route" data-tab="route" hidden>
         <div class="route-form">
-          <label class="route-field">
+          <label class="route-field route-field-autocomplete">
             <span>출발지</span>
-            <input id="route-start" type="text" value="내 현재 위치" readonly />
+            <div class="route-start-row">
+              <input id="route-start" type="text" value="내 현재 위치" readonly />
+              <button type="button" class="btn-link" id="btn-edit-start">✏️ 수정</button>
+            </div>
+            <ul id="route-start-suggestions" class="suggestion-list" hidden></ul>
           </label>
           <label class="route-field route-field-autocomplete">
             <span>도착지</span>
