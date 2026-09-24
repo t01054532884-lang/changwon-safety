@@ -93,11 +93,11 @@ PEDESTRIAN_ROUTER_URL = (
     "https://routing.openstreetmap.de/routed-foot/route/v1/driving"
 )
 DISTRICT_COLORS = {
-    "의창구": "#2563EB",
-    "성산구": "#F59E0B",
-    "마산합포구": "#DC2626",
-    "마산회원구": "#16A34A",
-    "진해구": "#7C3AED",
+    "의창구": "#475569",
+    "성산구": "#475569",
+    "마산합포구": "#475569",
+    "마산회원구": "#475569",
+    "진해구": "#475569",
 }
 SAFEMAP_RISK_PROFILES = {
     "노인 버전": {
@@ -3309,28 +3309,9 @@ if show_changwon_facilities:
                     </svg>
                     <span>안전요소 3종 충족 · 초록 테두리 △</span>
                 </div>
-                <div class="map-district-legend-title">창원시 5개 구 경계</div>
-                <div class="map-district-legend">
-                    <div class="map-district-legend-item">
-                        <span class="map-district-line" style="border-color:#2563EB"></span>
-                        <span>의창구</span>
-                    </div>
-                    <div class="map-district-legend-item">
-                        <span class="map-district-line" style="border-color:#F59E0B"></span>
-                        <span>성산구</span>
-                    </div>
-                    <div class="map-district-legend-item">
-                        <span class="map-district-line" style="border-color:#DC2626"></span>
-                        <span>마산합포구</span>
-                    </div>
-                    <div class="map-district-legend-item">
-                        <span class="map-district-line" style="border-color:#16A34A"></span>
-                        <span>마산회원구</span>
-                    </div>
-                    <div class="map-district-legend-item">
-                        <span class="map-district-line" style="border-color:#7C3AED"></span>
-                        <span>진해구</span>
-                    </div>
+                <div class="map-color-legend-row">
+                    <span class="map-district-line" style="border-color:#475569"></span>
+                    <span>창원시 5개 구 경계</span>
                 </div>
                 <div class="map-color-legend-note">
                     원본 시설은 지도 위 선택 메뉴에서 필요한 종류만 불러옵니다.
