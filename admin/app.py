@@ -3933,67 +3933,6 @@ if risk_grid_ready:
                             unsafe_allow_html=True,
                         )
                     
-            # 4. 최종 결과표
-            st.markdown("#### 최종 TOP10 상세 결과")
-
-            final_display_table = final_top10_table[
-                [
-                    "cluster_rank",
-                    "cluster_id",
-                    "risk_pct_mean",
-                    "infra_need_mean",
-                    "vulnerability_mean",
-                    "grid_n",
-                    "cctv_needed",
-                    "light_needed",
-                    "wifi_needed",
-                    "primary_facility",
-                    "facility_priority_order",
-                ]
-            ].copy()
-
-            final_display_table["cctv_needed"] = (
-                final_display_table["cctv_needed"]
-                .apply(top10_need_status)
-                .map({True: "보완 필요", False: "충족"})
-            )
-            final_display_table["light_needed"] = (
-                final_display_table["light_needed"]
-                .apply(top10_need_status)
-                .map({True: "보완 필요", False: "충족"})
-            )
-            final_display_table["wifi_needed"] = (
-                final_display_table["wifi_needed"]
-                .apply(top10_need_status)
-                .map({True: "보완 필요", False: "충족"})
-            )
-
-            final_display_table.columns = [
-                "순위",
-                "클러스터",
-                "범죄 고위험 적색영역 비율(%)",
-                "CRITIC 인프라 부족점수",
-                "최종 취약점수",
-                "포함 격자 수",
-                "CCTV",
-                "보안등",
-                "공공 Wi-Fi",
-                "1순위 보완시설",
-                "시설 보완 순서",
-            ]
-
-            st.dataframe(
-                final_display_table.round(
-                    {
-                        "범죄 고위험 적색영역 비율(%)": 2,
-                        "CRITIC 인프라 부족점수": 4,
-                        "최종 취약점수": 4,
-                    }
-                ),
-                hide_index=True,
-                use_container_width=True,
-            )
-
             # 5. 공식 최종결과 CSV 다운로드
             final_csv_name = (
                 "changwon_child_final_top10.csv"
