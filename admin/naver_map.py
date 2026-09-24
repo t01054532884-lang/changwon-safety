@@ -337,7 +337,6 @@ if(legendLabel){
         map.setCenter(target);
         map.setZoom(17);
       }
-      showHover(p,labelMarker.getPosition());
     });
 
     return labelMarker;
