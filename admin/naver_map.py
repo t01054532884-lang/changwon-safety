@@ -130,19 +130,59 @@ if(legendLabel){
   naver.maps.Event.once(map,"idle",reattachTop10);
   setTimeout(reattachTop10,800);
 
+  const hoverInfo=new naver.maps.InfoWindow({
+    borderWidth:1,
+    borderColor:strokeColor,
+    backgroundColor:"#ffffff",
+    anchorSize:new naver.maps.Size(8,8),
+    disableAutoPan:true
+  });
+
+  const facilityIcon=name=>
+    name==="보안등"?"💡":
+    name==="CCTV"?"📹":
+    "📶";
+
+  const hoverHtml=p=>
+    '<div style="padding:8px 11px;font-size:12px;line-height:1.6;min-width:170px">'+
+    '<b style="color:'+strokeColor+';font-size:13px">'+
+    esc(p.top10_label||"TOP10")+'</b><br>'+
+    (p.address?'📍 '+esc(p.address)+'<br>':'')+
+    '최종 취약점수 <b>'+Number(p.vulnerability_mean||0).toFixed(3)+'</b><br>'+
+    facilityIcon(p.primary_facility)+' <b>'+esc(p.primary_facility||"-")+
+    ' 우선 설치 권장</b><br>'+
+    '<span style="color:#64748b;font-size:11px">('+
+    esc(p.facility_priority_order||"-")+')</span>'+
+    '</div>';
+
+  const showHover=(p,position)=>{
+    hoverInfo.setContent(hoverHtml(p));
+    hoverInfo.open(map,position);
+  };
+
+  const featureHoverProps=f=>({
+    top10_label:f.getProperty("top10_label"),
+    address:f.getProperty("address"),
+    vulnerability_mean:f.getProperty("vulnerability_mean"),
+    primary_facility:f.getProperty("primary_facility"),
+    facility_priority_order:f.getProperty("facility_priority_order")
+  });
+  
   naver.maps.Event.addListener(layer,"mouseover",e=>{
     layer.overrideStyle(e.feature,{
       strokeWeight:6,
       fillOpacity:.68
     });
+    showHover(featureHoverProps(e.feature),e.coord);
   });
 
   naver.maps.Event.addListener(layer,"mouseout",e=>{
     layer.revertStyle(e.feature);
+    hoverInfo.close();
   });
-
   naver.maps.Event.addListener(layer,"click",e=>{
     const f=e.feature;
+    hoverInfo.close();
 
     const label=f.getProperty("top10_label")||"TOP10";
     const cluster=f.getProperty("cluster_id")||"-";
@@ -285,7 +325,16 @@ if(legendLabel){
       }
     });
 
+    naver.maps.Event.addListener(labelMarker,"mouseover",()=>{
+      showHover(p,labelMarker.getPosition());
+    });
+
+    naver.maps.Event.addListener(labelMarker,"mouseout",()=>{
+      hoverInfo.close();
+    });
+
     naver.maps.Event.addListener(labelMarker,"click",()=>{
+      hoverInfo.close();
       const target=new naver.maps.LatLng(
         Number(p.latitude),
         Number(p.longitude)
