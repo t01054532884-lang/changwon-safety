@@ -14,14 +14,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 
 from scoring import FACILITIES, facility_score, grade_from_score, nearest_top10, protection_score_at
 import routing
 import tmap_client
+import reports_store
 
 app = FastAPI(title="창원 안심길 Safety & Route API")
 app.add_middleware(
@@ -30,6 +33,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+reports_store.init_db()  # Stage 4: 위험신고 SQLite 저장소 초기화(테이블 없으면 생성)
 
 
 @app.get("/api/safety")
@@ -99,6 +104,68 @@ def geocode_address(q: str = Query(..., min_length=1)):
     if result is None:
         return {"found": False}
     return {"found": True, "place": result}
+
+
+class ReportCreate(BaseModel):
+    report_type: str
+    description: Optional[str] = None
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    age_group: Optional[str] = None
+    image_data_url: Optional[str] = Field(
+        default=None, description="data:image/...;base64,... 형식의 첨부 이미지(선택)"
+    )
+
+
+class ReportStatusUpdate(BaseModel):
+    status: str
+    admin_note: Optional[str] = None
+
+
+@app.post("/api/reports")
+def create_report(payload: ReportCreate):
+    """위험신고 접수 (Stage 4). 시민 앱에서 호출한다."""
+    try:
+        report_id = reports_store.create_report(
+            report_type=payload.report_type,
+            description=payload.description,
+            lat=payload.lat,
+            lng=payload.lng,
+            age_group=payload.age_group,
+            image_data_url=payload.image_data_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "id": report_id}
+
+
+@app.get("/api/reports")
+def get_reports(
+    status: Optional[str] = Query(None, description="접수됨/확인중/처리완료/반려 중 하나로 필터링"),
+    include_image: bool = Query(False, description="true면 각 신고의 이미지 데이터까지 포함(응답이 커짐)"),
+):
+    """위험신고 목록 조회 (Stage 4/6). 관리자 웹에서 호출한다."""
+    return {"reports": reports_store.list_reports(status=status, include_image=include_image)}
+
+
+@app.get("/api/reports/{report_id}")
+def get_report_detail(report_id: int):
+    report = reports_store.get_report(report_id, include_image=True)
+    if report is None:
+        raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
+    return report
+
+
+@app.patch("/api/reports/{report_id}")
+def patch_report(report_id: int, payload: ReportStatusUpdate):
+    """신고 처리 상태 변경 (Stage 6). 관리자 웹에서 호출한다."""
+    try:
+        updated = reports_store.update_report_status(report_id, payload.status, payload.admin_note)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
+    return {"ok": True}
 
 
 @app.get("/api/health")

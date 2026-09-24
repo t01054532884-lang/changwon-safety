@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo
 import folium
 import numpy as np
 import pandas as pd
-
+import requests
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
@@ -81,7 +81,6 @@ COLAB_GRID_FILES = {
     "어린이": BASE_DIR / "data" / "child_grid_colab.csv",
     "노인": BASE_DIR / "data" / "elderly_grid_colab.csv",
 }
-COLAB_RISK_GRID_FILE = BASE_DIR / "data" / "risk_grid_colab.geojson"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -2384,60 +2383,6 @@ st.set_page_config(
     layout="wide",
 )
 
-@st.cache_data(show_spinner=False)
-def load_colab_risk_grid(target_label: str) -> dict | None:
-    """Colab 1-8 적색영역 비율 격자 중 선택 대상의 값이 있는 격자만 읽습니다."""
-    if not COLAB_RISK_GRID_FILE.exists():
-        return None
-
-    column = "child_risk_pct" if target_label == "어린이" else "elderly_risk_pct"
-    source = json.loads(COLAB_RISK_GRID_FILE.read_text(encoding="utf-8"))
-    features = []
-
-    for feature in source.get("features", []):
-        properties = feature.get("properties", {})
-        value = float(properties.get(column) or 0)
-
-        if value <= 0:
-            continue
-
-        features.append(
-            {
-                "type": "Feature",
-                "properties": {
-                    "grid_id": properties.get("grid_id"),
-                    "risk_pct": round(value, 2),
-                },
-                "geometry": feature.get("geometry"),
-            }
-        )
-
-    return {"type": "FeatureCollection", "features": features}
-    
-def add_top10_addresses(geojson_data: dict | None) -> dict | None:
-    """TOP10 GeoJSON에 지도 요약용 대표 주소를 붙입니다."""
-    if not geojson_data:
-        return geojson_data
-
-    result = json.loads(json.dumps(geojson_data, ensure_ascii=False))
-
-    for feature in result.get("features", []):
-        properties = feature.setdefault("properties", {})
-        latitude = properties.get("latitude")
-        longitude = properties.get("longitude")
-
-        if latitude is None or longitude is None:
-            continue
-
-        address = reverse_geocode_changwon(float(latitude), float(longitude))
-        properties["address"] = (
-            ""
-            if address == "대표 주소 확인 불가"
-            else address.replace("경상남도 창원시 ", "").strip()
-        )
-
-    return result
-    
 def _feature_polygons(feature: dict | None) -> list:
     """GeoJSON Polygon/MultiPolygon을 폴리곤 목록으로 바꿉니다."""
     if not feature:
@@ -4518,14 +4463,13 @@ if naver_map_client_id:
         ),
         "riskImage": png_data_url(risk_density_image_bytes),
         "riskGridImage": png_data_url(risk_grid_image_bytes),
-        "colabRiskGrid": load_colab_risk_grid(final_top10_target),
         "riskBounds": (
             route_risk_grid["bounds"] if route_risk_grid else None
         ),
         "supportSites": naver_support_sites,
 
         # STEP 6에서 확정한 최종 TOP10
-        "finalTop10": add_top10_addresses(final_top10_geojson),
+        "finalTop10": final_top10_geojson,
         "finalTop10Target": final_top10_target,
 
         # 이전 웹 자체 TOP10은 더 이상 지도에 표시하지 않음
@@ -4576,3 +4520,161 @@ else:
         ),
         returned_objects=[],
     )
+
+
+# ==================== 위험신고 접수함 (Stage 4/6, 2026-09-24 신규) ====================
+# 시민 앱(창원 안심길, citizen-app/backend)에 접수된 위험신고를 이 관리자 웹에서
+# 조회하고 처리 상태를 바꿀 수 있게 한다. 시민 앱과 관리자 웹은 서로 다른 서버로
+# 배포돼 있어서, 이 섹션은 시민 앱 백엔드의 REST API(/api/reports)를 그대로 호출하는
+# 방식으로 연동한다(같은 DB를 직접 공유하지 않음).
+#
+# ⚠️ 데이터 보존 관련 중요 참고: 시민 앱은 Render 무료 플랜에 배포돼 있고, 신고 데이터는
+# SQLite 파일(citizen-app/backend/reports.db)에 저장된다. Render 무료 플랜은 코드를
+# 다시 배포할 때마다 디스크가 초기화되므로(서버가 잠들었다 깨는 것과는 다름 — 그건 유지됨),
+# 시민 앱 코드를 업데이트/재배포할 때마다 그 시점까지 쌓인 신고 데이터가 사라진다. 지금은
+# "실제로 저장되고 여기서 조회·처리까지 되는" 구조를 완성하는 단계이고, 배포 사이에도
+# 데이터를 남겨야 한다면 이후 Render 유료 Disk나 외부 DB로 옮겨야 한다(citizen-app/backend
+# /reports_store.py의 함수들만 바꾸면 되도록 분리해뒀다).
+#
+# ⚠️ 인증 없음: 지금은 URL만 알면 누구나 신고 목록을 볼 수 있다(공모전 데모 단계라
+# 우선순위에서 미룸). 실제 운영 전에는 최소한 API 키 정도는 붙이는 걸 권장한다.
+CITIZEN_APP_API_BASE = get_secret("CITIZEN_APP_API_BASE") or "https://changwon-ansimgil.onrender.com"
+
+REPORT_STATUS_OPTIONS = ["접수됨", "확인중", "처리완료", "반려"]
+REPORT_STATUS_ICONS = {
+    "접수됨": "🔴",
+    "확인중": "🟠",
+    "처리완료": "🟢",
+    "반려": "⚪",
+}
+REPORT_TYPE_LABELS_FALLBACK = {
+    "dark_alley": "어둡고 인적 드문 골목",
+    "broken_facility": "파손된 시설(가로등·CCTV 등)",
+    "suspicious_person": "불안한 사람·행동",
+    "traffic": "교통·보행 위험",
+    "etc": "기타 위험 상황",
+}
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def fetch_reports(status_filter: str) -> tuple[list[dict], str]:
+    """시민 앱 백엔드에서 위험신고 목록을 가져온다. 실패하면 (빈 목록, 오류 메시지)."""
+    try:
+        params = {} if status_filter == "전체" else {"status": status_filter}
+        response = requests.get(
+            f"{CITIZEN_APP_API_BASE}/api/reports", params=params, timeout=15
+        )
+        response.raise_for_status()
+        return response.json().get("reports", []), ""
+    except Exception as exc:
+        return [], str(exc)
+
+
+def fetch_report_image(report_id: int) -> tuple[str, str]:
+    """신고 하나의 첨부 이미지(data URL)를 가져온다. 실패하면 (\"\", 오류 메시지)."""
+    try:
+        response = requests.get(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}", timeout=15
+        )
+        response.raise_for_status()
+        return response.json().get("image_data_url") or "", ""
+    except Exception as exc:
+        return "", str(exc)
+
+
+def update_report_status(report_id: int, status: str, admin_note: str) -> str:
+    """상태/메모를 갱신한다. 성공하면 빈 문자열, 실패하면 오류 메시지를 반환."""
+    try:
+        response = requests.patch(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
+            json={"status": status, "admin_note": admin_note},
+            timeout=15,
+        )
+        response.raise_for_status()
+        return ""
+    except Exception as exc:
+        return str(exc)
+
+
+st.divider()
+st.header("🚨 위험신고 접수함")
+st.caption(
+    "창원 안심길 시민 앱에서 접수된 위험신고를 확인하고 처리 상태를 관리합니다. "
+    "무료 서버 특성상 신고 데이터는 시민 앱을 다시 배포할 때 초기화될 수 있습니다."
+)
+
+report_filter_col, report_refresh_col = st.columns([3, 1])
+with report_filter_col:
+    report_status_filter = st.selectbox(
+        "상태 필터",
+        ["전체"] + REPORT_STATUS_OPTIONS,
+        key="report_status_filter",
+    )
+with report_refresh_col:
+    st.write("")
+    if st.button("🔄 새로고침", key="report_refresh_btn", use_container_width=True):
+        fetch_reports.clear()
+
+reports, reports_fetch_error = fetch_reports(report_status_filter)
+
+if reports_fetch_error:
+    st.warning(
+        "신고 목록을 불러오지 못했습니다. 시민 앱 서버가 무료 플랜 특성상 잠들어 있다가 "
+        "첫 요청에 깨어나는 중이라 1분 정도 걸릴 수 있습니다 — 잠시 후 새로고침 해보세요.\n\n"
+        f"(오류 내용: {reports_fetch_error})"
+    )
+elif not reports:
+    st.info("접수된 위험신고가 없습니다.")
+else:
+    st.caption(f"총 {len(reports)}건")
+    for report in reports:
+        status_icon = REPORT_STATUS_ICONS.get(report.get("status", ""), "❔")
+        type_label = report.get("report_type_label") or REPORT_TYPE_LABELS_FALLBACK.get(
+            report.get("report_type"), report.get("report_type")
+        )
+        created_display = str(report.get("created_at") or "")[:16].replace("T", " ")
+        expander_title = (
+            f"{status_icon} #{report['id']} · {type_label} · "
+            f"{created_display} · {report.get('status')}"
+        )
+        with st.expander(expander_title):
+            detail_col, action_col = st.columns([2, 1])
+            with detail_col:
+                st.write(report.get("description") or "_(작성된 설명 없음)_")
+                if report.get("lat") is not None and report.get("lng") is not None:
+                    st.caption(f"위치: {report['lat']:.5f}, {report['lng']:.5f}")
+                if report.get("age_group"):
+                    st.caption(f"신고자 프로필: {report['age_group']}")
+                if report.get("has_image"):
+                    image_data_url, image_error = fetch_report_image(report["id"])
+                    if image_data_url:
+                        st.image(image_data_url, caption="첨부 사진", width=280)
+                    elif image_error:
+                        st.caption(f"사진을 불러오지 못했습니다: {image_error}")
+            with action_col:
+                current_status = report.get("status")
+                status_index = (
+                    REPORT_STATUS_OPTIONS.index(current_status)
+                    if current_status in REPORT_STATUS_OPTIONS
+                    else 0
+                )
+                new_status = st.selectbox(
+                    "처리 상태",
+                    REPORT_STATUS_OPTIONS,
+                    index=status_index,
+                    key=f"report_status_select_{report['id']}",
+                )
+                new_note = st.text_area(
+                    "관리자 메모",
+                    value=report.get("admin_note") or "",
+                    key=f"report_note_{report['id']}",
+                    height=80,
+                )
+                if st.button("저장", key=f"report_save_{report['id']}"):
+                    save_error = update_report_status(report["id"], new_status, new_note)
+                    if save_error:
+                        st.error(f"저장 실패: {save_error}")
+                    else:
+                        st.success("저장했습니다.")
+                        fetch_reports.clear()
+                        st.rerun()

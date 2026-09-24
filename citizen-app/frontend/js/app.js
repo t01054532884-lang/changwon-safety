@@ -866,6 +866,26 @@ function initSaveTab() {
 }
 
 // ---------- 위험신고 ----------
+// 첨부 이미지를 base64 data URL 문자열로 바꾼다(서버에 그대로 JSON으로 실어 보내기 위함).
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error("파일을 읽지 못했어요."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function setReportStatus(message, isError = false) {
+  const el = document.getElementById("report-status");
+  if (!el) return;
+  el.textContent = message || "";
+  el.hidden = !message;
+  el.classList.toggle("is-error", isError);
+}
+
+// 2026-09-24 (Stage 4): 로컬 목업(console.log만 하던 것)을 실제 백엔드 저장으로 교체.
+// /api/reports로 접수하면 관리자 웹의 "위험신고 접수함"에서 조회/상태 변경까지 이어진다.
 function initReportForm() {
   const typeEl = document.getElementById("report-type");
   const descEl = document.getElementById("report-desc");
@@ -894,22 +914,48 @@ function initReportForm() {
     validate();
   });
 
-  form.addEventListener("submit", (e) => {
+  form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    // Stage 1: 로컬 목업 제출 (Stage 4/7에서 실제 백엔드 API로 교체)
-    const report = {
-      type: typeEl.value,
-      desc: descEl.value.trim(),
-      hasImage: !!imageEl.files.length,
-      location: state.location,
-      createdAt: new Date().toISOString(),
-    };
-    console.log("[mock submit] danger report", report);
-    toast.hidden = false;
-    setTimeout(() => { toast.hidden = true; }, 3200);
-    form.reset();
-    preview.hidden = true;
+    setReportStatus("");
     submitBtn.disabled = true;
+    const originalLabel = submitBtn.textContent;
+    submitBtn.textContent = "접수하는 중…";
+
+    try {
+      let imageDataUrl = null;
+      if (imageEl.files[0]) {
+        imageDataUrl = await readFileAsDataUrl(imageEl.files[0]);
+      }
+
+      const payload = {
+        report_type: typeEl.value,
+        description: descEl.value.trim() || null,
+        lat: state.location ? state.location.lat : null,
+        lng: state.location ? state.location.lng : null,
+        age_group: state.profile.ageGroup || null,
+        image_data_url: imageDataUrl,
+      };
+
+      const res = await fetch(`${SAFETY_API_BASE}/api/reports`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || "신고 접수에 실패했어요.");
+      }
+
+      toast.hidden = false;
+      setTimeout(() => { toast.hidden = true; }, 3200);
+      form.reset();
+      preview.hidden = true;
+    } catch (err) {
+      setReportStatus(err.message || "신고 접수 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.", true);
+    } finally {
+      submitBtn.textContent = originalLabel;
+      validate();
+    }
   });
 }
 
