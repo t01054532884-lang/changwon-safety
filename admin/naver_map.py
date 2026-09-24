@@ -62,13 +62,14 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
 </div>
     <div class="legend-row"><span class="triangle">△</span>안전요소 3종 충족</div>
     <div class="legend-row"><span class="boundary"></span>창원시 행정경계</div>
+    <div class="legend-row"><span class="boundary" style="border-top-color:#475569"></span>창원시 5개 구 경계</div>
   </div>
   <div id="map-error" class="error">네이버 지도를 불러오지 못했습니다.<br>API 서비스와 허용 Web 서비스 URL을 확인해 주세요.</div>
 </div>
 <script>
   (function(){
   const DATA=__PAYLOAD__;
-  const districtColors={"의창구":"#2563EB","성산구":"#F59E0B","마산합포구":"#DC2626","마산회원구":"#16A34A","진해구":"#7C3AED"};
+  const districtColors={"의창구":"#475569","성산구":"#475569","마산합포구":"#475569","마산회원구":"#475569","진해구":"#475569"};
   const groups={};
   const facilityState={};
   let map,infoWindow,naver,initialized=false;
@@ -370,7 +371,7 @@ if(groups.finalTop10.length){
     v=>setObjects(groups.finalTop10,v)
   );
 }
-    const labels={cctv:"원본 방범용 CCTV",light:"원본 보행조명",wifi:"원본 공공 Wi-Fi",police:"원본 지구대·파출소"};for(const kind of ["cctv","light","wifi","police"]){if((DATA.facilities[kind]||[]).length){facilityState[kind]=false;addControl(kind,labels[kind],false,v=>{facilityState[kind]=v;redrawFacility(kind)})}}
+    const labels={cctv:"원본 방범용 CCTV",light:"원본 보안등",wifi:"원본 공공 Wi-Fi",police:"원본 지구대·파출소"};const swatchSymbols={cctv:"C",light:"L",wifi:"W",police:"P"};for(const kind of ["cctv","light","wifi","police"]){if((DATA.facilities[kind]||[]).length){facilityState[kind]=false;addControl(kind,labels[kind],false,v=>{facilityState[kind]=v;redrawFacility(kind)});const layerRows=document.getElementById("layer-items").children;const swatch=document.createElement("span");swatch.className="facility-marker "+kind;swatch.style.cssText="min-width:18px;height:18px;padding:0 3px;margin-left:auto;font-size:9px;border-width:1px";swatch.textContent=swatchSymbols[kind];layerRows[layerRows.length-1].appendChild(swatch)}}
     if(DATA.route&&DATA.route.coordinates?.length){
       const path=DATA.route.coordinates.map(p=>new naver.maps.LatLng(p[0],p[1]));
       const route=new naver.maps.Polyline({map,path,strokeColor:"#2563EB",strokeWeight:8,strokeOpacity:.95,strokeLineCap:"round",strokeLineJoin:"round",clickable:true,zIndex:150});
