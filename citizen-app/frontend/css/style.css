@@ -278,6 +278,13 @@ button, input, select, textarea {
   border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; color: var(--color-text);
 }
 .route-field-autocomplete { position: relative; }
+.route-start-row { display: flex; align-items: center; gap: 8px; }
+.route-start-row input { flex: 1; min-width: 0; }
+.btn-link {
+  flex-shrink: 0; background: none; border: none; padding: 6px 4px; cursor: pointer;
+  color: var(--color-primary); font-size: 12.5px; font-weight: 700; white-space: nowrap;
+}
+.btn-link:active { color: var(--color-primary-dark); }
 .suggestion-list {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
   list-style: none; margin: 0; padding: 6px; max-height: 240px; overflow-y: auto;
