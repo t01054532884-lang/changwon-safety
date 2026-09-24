@@ -16,6 +16,7 @@ import folium
 import numpy as np
 import pandas as pd
 import requests
+
 import streamlit as st
 import streamlit.components.v1 as components
 from streamlit_searchbox import st_searchbox
@@ -81,6 +82,7 @@ COLAB_GRID_FILES = {
     "어린이": BASE_DIR / "data" / "child_grid_colab.csv",
     "노인": BASE_DIR / "data" / "elderly_grid_colab.csv",
 }
+COLAB_RISK_GRID_FILE = BASE_DIR / "data" / "risk_grid_colab.geojson"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -2383,6 +2385,60 @@ st.set_page_config(
     layout="wide",
 )
 
+@st.cache_data(show_spinner=False)
+def load_colab_risk_grid(target_label: str) -> dict | None:
+    """Colab 1-8 적색영역 비율 격자 중 선택 대상의 값이 있는 격자만 읽습니다."""
+    if not COLAB_RISK_GRID_FILE.exists():
+        return None
+
+    column = "child_risk_pct" if target_label == "어린이" else "elderly_risk_pct"
+    source = json.loads(COLAB_RISK_GRID_FILE.read_text(encoding="utf-8"))
+    features = []
+
+    for feature in source.get("features", []):
+        properties = feature.get("properties", {})
+        value = float(properties.get(column) or 0)
+
+        if value <= 0:
+            continue
+
+        features.append(
+            {
+                "type": "Feature",
+                "properties": {
+                    "grid_id": properties.get("grid_id"),
+                    "risk_pct": round(value, 2),
+                },
+                "geometry": feature.get("geometry"),
+            }
+        )
+
+    return {"type": "FeatureCollection", "features": features}
+    
+def add_top10_addresses(geojson_data: dict | None) -> dict | None:
+    """TOP10 GeoJSON에 지도 요약용 대표 주소를 붙입니다."""
+    if not geojson_data:
+        return geojson_data
+
+    result = json.loads(json.dumps(geojson_data, ensure_ascii=False))
+
+    for feature in result.get("features", []):
+        properties = feature.setdefault("properties", {})
+        latitude = properties.get("latitude")
+        longitude = properties.get("longitude")
+
+        if latitude is None or longitude is None:
+            continue
+
+        address = reverse_geocode_changwon(float(latitude), float(longitude))
+        properties["address"] = (
+            ""
+            if address == "대표 주소 확인 불가"
+            else address.replace("경상남도 창원시 ", "").strip()
+        )
+
+    return result
+    
 def _feature_polygons(feature: dict | None) -> list:
     """GeoJSON Polygon/MultiPolygon을 폴리곤 목록으로 바꿉니다."""
     if not feature:
@@ -4463,13 +4519,14 @@ if naver_map_client_id:
         ),
         "riskImage": png_data_url(risk_density_image_bytes),
         "riskGridImage": png_data_url(risk_grid_image_bytes),
+        "colabRiskGrid": load_colab_risk_grid(final_top10_target),
         "riskBounds": (
             route_risk_grid["bounds"] if route_risk_grid else None
         ),
         "supportSites": naver_support_sites,
 
         # STEP 6에서 확정한 최종 TOP10
-        "finalTop10": final_top10_geojson,
+        "finalTop10": add_top10_addresses(final_top10_geojson),
         "finalTop10Target": final_top10_target,
 
         # 이전 웹 자체 TOP10은 더 이상 지도에 표시하지 않음
