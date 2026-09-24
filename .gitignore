@@ -16,3 +16,6 @@ __pycache__/
 
 # Citizen app is maintained in its own Git repository.
 citizen/
+
+# 위험신고 SQLite 저장소(런타임 생성 파일 — 실행할 때마다 새로 만들어지므로 커밋하지 않음)
+citizen-app/backend/reports.db
