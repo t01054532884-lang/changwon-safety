@@ -1,4 +1,23 @@
-"""Target-specific TOP 10 safety infrastructure priority analysis."""
+"""Target-specific TOP 10 safety infrastructure priority analysis.
+
+⚠️ 2026-09-25(Stage 7) 현황 정리 — 이 모듈이 실제로 계산에 쓰이는 범위:
+- `prepare_target_facilities()`/`add_target_influence()`: admin/app.py가 지금도 실제로
+  호출한다(어린이집/경로당 300m 생활권 판정용). 계속 정상 동작.
+- `build_priority_top10()`: **admin/app.py에서 더 이상 호출되지 않는 죽은 코드다.**
+  실제 라이브 관리자 웹의 "최종 TOP10"은 Colab 노트북(OOEZ.ipynb STEP0~6)이 산출해 내보낸
+  `data/child_top10.csv`/`data/elderly_top10.csv`(+geojson)를 그대로 읽어서 쓴다
+  (admin/app.py의 `load_final_top10()` 참고). 이 함수는 노트북이 있기 전에 저장소
+  자체적으로 처음 만들었던 독자적인 근사 재구현이고, 지금은 tests/test_vulnerability.py
+  테스트로만 유지되고 있다.
+- 이 함수의 등급 산정 방식(범죄위험 1~5단계 사분위 이산화 × 인프라부족 1~5단계 이산화를
+  곱하는 방식)은 노트북 최종 방법론(CRITIC 연속점수 `vulnerability_score`)과 다르다.
+  두 방식을 완전히 동일하게 맞추려면 노트북 STEP2~5의 회귀분석·CRITIC 가중치 도출 과정을
+  그대로 재현해야 하는데, 그 중간 산출물(회귀계수, 표본 등)이 이 저장소에 없어 여기서는
+  정확히 복제할 수 없다. **다만 이 클러스터링에서 "변만 맞닿은 격자(Rook 인접, 4방향)만
+  하나로 묶는다"는 부분은 노트북(Queen 인접, 8방향 — 대각선도 인접으로 취급)과 명백히
+  다른 부분이라 아래에서 Queen으로 고쳤다** — 이건 값 재현이 아니라 순수하게 인접 규칙을
+  맞추는 문제라 정확히 통일할 수 있었다.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 
-PRIORITY_MODEL_VERSION = "colab-v2"
+PRIORITY_MODEL_VERSION = "colab-v3-queen"
 
 
 def prepare_target_facilities(dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -253,15 +272,18 @@ def build_priority_top10(
         if first_root != second_root:
             parent[second_root] = first_root
 
+    # Stage 7(2026-09-25): Rook 인접(변만 맞닿은 4방향) → Queen 인접(대각선 포함 8방향)으로
+    # 수정 — 노트북(OOEZ.ipynb STEP6)의 최종 TOP10 클러스터링과 인접 규칙을 통일했다.
+    # 대각선으로만 맞닿은 두 고위험 격자가 예전에는 서로 다른 구역으로 쪼개졌지만, 이제는
+    # 노트북과 동일하게 하나의 연속 구역으로 묶인다.
     for (grid_row, grid_column), index in coordinates.items():
-        for neighbor in (
-            (grid_row - 1, grid_column),
-            (grid_row + 1, grid_column),
-            (grid_row, grid_column - 1),
-            (grid_row, grid_column + 1),
-        ):
-            if neighbor in coordinates:
-                union(index, coordinates[neighbor])
+        for row_delta in (-1, 0, 1):
+            for column_delta in (-1, 0, 1):
+                if row_delta == 0 and column_delta == 0:
+                    continue
+                neighbor = (grid_row + row_delta, grid_column + column_delta)
+                if neighbor in coordinates:
+                    union(index, coordinates[neighbor])
 
     candidates["cluster_key"] = [find(index) for index in candidates.index]
     summaries = candidates.groupby("cluster_key", as_index=False).agg(
