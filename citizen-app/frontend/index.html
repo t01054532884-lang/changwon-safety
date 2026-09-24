@@ -108,6 +108,7 @@
             <div class="route-option-head"><span>🛡️ 안심 우선</span><span class="route-time">-</span></div>
             <div class="route-option-sub">시간이 더 걸려도 가장 안전한 길</div>
           </button>
+          <button class="btn-secondary" id="btn-save-destination" type="button">⭐ 이 장소 자주가는 곳으로 저장</button>
         </div>
       </section>
 
@@ -151,10 +152,22 @@
 
       <!-- 저장 -->
       <section class="tab-panel" id="tab-save" data-tab="save" hidden>
-        <div class="empty-state">
+        <div class="route-form">
+          <label class="route-field route-field-autocomplete">
+            <span>자주 가는 곳 추가 (최대 5개)</span>
+            <input id="save-search" type="text" placeholder="장소 이름이나 도로명·지번 주소를 검색해보세요" autocomplete="off" />
+            <ul id="save-search-suggestions" class="suggestion-list" hidden></ul>
+          </label>
+        </div>
+
+        <p class="save-status" id="save-status" hidden></p>
+
+        <ul class="saved-places-list" id="saved-places-list"></ul>
+
+        <div class="empty-state" id="saved-places-empty">
           <div class="empty-icon">🔖</div>
-          <p>아직 저장한 경로나 장소가 없어요.</p>
-          <p class="empty-sub">안심경로에서 마음에 드는 경로를 저장해보세요.</p>
+          <p>아직 저장한 장소가 없어요.</p>
+          <p class="empty-sub">위 검색창에서 자주 가는 곳을 최대 5개까지 저장해보세요. 저장한 장소를 누르면 바로 경로를 찾아줘요.</p>
         </div>
       </section>
 
