@@ -2,14 +2,14 @@
  * - 실제 전체 격자 안전도 API는 Stage 2~3에서 연결 예정
  * - 여기서는 저장소(changwon-safety)의 실제 TOP10 데이터를 정적으로 불러와 사용
  */
- 
+
 const CHANGWON_CENTER = [35.2280, 128.6811]; // 창원시청 부근 fallback 좌표
- 
+
 // Stage 2~3: 안전도/경로 API. 백엔드가 이 프론트엔드를 같은 오리진에서 함께 서빙하므로
 // 기본값은 상대경로("")로 두면 배포 도메인이 어디든 그대로 작동한다.
 // 로컬에서 프론트엔드/백엔드를 각각 다른 포트로 따로 띄워 테스트할 때만 window.ANSHIMGIL_API_BASE로 override.
 const SAFETY_API_BASE = window.ANSHIMGIL_API_BASE || "";
- 
+
 const state = {
   profile: { ageGroup: null, gender: null },
   location: null, // {lat, lng}
@@ -22,7 +22,7 @@ const state = {
   activeTab: "home",
   savedPlaces: [], // 저장(북마크) 탭 — 자주 가는 곳 최대 5개, 이 기기의 localStorage에만 저장
 };
- 
+
 // ---------- 유틸 ----------
 function haversineM(lat1, lon1, lat2, lon2) {
   const R = 6371000;
@@ -32,14 +32,14 @@ function haversineM(lat1, lon1, lat2, lon2) {
     Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
- 
+
 function gradeColor(grade) {
   return { 5: "var(--grade-5)", 4: "var(--grade-4)", 3: "var(--grade-3)", 2: "var(--grade-2)", 1: "var(--grade-1)" }[grade] || "#94a3b8";
 }
 function gradeLabel(grade) {
   return { 5: "매우안전", 4: "안전", 3: "보통", 2: "위험", 1: "매우위험" }[grade] || "확인중";
 }
- 
+
 function saveProfile() {
   try { localStorage.setItem("ac_profile", JSON.stringify(state.profile)); } catch (e) {}
 }
@@ -49,18 +49,18 @@ function loadProfile() {
     if (raw) state.profile = JSON.parse(raw);
   } catch (e) {}
 }
- 
+
 // ---------- 온보딩 ----------
 function initOnboarding() {
   const steps = ["location", "age", "gender"];
   let stepIndex = 0;
- 
+
   function showStep(name) {
     document.querySelectorAll(".ob-step").forEach(el => {
       el.hidden = el.dataset.step !== name;
     });
   }
- 
+
   function finishOnboarding() {
     saveProfile();
     document.getElementById("onboarding").remove();
@@ -68,7 +68,7 @@ function initOnboarding() {
     updateProfileChip();
     initApp();
   }
- 
+
   document.getElementById("btn-allow-location").addEventListener("click", () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -84,14 +84,14 @@ function initOnboarding() {
     }
   });
   document.getElementById("btn-skip-location").addEventListener("click", () => showStep("age"));
- 
+
   document.getElementById("age-choices").addEventListener("click", (e) => {
     const card = e.target.closest(".choice-card");
     if (!card) return;
     state.profile.ageGroup = card.dataset.value;
     showStep("gender");
   });
- 
+
   document.getElementById("gender-choices").addEventListener("click", (e) => {
     const card = e.target.closest(".choice-card");
     if (!card) return;
@@ -99,12 +99,12 @@ function initOnboarding() {
     finishOnboarding();
   });
 }
- 
+
 function updateProfileChip() {
   const map = { child: "🧒 어린이 모드", adult: "🧑 성인 모드", senior: "🧓 고령자 모드" };
   document.getElementById("profile-chip").textContent = map[state.profile.ageGroup] || "🙂 프로필";
 }
- 
+
 // ---------- 탭 네비게이션 ----------
 function initTabs() {
   document.querySelectorAll(".nav-item").forEach(btn => {
@@ -118,7 +118,7 @@ function switchTab(tab) {
   if (tab === "home" && homeMap) setTimeout(() => homeMap.invalidateSize(), 50);
   if (tab === "route" && routeMap) setTimeout(() => routeMap.invalidateSize(), 50);
 }
- 
+
 // 2026-09-24: "경로 찾으면 지도가 반절 짤린다"는 제보 — 폰에서 도착지 입력할 때 키보드가
 // 올라왔다 내려가면서 화면(뷰포트) 크기가 바뀌는데, 그 시점에 지도 크기를 다시 계산하는
 // 코드가 없어서 생긴 문제로 추정된다(탭 전환할 때만 invalidateSize를 불렀음). 키보드가
@@ -136,10 +136,10 @@ function initMapResizeSafety() {
   // 도착지 입력창에서 포커스가 빠질 때(키보드가 내려가는 시점)도 한 번 더 보정
   document.getElementById("route-end")?.addEventListener("blur", () => setTimeout(resyncVisibleMapSize, 250));
 }
- 
+
 // ---------- 지도 / 안전도 (홈) ----------
 let homeMap, routeMap;
- 
+
 async function loadTopZones() {
   // TOP10 취약지역 데이터는 홈 화면에는 더 이상 노출하지 않고,
   // (1) 안전도 API 폴백 계산, (2) 추후 안심경로 안전가중치 계산용으로만 내부에서 사용한다.
@@ -150,21 +150,21 @@ async function loadTopZones() {
   state.topZones.child = child;
   state.topZones.senior = senior;
 }
- 
+
 async function loadRecommendedPlaces() {
   const data = await fetch("data/recommended_places.json").then(r => r.json());
   state.recommendedPlaces = data.places;
 }
- 
+
 function currentZoneSet() {
   // 성인은 어린이+노인 취약지역을 모두 참고정보로 함께 표시
   if (state.profile.ageGroup === "child") return state.topZones.child;
   if (state.profile.ageGroup === "senior") return state.topZones.senior;
   return null;
 }
- 
+
 let recommendedLayer; // 추천시설 마커 레이어(위치 갱신 시마다 다시 그리므로 그룹으로 관리)
- 
+
 function initHomeMap() {
   const center = state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER;
   homeMap = L.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
@@ -173,18 +173,18 @@ function initHomeMap() {
     maxZoom: 19,
     detectRetina: true, // 폰 화면(고해상도)에서 타일 일부만 채워지는 문제 방지
   }).addTo(homeMap);
- 
+
   recommendedLayer = L.layerGroup().addTo(homeMap);
   renderRecommendedPlaces();
   refreshLiveLocationUI();
 }
- 
+
 const PLACE_STYLE = {
   library: { color: "#2563eb", emoji: "📚", label: "도서관" },
   park: { color: "#16a34a", emoji: "🌳", label: "공원" },
   police: { color: "#4f46e5", emoji: "🚓", label: "지구대·파출소" },
 };
- 
+
 // ---------- 홈 지도 "귀여운" 안전/주의 구간 표시 (2026-09-24 추가) ----------
 // 등급 배지·숫자 점수는 여전히 노출하지 않되(2026-09-24 이전 결정 유지),
 // 실측 데이터 기반 안전시설 근처("안전 영향권")와 취약지역 인근("주의 구간")을
@@ -192,7 +192,7 @@ const PLACE_STYLE = {
 const SAFE_ZONE_COLOR = "#0f9d78";
 const CAUTION_ZONE_COLOR = "#e2554a";
 const CAUTION_ZONE_MAX_DIST_M = 3000; // 이보다 멀면 홈 지도에 주의 구간을 표시하지 않음
- 
+
 function addGlowZone(layerGroup, lat, lng, baseRadius, color) {
   [
     { r: baseRadius * 1.9, opacity: 0.06 },
@@ -205,7 +205,7 @@ function addGlowZone(layerGroup, lat, lng, baseRadius, color) {
     }).addTo(layerGroup);
   });
 }
- 
+
 function shieldDivIcon() {
   return L.divIcon({
     className: "facility-badge",
@@ -215,7 +215,7 @@ function shieldDivIcon() {
     iconSize: [32, 32], iconAnchor: [16, 16],
   });
 }
- 
+
 function cautionDivIcon() {
   return L.divIcon({
     className: "facility-badge",
@@ -225,7 +225,7 @@ function cautionDivIcon() {
     iconSize: [32, 32], iconAnchor: [16, 16],
   });
 }
- 
+
 function nearestHotspot(zoneSet, lat, lng) {
   if (!zoneSet || !Array.isArray(zoneSet.features) || !zoneSet.features.length) return null;
   let best = null, bestDist = Infinity;
@@ -237,7 +237,7 @@ function nearestHotspot(zoneSet, lat, lng) {
   });
   return best;
 }
- 
+
 function renderRecommendedPlaces() {
   const places = state.recommendedPlaces || [];
   const withDist = places.map(p => ({
@@ -246,10 +246,10 @@ function renderRecommendedPlaces() {
   }));
   withDist.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
   const nearestThree = withDist.slice(0, 3);
- 
+
   if (recommendedLayer) {
     recommendedLayer.clearLayers();
- 
+
     // 안전 영향권: 가장 가까운 추천시설(도서관/공원/파출소) 최대 3곳만 은은하게 표시
     nearestThree.forEach(p => {
       const style = PLACE_STYLE[p.category] || { emoji: "📍", label: p.category };
@@ -258,7 +258,7 @@ function renderRecommendedPlaces() {
         .addTo(recommendedLayer)
         .bindPopup(`<strong>🛡️ ${p.name}</strong><br/>${style.label} · 안전 영향권`);
     });
- 
+
     // 주의 구간: 연령대별 TOP10 취약지역 중 가장 가까운 한 곳만, 너무 멀면 표시하지 않음
     if (state.location) {
       const zoneSet = currentZoneSet();
@@ -271,7 +271,7 @@ function renderRecommendedPlaces() {
       }
     }
   }
- 
+
   const ul = document.getElementById("nearby-list");
   ul.innerHTML = "";
   nearestThree.forEach(item => {
@@ -286,22 +286,22 @@ function renderRecommendedPlaces() {
     ul.innerHTML = "<li>주변 추천시설 정보를 불러오지 못했어요.</li>";
   }
 }
- 
+
 // 참고: 홈 화면 등급 배지(안전도 API 연동)는 사용자 피드백(2026-09-24)에 따라
 // "위험성을 유발한다"는 이유로 홈 화면에서 제거했다. /api/safety 자체는 계속 살려두고
 // Stage 3 안심경로(경로별 안전도 비교)에서 재사용할 예정이다.
- 
+
 // ---------- 실시간 위치 추적 (Stage 3 추가: 위치가 바뀔 때마다 내 위치 아이콘도 이동) ----------
 let userMarkerHome = null;
 let userMarkerRoute = null;
 let locationWatchId = null;
- 
+
 // 안심경로 지도 전용: 이동 방향(heading)을 계산해 파란 화살표를 그 방향으로 회전시킨다.
 // (홈 지도는 사용자 요청(2026-09-24)에 따라 방향 표시 없이 단순 점으로 유지)
 let lastBearingFix = null; // 직전 위치(화살표 방향 계산용, GPS 노이즈 방지를 위해 일정 거리 이상 이동했을 때만 갱신)
 let currentHeadingDeg = 0;
 const BEARING_MIN_MOVE_M = 3; // 이보다 적게 움직였으면 방향을 갱신하지 않음(제자리 GPS 흔들림 방지)
- 
+
 function bearingDeg(lat1, lon1, lat2, lon2) {
   const toRad = (d) => d * Math.PI / 180;
   const phi1 = toRad(lat1), phi2 = toRad(lat2);
@@ -311,7 +311,7 @@ function bearingDeg(lat1, lon1, lat2, lon2) {
   const theta = Math.atan2(y, x);
   return (theta * 180 / Math.PI + 360) % 360;
 }
- 
+
 function updateHeading(lat, lng) {
   if (lastBearingFix) {
     const moved = haversineM(lastBearingFix.lat, lastBearingFix.lng, lat, lng);
@@ -323,7 +323,7 @@ function updateHeading(lat, lng) {
     lastBearingFix = { lat, lng };
   }
 }
- 
+
 function arrowDivIcon(headingDeg) {
   return L.divIcon({
     className: "user-arrow-icon",
@@ -334,7 +334,7 @@ function arrowDivIcon(headingDeg) {
     iconSize: [30, 30], iconAnchor: [15, 15],
   });
 }
- 
+
 function startLocationWatch() {
   if (!navigator.geolocation || !navigator.geolocation.watchPosition) return;
   if (locationWatchId != null) return; // 중복 등록 방지
@@ -347,7 +347,7 @@ function startLocationWatch() {
     { enableHighAccuracy: true, maximumAge: 4000, timeout: 12000 }
   );
 }
- 
+
 function updateReportLocationText() {
   const locationText = document.getElementById("report-location-text");
   if (!locationText) return;
@@ -355,11 +355,11 @@ function updateReportLocationText() {
     ? `위도 ${state.location.lat.toFixed(5)}, 경도 ${state.location.lng.toFixed(5)}`
     : "위치 정보 없음 (권한을 허용해주세요)";
 }
- 
+
 function refreshLiveLocationUI() {
   if (!state.location) return;
   const latlng = [state.location.lat, state.location.lng];
- 
+
   if (homeMap) {
     // 홈 지도는 방향 표시 없이 단순한 점으로 유지(사용자 요청, 2026-09-24)
     if (!userMarkerHome) {
@@ -370,7 +370,7 @@ function refreshLiveLocationUI() {
       userMarkerHome.setLatLng(latlng);
     }
   }
- 
+
   if (routeMap) {
     // 안심경로 지도는 이동 방향을 알 수 있는 파란 화살표로 표시(사용자 요청, 2026-09-24)
     updateHeading(state.location.lat, state.location.lng);
@@ -382,14 +382,14 @@ function refreshLiveLocationUI() {
       userMarkerRoute.setIcon(arrowDivIcon(currentHeadingDeg));
     }
   }
- 
+
   if (state.activeTab === "home") renderRecommendedPlaces();
   if (state.activeTab === "report") updateReportLocationText();
 }
- 
+
 // ---------- 안심경로 (Stage 3: 실제 라우팅 엔진 연결) ----------
 let routeLayers; // 경로 폴리라인/마커 레이어 그룹
- 
+
 const DEST_CATEGORY_STYLE = {
   library: { color: "#2563eb", emoji: "📚", label: "도서관" },
   park: { color: "#16a34a", emoji: "🌳", label: "공원" },
@@ -400,9 +400,9 @@ const DEST_CATEGORY_STYLE = {
   tmap_poi: { color: "#7c3aed", emoji: "🔍", label: "검색결과" },
   address: { color: "#0891b2", emoji: "🏠", label: "주소" },
 };
- 
+
 const ROUTE_TYPE_COLOR = { fast: "#94a3b8", balanced: "#f97316", safe: "#16a34a" };
- 
+
 function initRouteMap() {
   routeMap = L.map("route-map", { zoomControl: false, dragging: true }).setView(
     state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER, 13
@@ -413,12 +413,12 @@ function initRouteMap() {
   }).addTo(routeMap);
   routeLayers = L.layerGroup().addTo(routeMap);
 }
- 
+
 async function loadDestinations() {
   const data = await fetch("data/destinations.json").then(r => r.json());
   state.destinations = data.places;
 }
- 
+
 function searchLocalDestinations(query, limit = 8) {
   // 2026-09-24 버그 수정 (2차): "창원 도서관"처럼 띄어쓰기가 들어간 검색어는 원래
   // 전체 문자열을 그대로 부분일치시켜서(예: "창원 도서관"이라는 글자가 이름에 그대로
@@ -443,7 +443,7 @@ function searchLocalDestinations(query, limit = 8) {
     .sort((a, b) => (a.baseRank - b.baseRank) || (a.ageBoost - b.ageBoost))
     .slice(0, limit);
 }
- 
+
 // destinations.json은 도서관/공원/파출소/어린이집/경로당 등 미리 정리해둔 한정된
 // 목록이라 "NC파크"처럼 목록에 없는 장소는 원래 검색이 안 됐다(사용자 피드백,
 // 2026-09-24: 네이버 지도 API를 쓸 때는 이런 게 없었는데 왜 빠졌냐는 지적).
@@ -464,7 +464,7 @@ async function searchTmapPlaces(query, limit = 6) {
     return [];
   }
 }
- 
+
 // 2026-09-24: "도착지는 왜 자유주소검색을 막아놨냐"는 지적 — 실제로는 두 가지가 겹쳐서
 // 막고 있었다. (1) destinations.json/Tmap POI 검색 둘 다 "이름이 있는 장소"를 찾는
 // 방식이라, "창원시 성산구 중앙대로 151" 같은 순수 도로명/지번 주소는 애초에 검색 결과에
@@ -484,7 +484,7 @@ async function geocodeAddress(query) {
     return null;
   }
 }
- 
+
 function mergeDestinationResults(local, remote, limit = 10) {
   const seen = new Set(local.map(p => p.name));
   const merged = local.slice();
@@ -495,22 +495,22 @@ function mergeDestinationResults(local, remote, limit = 10) {
   });
   return merged.slice(0, limit);
 }
- 
+
 function initRouteAutocomplete() {
   const input = document.getElementById("route-end");
   const list = document.getElementById("route-end-suggestions");
   const findBtn = document.getElementById("btn-find-route");
   let searchToken = 0; // 늦게 도착한 예전 검색 응답이 최신 입력 결과를 덮어쓰지 않도록
- 
+
   function closeList() { list.hidden = true; list.innerHTML = ""; }
- 
+
   function selectDestination(place) {
     state.routeDestination = place;
     input.value = place.name;
     closeList();
     findBtn.disabled = false;
   }
- 
+
   function renderList(places) {
     if (!places.length) {
       list.innerHTML = input.value.trim() ? `<li class="suggestion-empty">일치하는 장소가 없어요</li>` : "";
@@ -527,7 +527,7 @@ function initRouteAutocomplete() {
     });
     list.hidden = false;
   }
- 
+
   input.addEventListener("input", async () => {
     state.routeDestination = null;
     // 2026-09-24 수정: 예전엔 여기서 버튼을 무조건 비활성화하고 목록 클릭으로만 다시
@@ -538,36 +538,36 @@ function initRouteAutocomplete() {
     findBtn.disabled = !input.value.trim();
     const myToken = ++searchToken;
     const query = input.value;
- 
+
     const localMatches = searchLocalDestinations(query);
     renderList(localMatches); // 목록 검색 결과는 항상 즉시 표시
- 
+
     if (!query.trim()) return;
     const remoteMatches = await searchTmapPlaces(query);
     if (myToken !== searchToken) return; // 그 사이 사용자가 다른 검색어를 입력했으면 버림
     renderList(mergeDestinationResults(localMatches, remoteMatches));
   });
- 
+
   input.addEventListener("blur", () => setTimeout(closeList, 120));
   input.addEventListener("focus", () => { if (input.value.trim() && !state.routeDestination) input.dispatchEvent(new Event("input")); });
 }
- 
+
 function setRouteStatus(message, isError = false) {
   const el = document.getElementById("route-status");
   el.textContent = message || "";
   el.hidden = !message;
   el.classList.toggle("is-error", isError);
 }
- 
+
 function renderRouteResult(data) {
   state.routeResult = data;
   routeLayers.clearLayers();
- 
+
   L.circleMarker([data.start.lat, data.start.lng], { radius: 7, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.95, weight: 3 })
     .addTo(routeLayers).bindPopup("출발지");
   L.circleMarker([data.end.lat, data.end.lng], { radius: 7, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 0.95, weight: 3 })
     .addTo(routeLayers).bindPopup(state.routeDestination ? state.routeDestination.name : "도착지");
- 
+
   const polylines = {};
   Object.entries(data.routes).forEach(([type, r]) => {
     const latlngs = r.path.map(p => [p.lat, p.lng]);
@@ -577,7 +577,7 @@ function renderRouteResult(data) {
     }).addTo(routeLayers);
   });
   state._routePolylines = polylines;
- 
+
   const options = document.getElementById("route-options");
   options.hidden = false;
   options.querySelectorAll(".route-option").forEach(row => {
@@ -595,7 +595,7 @@ function renderRouteResult(data) {
     row.querySelector(".route-option-sub").textContent =
       `${(r.distance_m / 1000).toFixed(2)}km · 안전도 ${r.safety_label}`;
   });
- 
+
   // 검색 직전에 도착지 입력창 포커스가 빠지면서 폰 키보드가 내려가고, 그 사이 지도
   // 크기가 바뀌었을 수 있다 — fitBounds로 화면을 맞추기 직전에 한 번 더 크기를
   // 재계산해서, 이미 사라진 키보드 공간만큼 지도가 반절 잘려 보이는 걸 방지한다.
@@ -603,7 +603,7 @@ function renderRouteResult(data) {
   const selected = polylines[state.selectedRouteType];
   if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
 }
- 
+
 function highlightRouteType(type) {
   state.selectedRouteType = type;
   document.querySelectorAll(".route-option").forEach(o => o.classList.toggle("is-selected", o.dataset.type === type));
@@ -615,7 +615,7 @@ function highlightRouteType(type) {
   const selected = state._routePolylines[type];
   if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
 }
- 
+
 // dest(좌표가 있는 장소 객체)로 실제 경로를 계산해서 그려준다. "경로 찾기" 버튼과
 // 저장(북마크) 탭에서 저장해둔 장소를 클릭했을 때 둘 다 이 함수를 공유해서 쓴다.
 async function computeAndRenderRoute(dest) {
@@ -623,18 +623,18 @@ async function computeAndRenderRoute(dest) {
     setRouteStatus("현재 위치 정보가 없어 경로를 계산할 수 없어요. 위치 권한을 확인해주세요.", true);
     return;
   }
- 
+
   const btn = document.getElementById("btn-find-route");
   btn.disabled = true;
   const originalLabel = btn.textContent;
   btn.textContent = "경로 계산 중…";
   setRouteStatus("출발지 주변 안전도를 분석해 3가지 경로를 계산하고 있어요…");
   document.getElementById("route-options").hidden = true;
- 
+
   const ageGroup = state.profile.ageGroup || "adult";
   const url = `${SAFETY_API_BASE}/api/route?start_lat=${state.location.lat}&start_lng=${state.location.lng}` +
     `&end_lat=${dest.lat}&end_lng=${dest.lng}&age_group=${ageGroup}`;
- 
+
   try {
     const res = await fetch(url);
     if (!res.ok) {
@@ -652,7 +652,7 @@ async function computeAndRenderRoute(dest) {
     btn.textContent = originalLabel;
   }
 }
- 
+
 // 저장 탭에서 북마크한 장소를 클릭했을 때: 안심경로 탭으로 이동해서 도착지 칸을
 // 채우고 바로 경로 계산까지 이어서 해준다(다시 검색할 필요 없이 한 번에).
 async function goToSavedPlace(place) {
@@ -663,15 +663,15 @@ async function goToSavedPlace(place) {
   document.getElementById("btn-find-route").disabled = false;
   await computeAndRenderRoute(place);
 }
- 
+
 function initRouteForm() {
   initRouteAutocomplete();
- 
+
   document.getElementById("btn-find-route").addEventListener("click", async () => {
     const endInput = document.getElementById("route-end");
     let dest = state.routeDestination;
     const rawQuery = endInput.value.trim();
- 
+
     // 목록에서 클릭으로 고르지 않고 텍스트만 입력한 채로 눌렀을 때: (2026-09-24 수정)
     // 예전엔 여기서 바로 막았는데, 이러면 정확한 이름/주소를 입력해도 클릭을 안 하면
     // 무조건 실패했다. 이제는 누른 시점에 한 번 더 찾아본다 — 목록/Tmap 장소 검색으로
@@ -680,40 +680,40 @@ function initRouteForm() {
       const btn0 = document.getElementById("btn-find-route");
       btn0.disabled = true;
       setRouteStatus("입력하신 내용으로 장소를 찾는 중…");
- 
+
       const [localMatches, remoteMatches] = await Promise.all([
         Promise.resolve(searchLocalDestinations(rawQuery, 1)),
         searchTmapPlaces(rawQuery, 1),
       ]);
       dest = localMatches[0] || remoteMatches[0] || null;
- 
+
       if (!dest) {
         const geocoded = await geocodeAddress(rawQuery);
         if (geocoded) dest = { ...geocoded, category: "address" };
       }
- 
+
       if (dest) {
         state.routeDestination = dest;
         endInput.value = dest.name;
       }
       btn0.disabled = false;
     }
- 
+
     if (!dest) {
       setRouteStatus("입력하신 장소/주소를 찾지 못했어요. 다른 이름이나 정확한 주소로 다시 시도해주세요.", true);
       endInput.focus();
       return;
     }
- 
+
     await computeAndRenderRoute(dest);
   });
- 
+
   document.getElementById("route-options").addEventListener("click", (e) => {
     const opt = e.target.closest(".route-option");
     if (!opt || opt.disabled) return;
     highlightRouteType(opt.dataset.type);
   });
- 
+
   document.getElementById("btn-save-destination")?.addEventListener("click", () => {
     if (!state.routeDestination) return;
     const added = addSavedPlace(state.routeDestination);
@@ -723,14 +723,14 @@ function initRouteForm() {
     );
   });
 }
- 
+
 // ---------- 저장(북마크) ----------
 // 2026-09-24: "저장 메뉴가 텅 비어있다, 자주 가는 곳을 북마크처럼 최대 5개 저장해서
 // 클릭하면 바로 경로를 찍어줬으면 좋겠다"는 요청으로 새로 추가. 계정/서버 개념이
 // 없는 앱이라 이 기기의 localStorage에만 저장한다(다른 기기와는 공유되지 않음).
 const SAVED_PLACES_KEY = "anshimgil_saved_places_v1";
 const SAVED_PLACES_MAX = 5;
- 
+
 function loadSavedPlaces() {
   try {
     const raw = localStorage.getItem(SAVED_PLACES_KEY);
@@ -740,7 +740,7 @@ function loadSavedPlaces() {
     state.savedPlaces = []; // 저장된 값이 깨져 있어도(다른 버전 형식 등) 앱이 죽지 않게
   }
 }
- 
+
 function persistSavedPlaces() {
   try {
     localStorage.setItem(SAVED_PLACES_KEY, JSON.stringify(state.savedPlaces));
@@ -748,12 +748,12 @@ function persistSavedPlaces() {
     console.warn("[saved-places] 저장 실패(브라우저 저장 공간/프라이빗 모드 문제일 수 있음):", e);
   }
 }
- 
+
 function isSamePlace(a, b) {
   if (a.name === b.name) return true;
   return Math.abs(a.lat - b.lat) < 0.0002 && Math.abs(a.lng - b.lng) < 0.0002; // 대략 20m 이내는 같은 곳으로 간주
 }
- 
+
 function setSaveStatus(message, isError = false) {
   const el = document.getElementById("save-status");
   if (!el) return;
@@ -762,7 +762,7 @@ function setSaveStatus(message, isError = false) {
   el.classList.toggle("is-error", isError);
   if (message) setTimeout(() => { if (el.textContent === message) el.hidden = true; }, 2600);
 }
- 
+
 function addSavedPlace(place) {
   if (state.savedPlaces.some(p => isSamePlace(p, place))) {
     setSaveStatus("이미 저장된 장소예요.", true);
@@ -777,20 +777,20 @@ function addSavedPlace(place) {
   renderSavedPlaces();
   return true;
 }
- 
+
 function removeSavedPlace(index) {
   state.savedPlaces.splice(index, 1);
   persistSavedPlaces();
   renderSavedPlaces();
 }
- 
+
 function renderSavedPlaces() {
   const list = document.getElementById("saved-places-list");
   const empty = document.getElementById("saved-places-empty");
   if (!list || !empty) return;
   list.innerHTML = "";
   empty.hidden = state.savedPlaces.length > 0;
- 
+
   state.savedPlaces.forEach((place, index) => {
     const style = DEST_CATEGORY_STYLE[place.category] || { emoji: "📍", label: "저장한 장소" };
     const li = document.createElement("li");
@@ -809,7 +809,7 @@ function renderSavedPlaces() {
     list.appendChild(li);
   });
 }
- 
+
 // 저장 탭 안의 "자주 가는 곳 추가" 검색창 — 안심경로 도착지 검색과 같은 3단계
 // (목록 → Tmap 장소 검색 → 지오코딩)를 그대로 재사용해서, 여기서도 이름/주소
 // 어느 쪽으로 검색해도 찾을 수 있게 한다.
@@ -818,9 +818,9 @@ function initSaveSearch() {
   const list = document.getElementById("save-search-suggestions");
   if (!input || !list) return;
   let searchToken = 0;
- 
+
   function closeList() { list.hidden = true; list.innerHTML = ""; }
- 
+
   function renderList(places) {
     if (!places.length) {
       list.innerHTML = input.value.trim() ? `<li class="suggestion-empty">일치하는 장소가 없어요</li>` : "";
@@ -845,7 +845,7 @@ function initSaveSearch() {
     });
     list.hidden = false;
   }
- 
+
   input.addEventListener("input", async () => {
     const myToken = ++searchToken;
     const query = input.value;
@@ -858,13 +858,13 @@ function initSaveSearch() {
   });
   input.addEventListener("blur", () => setTimeout(closeList, 120));
 }
- 
+
 function initSaveTab() {
   loadSavedPlaces();
   initSaveSearch();
   renderSavedPlaces();
 }
- 
+
 // ---------- 위험신고 ----------
 function initReportForm() {
   const typeEl = document.getElementById("report-type");
@@ -874,9 +874,9 @@ function initReportForm() {
   const submitBtn = document.getElementById("btn-submit-report");
   const form = document.getElementById("report-form");
   const toast = document.getElementById("report-toast");
- 
+
   updateReportLocationText(); // 이후에는 실시간 위치 갱신 시 refreshLiveLocationUI()가 이 텍스트도 갱신
- 
+
   function validate() {
     const hasType = !!typeEl.value;
     const hasContent = !!imageEl.files.length || descEl.value.trim().length > 0;
@@ -893,7 +893,7 @@ function initReportForm() {
     }
     validate();
   });
- 
+
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     // Stage 1: 로컬 목업 제출 (Stage 4/7에서 실제 백엔드 API로 교체)
@@ -912,7 +912,7 @@ function initReportForm() {
     submitBtn.disabled = true;
   });
 }
- 
+
 // ---------- 앱 초기화 ----------
 async function initApp() {
   await Promise.all([loadTopZones(), loadRecommendedPlaces(), loadDestinations()]);
@@ -926,13 +926,12 @@ async function initApp() {
   initSaveTab();
   startLocationWatch(); // 이후로는 위치가 바뀔 때마다 두 지도의 내 위치 아이콘과 신고 위치 텍스트를 실시간으로 갱신
 }
- 
+
 document.addEventListener("DOMContentLoaded", () => {
   loadProfile();
   initOnboarding();
- 
+
   if (navigator.serviceWorker) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 });
- 
