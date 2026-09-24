@@ -360,6 +360,35 @@ if(legendLabel){
     return labelMarker;
   }).filter(Boolean);
 
+  const naverShell=document.getElementById("changwon-naver-shell");
+  if(naverShell&&labels.length){
+    const jumpPanel=document.createElement("div");
+    jumpPanel.className="panel";
+    jumpPanel.style.cssText="right:12px;bottom:40px;width:176px;padding:9px 10px";
+    jumpPanel.innerHTML=
+      '<div class="panel-title" style="font-size:12px;margin-bottom:6px">'+
+      esc(targetLabel)+' TOP 바로가기</div>';
+    const jumpGrid=document.createElement("div");
+    jumpGrid.style.cssText="display:grid;grid-template-columns:repeat(5,1fr);gap:5px";
+    labels
+      .slice()
+      .sort((a,b)=>a.top10Rank-b.top10Rank)
+      .forEach(marker=>{
+        const button=document.createElement("button");
+        button.type="button";
+        button.textContent=marker.top10Rank;
+        button.title="TOP "+marker.top10Rank+" 위치로 이동";
+        button.style.cssText=
+          "height:26px;border:0;border-radius:7px;cursor:pointer;"+
+          "background:"+badgeColor+";color:#fff;font-size:12px;font-weight:900";
+        button.addEventListener("click",()=>{
+          naver.maps.Event.trigger(marker,"click");
+        });
+        jumpGrid.appendChild(button);
+      });
+    jumpPanel.appendChild(jumpGrid);
+    naverShell.appendChild(jumpPanel);
+  }
   let compactLabels=map.getZoom()<=13;
   naver.maps.Event.addListener(map,"zoom_changed",()=>{
     const compact=map.getZoom()<=13;
