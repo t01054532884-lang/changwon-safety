@@ -167,18 +167,18 @@ if(legendLabel){
     primary_facility:f.getProperty("primary_facility"),
     facility_priority_order:f.getProperty("facility_priority_order")
   });
+
+  naver.maps.Event.addListener(map,"click",()=>hoverInfo.close());
   
   naver.maps.Event.addListener(layer,"mouseover",e=>{
     layer.overrideStyle(e.feature,{
       strokeWeight:6,
       fillOpacity:.68
     });
-    showHover(featureHoverProps(e.feature),e.coord);
   });
 
   naver.maps.Event.addListener(layer,"mouseout",e=>{
     layer.revertStyle(e.feature);
-    hoverInfo.close();
   });
   naver.maps.Event.addListener(layer,"click",e=>{
     const f=e.feature;
@@ -325,16 +325,8 @@ if(legendLabel){
       }
     });
 
-    naver.maps.Event.addListener(labelMarker,"mouseover",()=>{
-      showHover(p,labelMarker.getPosition());
-    });
-
-    naver.maps.Event.addListener(labelMarker,"mouseout",()=>{
-      hoverInfo.close();
-    });
-
     naver.maps.Event.addListener(labelMarker,"click",()=>{
-      hoverInfo.close();
+      infoWindow.close();
       const target=new naver.maps.LatLng(
         Number(p.latitude),
         Number(p.longitude)
@@ -345,6 +337,7 @@ if(legendLabel){
         map.setCenter(target);
         map.setZoom(17);
       }
+      showHover(p,labelMarker.getPosition());
     });
 
     return labelMarker;
