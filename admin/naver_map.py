@@ -61,8 +61,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   <span id="final-top10-legend-label">최종 안전취약지역 TOP 10</span>
 </div>
     <div class="legend-row"><span class="triangle">△</span>안전요소 3종 충족</div>
-    <div class="legend-row"><span class="boundary"></span>창원시 행정경계</div>
-    <div class="legend-row"><span class="boundary" style="border-top-color:#475569"></span>창원시 5개 구 경계</div>
+    <div class="legend-row"><span class="boundary" style="border-top:3px solid #475569"></span>창원시 행정경계 (5개 구)</div>
   </div>
   <div id="map-error" class="error">네이버 지도를 불러오지 못했습니다.<br>API 서비스와 허용 Web 서비스 URL을 확인해 주세요.</div>
 </div>
@@ -455,10 +454,10 @@ if(grid){
 const outer=makeDataLayer(
   DATA.outerBoundary,
   {
-    strokeColor:"#312E81",
-    strokeWeight:6,
+    strokeColor:"#475569",
+    strokeWeight:3,
     strokeOpacity:1,
-    fillColor:"#312E81",
+    fillColor:"#475569",
     fillOpacity:.01,
     clickable:false,
     zIndex:134
@@ -474,8 +473,8 @@ const districts=makeDataLayer(
 
     return{
       strokeColor:color,
-      strokeWeight:4,
-      strokeOpacity:.95,
+      strokeWeight:3,
+      strokeOpacity:1,
       fillColor:color,
       fillOpacity:.018,
       clickable:false,
