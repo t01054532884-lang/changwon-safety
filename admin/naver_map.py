@@ -252,7 +252,7 @@ if(legendLabel){
           'background:'+badgeColor+';color:white;'+
           'font-size:11px;font-weight:900;white-space:nowrap;'+
           'box-shadow:0 2px 7px rgba(0,0,0,.38)">'+
-          'TOP '+Number(p.cluster_rank)+(symbol?' · '+symbol:'')+
+          'TOP '+Number(p.cluster_rank)+
           '</div>',
         size:new naver.maps.Size(66,28),
         anchor:new naver.maps.Point(33,14)
