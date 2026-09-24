@@ -460,6 +460,7 @@ const outer=makeDataLayer(
     strokeOpacity:1,
     fillColor:"#312E81",
     fillOpacity:.01,
+    clickable:false,
     zIndex:134
   }
 );
@@ -477,6 +478,7 @@ const districts=makeDataLayer(
       strokeOpacity:.95,
       fillColor:color,
       fillOpacity:.018,
+      clickable:false,
       zIndex:135
     };
   }
