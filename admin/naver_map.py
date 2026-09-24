@@ -407,7 +407,7 @@ def build_naver_location_map_html(
     longitude: float,
     target_label: str,
     top10_label: str,
-    cctv_points: list[dict] | None = None,
+    facility_points: list[dict] | None = None,
 ) -> str:
     """TOP10 위치 모달용 간단한 NAVER 지도를 생성합니다."""
     feature_json = json.dumps(
@@ -415,8 +415,8 @@ def build_naver_location_map_html(
         ensure_ascii=False,
         separators=(",", ":"),
     ).replace("<", "\\u003c")
-    cctv_json = json.dumps(
-        cctv_points or [],
+    facility_json = json.dumps(
+        facility_points or [],
         ensure_ascii=False,
         separators=(",", ":"),
     ).replace("<", "\\u003c")
@@ -531,6 +531,10 @@ html, body {
     background: #dc2626;
 }
 
+.top10-legend-icon.light { border: 2px solid #b45309; background: #f59e0b; }
+.top10-legend-icon.wifi { border: 2px solid #1d4ed8; background: #3b82f6; }
+.top10-legend-icon.police { border: 2px solid #1e3a8a; background: #1e40af; }
+
 .top10-legend-divider {
     margin: 7px 0 5px 0;
     border-top: 1px solid #e2e8f0;
@@ -554,13 +558,13 @@ html, body {
 }
 
 .top10-range-dot.strong {
-    background: #dc2626;
-    border: 1px solid #991b1b;
+    background: #334155;
+    border: 1px solid #0f172a;
 }
 
 .top10-range-dot.soft {
-    background: #fca5a5;
-    border: 1px solid #dc2626;
+    background: #e2e8f0;
+    border: 1px solid #64748b;
 }
 </style>
 
@@ -577,11 +581,26 @@ html, body {
             <span>CCTV</span>
         </div>
 
+        <div class="top10-legend-row">
+            <span class="top10-legend-icon light">💡</span>
+            <span>보안등</span>
+        </div>
+
+        <div class="top10-legend-row">
+            <span class="top10-legend-icon wifi">📶</span>
+            <span>Wi-Fi</span>
+        </div>
+
+        <div class="top10-legend-row">
+            <span class="top10-legend-icon police">🛡</span>
+            <span>파출소</span>
+        </div>
+
         <div class="top10-legend-divider"></div>
 
         <div class="top10-range-row">
             <span class="top10-range-dot strong"></span>
-            <span>진한색 · 분석 기준 내</span>
+            <span>진한색 · 분석 기준 내 (TOP10 영역 안)</span>
         </div>
 
         <div class="top10-range-row">
@@ -606,7 +625,13 @@ html, body {
     const LINE_COLOR = "__LINE_COLOR__";
     const FILL_COLOR = "__FILL_COLOR__";
     const TOP10_LABEL = "__TOP10_LABEL__";
-    const CCTV_POINTS = __CCTV_POINTS__;
+    const FACILITY_POINTS = __FACILITY_POINTS__;
+    const FACILITY_STYLES = {
+        cctv:   { name: "CCTV",   icon: "📹", strong: ["#DC2626", "#991B1B"], soft: ["#FECACA", "#DC2626"], size: 24 },
+        light:  { name: "보안등", icon: "💡", strong: ["#F59E0B", "#B45309"], soft: ["#FEF3C7", "#D97706"], size: 20 },
+        wifi:   { name: "Wi-Fi",  icon: "📶", strong: ["#3B82F6", "#1D4ED8"], soft: ["#DBEAFE", "#2563EB"], size: 22 },
+        police: { name: "파출소", icon: "🛡", strong: ["#1E40AF", "#1E3A8A"], soft: ["#C7D2FE", "#1E3A8A"], size: 26 }
+    };
 
     let initialized = false;
 
@@ -727,96 +752,64 @@ html, body {
                 }
             }
 
-            CCTV_POINTS.forEach(function (point) {
+            FACILITY_POINTS.forEach(function (point) {
+                const style = FACILITY_STYLES[point.type] || FACILITY_STYLES.cctv;
                 const position = new naver.maps.LatLng(
                     Number(point.lat),
                     Number(point.lng)
                 );
-
-                const inAnalysisRange =
-                    Boolean(point.in_analysis_range);
-
-                const markerBackground =
-                    inAnalysisRange
-                        ? "#DC2626"
-                        : "#FCA5A5";
-
-                const markerBorder =
-                    inAnalysisRange
-                        ? "#991B1B"
-                        : "#DC2626";
-
-                const markerText =
-                    inAnalysisRange
-                        ? "#FFFFFF"
-                        : "#7F1D1D";
+                const inAnalysisRange = Boolean(point.in_analysis_range);
+                const colors = inAnalysisRange ? style.strong : style.soft;
+                const size = style.size;
+                const rangeLabel = point.type === "police"
+                    ? "참고용 · 최종 취약점수 미반영"
+                    : (inAnalysisRange
+                        ? "분석 기준 내 (TOP10 영역 안)"
+                        : "300m 주변 참고 (영역 밖)");
 
                 const marker = new naver.maps.Marker({
                     map: map,
                     position: position,
-                    title: inAnalysisRange
-                        ? "CCTV · 분석 기준 100m 이내"
-                        : "CCTV · 주변 300m 이내",
+                    title: style.name + " · " + rangeLabel,
                     zIndex: inAnalysisRange ? 175 : 165,
                     icon: {
                         content:
                             '<div style="' +
-                            'display:flex;' +
-                            'align-items:center;' +
-                            'justify-content:center;' +
-                            'width:24px;' +
-                            'height:24px;' +
+                            'display:flex;align-items:center;justify-content:center;' +
+                            'width:' + size + 'px;height:' + size + 'px;' +
                             'border-radius:50%;' +
-                            'border:2px solid ' +
-                            markerBorder + ';' +
-                            'background:' +
-                            markerBackground + ';' +
-                            'color:' +
-                            markerText + ';' +
-                            'font-size:13px;' +
-                            'font-weight:900;' +
+                            'border:2px solid ' + colors[1] + ';' +
+                            'background:' + colors[0] + ';' +
+                            'opacity:' + (inAnalysisRange ? '1' : '0.85') + ';' +
+                            'font-size:' + Math.round(size * 0.52) + 'px;' +
                             'box-shadow:0 1px 5px rgba(0,0,0,.28)">' +
-                            '📹' +
+                            style.icon +
                             '</div>',
-                        size: new naver.maps.Size(24, 24),
-                        anchor: new naver.maps.Point(12, 12)
+                        size: new naver.maps.Size(size, size),
+                        anchor: new naver.maps.Point(size / 2, size / 2)
                     }
                 });
 
-                const rangeLabel =
-                    inAnalysisRange
-                        ? "분석 기준 100m 이내"
-                        : "주변 참고 100~300m";
+                const label = String(point.label || "")
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;");
 
                 const info = new naver.maps.InfoWindow({
                     content:
-                        '<div style="' +
-                        'padding:9px 11px;' +
-                        'font-size:12px;' +
-                        'line-height:1.55">' +
-                        '<b>CCTV</b><br>' +
+                        '<div style="padding:9px 11px;font-size:12px;line-height:1.55">' +
+                        '<b>' + style.icon + ' ' + style.name + '</b><br>' +
                         rangeLabel + '<br>' +
-                        '중심점 거리 · ' +
-                        Number(point.distance).toFixed(1) +
-                        'm' +
-                        (
-                            point.address
-                                ? '<br>' + String(point.address)
-                                : ''
-                        ) +
+                        '중심점 거리 · ' + Number(point.distance).toFixed(1) + 'm' +
+                        (label ? '<br>' + label : '') +
                         '</div>'
                 });
 
-                naver.maps.Event.addListener(
-                    marker,
-                    "click",
-                    function () {
-                        info.open(map, marker);
-                    }
-                );
+                naver.maps.Event.addListener(marker, "click", function () {
+                    info.open(map, marker);
+                });
             });
 
-            if (CCTV_POINTS.length > 0) {
+            if (FACILITY_POINTS.length > 0) {
                 map.setCenter(center);
                 map.setZoom(16);
             }
@@ -907,6 +900,6 @@ html, body {
             "__TOP10_LABEL__",
             str(top10_label).replace('"', '\\"'),
         )
-        .replace("__CCTV_POINTS__", cctv_json)
+        .replace("__FACILITY_POINTS__", facility_json)
         .replace("__CLIENT_ID__", safe_client_id)
     )
