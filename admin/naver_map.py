@@ -232,10 +232,24 @@ if(legendLabel){
       primary.includes("Wi-Fi")||primary.includes("와이파이")
         ?"Wi-Fi":"";
 
+    let topLatitude=-Infinity;
+    const findTop=coordinates=>{
+      if(typeof coordinates[0]==="number"){
+        topLatitude=Math.max(topLatitude,Number(coordinates[1]));
+      }else{
+        coordinates.forEach(findTop);
+      }
+    };
+    if(feature.geometry&&feature.geometry.coordinates){
+      findTop(feature.geometry.coordinates);
+    }
+    const labelLatitude=
+      Number.isFinite(topLatitude)?topLatitude:Number(p.latitude);
+
     return new naver.maps.Marker({
       map,
       position:new naver.maps.LatLng(
-        Number(p.latitude),
+        labelLatitude,
         Number(p.longitude)
       ),
       title:
@@ -245,17 +259,20 @@ if(legendLabel){
       zIndex:146,
       icon:{
         content:
-          '<div style="'+
-          'display:flex;align-items:center;justify-content:center;'+
-          'min-width:54px;height:28px;padding:0 7px;'+
-          'border-radius:8px;border:2px solid white;'+
+          '<div style="width:52px;text-align:center">'+
+          '<div style="position:relative;display:inline-block;'+
+          'padding:3px 7px;border-radius:6px;border:1.5px solid white;'+
           'background:'+badgeColor+';color:white;'+
-          'font-size:11px;font-weight:900;white-space:nowrap;'+
-          'box-shadow:0 2px 7px rgba(0,0,0,.38)">'+
+          'font-size:10px;font-weight:900;line-height:12px;white-space:nowrap;'+
+          'box-shadow:0 1px 4px rgba(0,0,0,.35)">'+
           'TOP '+Number(p.cluster_rank)+
-          '</div>',
-        size:new naver.maps.Size(66,28),
-        anchor:new naver.maps.Point(33,14)
+          '<span style="position:absolute;left:50%;bottom:-6px;'+
+          'transform:translateX(-50%);width:0;height:0;'+
+          'border-left:5px solid transparent;border-right:5px solid transparent;'+
+          'border-top:6px solid '+badgeColor+'"></span>'+
+          '</div></div>',
+        size:new naver.maps.Size(52,27),
+        anchor:new naver.maps.Point(26,27)
       }
     });
   }).filter(Boolean);
