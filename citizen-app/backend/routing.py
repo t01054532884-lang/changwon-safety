@@ -363,13 +363,22 @@ def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str)
 
 def compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str) -> dict:
     """공개 엔트리포인트. Tmap이 설정돼 있으면 Tmap 기반, 아니면(또는 실패 시) 격자 폴백."""
+    tmap_error: str | None = None
     if tmap_client.is_configured():
         try:
             return _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group)
         except RouteError:
             raise
-        except tmap_client.TmapError:
-            pass  # 폴백으로 진행
-        except Exception:
-            pass  # 예상 못한 오류도 폴백으로 안전하게 처리 (사용자에게는 경로가 나가야 함)
-    return _compute_routes_grid(start_lat, start_lng, end_lat, end_lng, age_group)
+        except tmap_client.TmapError as exc:
+            tmap_error = str(exc)
+        except Exception as exc:  # 예상 못한 오류도 폴백으로 안전하게 처리 (사용자에게는 경로가 나가야 함)
+            tmap_error = f"예상 못한 오류: {exc!r}"
+        print(f"[routing] Tmap 호출 실패, 격자 폴백으로 전환: {tmap_error}", flush=True)
+
+    result = _compute_routes_grid(start_lat, start_lng, end_lat, end_lng, age_group)
+    if tmap_error is not None:
+        # 디버깅 편의를 위해 실패 사유를 응답에도 그대로 노출한다 (배포 후 원인 파악용).
+        result["tmap_error"] = tmap_error
+    elif not tmap_client.is_configured():
+        result["tmap_error"] = "TMAP_APP_KEY 미설정"
+    return result
