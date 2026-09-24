@@ -123,6 +123,13 @@ if(legendLabel){
     zIndex:145
   });
 
+  const reattachTop10=()=>{
+    layer.setMap(null);
+    layer.setMap(map);
+  };
+  naver.maps.Event.once(map,"idle",reattachTop10);
+  setTimeout(reattachTop10,800);
+
   naver.maps.Event.addListener(layer,"mouseover",e=>{
     layer.overrideStyle(e.feature,{
       strokeWeight:6,
