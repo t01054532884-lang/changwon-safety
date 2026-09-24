@@ -377,6 +377,7 @@ const DEST_CATEGORY_STYLE = {
   childcare: { color: "#db2777", emoji: "🧸", label: "어린이집" },
   senior_center: { color: "#ca8a04", emoji: "🏠", label: "경로당" },
   landmark: { color: "#0f766e", emoji: "📍", label: "주요 장소" },
+  tmap_poi: { color: "#7c3aed", emoji: "🔍", label: "검색결과" },
 };
 
 const ROUTE_TYPE_COLOR = { fast: "#94a3b8", balanced: "#f97316", safe: "#16a34a" };
@@ -396,27 +397,68 @@ async function loadDestinations() {
   state.destinations = data.places;
 }
 
-function searchDestinations(query, limit = 8) {
-  const q = query.trim().toLowerCase();
-  if (!q) return [];
+function searchLocalDestinations(query, limit = 8) {
+  // 2026-09-24 버그 수정 (2차): "창원 도서관"처럼 띄어쓰기가 들어간 검색어는 원래
+  // 전체 문자열을 그대로 부분일치시켜서(예: "창원 도서관"이라는 글자가 이름에 그대로
+  // 들어있어야 함) 실제로는 어떤 장소도 못 찾았다. 이제는 띄어쓰기 기준으로 단어를
+  // 나눠서 "모든 단어를 포함하는" 이름을 찾도록 바꿨다(예: "창원", "도서관" 둘 다
+  // 포함하면 "창원중앙도서관"도 찾아짐) — 네이버 지도 등 일반적인 장소 검색과 비슷한 방식.
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
   const ageTag = state.profile.ageGroup === "child" ? "child" : state.profile.ageGroup === "senior" ? "senior" : null;
   return state.destinations
     .map(p => {
       const name = p.name.toLowerCase();
-      let rank = name.startsWith(q) ? 0 : name.includes(q) ? 1 : null;
-      if (rank === null) return null;
-      if (ageTag && p.ageTag === ageTag) rank -= 0.5; // 연령대 맞춤 장소 우선 노출
-      return { ...p, rank };
+      if (!tokens.every(t => name.includes(t))) return null;
+      const baseRank = name.startsWith(tokens[0]) ? 0 : 1; // 첫 단어로 시작하는 이름을 더 우선
+      // 연령대 태그는 baseRank가 같을 때만 순서를 살짝 조정하는 보조 기준으로만 쓴다
+      // (예전엔 이 보정이 너무 세서, 어린이 모드에서 "창원"을 검색하면 어린이집만 잔뜩
+      // 뜨고 도서관·공원은 아예 안 보이는 문제가 있었음).
+      const ageBoost = (ageTag && p.ageTag === ageTag) ? 0 : 1;
+      return { ...p, baseRank, ageBoost };
     })
     .filter(Boolean)
-    .sort((a, b) => a.rank - b.rank)
+    .sort((a, b) => (a.baseRank - b.baseRank) || (a.ageBoost - b.ageBoost))
     .slice(0, limit);
+}
+
+// destinations.json은 도서관/공원/파출소/어린이집/경로당 등 미리 정리해둔 한정된
+// 목록이라 "NC파크"처럼 목록에 없는 장소는 원래 검색이 안 됐다(사용자 피드백,
+// 2026-09-24: 네이버 지도 API를 쓸 때는 이런 게 없었는데 왜 빠졌냐는 지적).
+// 그래서 Tmap POI 검색(/api/search-place, 자유 검색어로 실제 존재하는 모든 장소를
+// 찾는 API)을 함께 붙여서, 목록에 없는 장소도 찾을 수 있게 보완했다. 목록 검색은
+// 그대로 즉시 뜨고, Tmap 검색 결과는 조금 늦게 도착하면 뒤에 이어 붙는다.
+async function searchTmapPlaces(query, limit = 6) {
+  try {
+    const url = `${SAFETY_API_BASE}/api/search-place?q=${encodeURIComponent(query)}&limit=${limit}` +
+      (state.location ? `&lat=${state.location.lat}&lng=${state.location.lng}` : "");
+    const res = await fetch(url);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.error) console.warn("[search-place] Tmap 검색 실패(무시하고 목록 검색만 사용):", data.error);
+    return (data.places || []).map(p => ({ ...p, category: "tmap_poi" }));
+  } catch (e) {
+    console.warn("[search-place] 요청 실패(무시하고 목록 검색만 사용):", e);
+    return [];
+  }
+}
+
+function mergeDestinationResults(local, remote, limit = 10) {
+  const seen = new Set(local.map(p => p.name));
+  const merged = local.slice();
+  remote.forEach(p => {
+    if (seen.has(p.name)) return;
+    seen.add(p.name);
+    merged.push(p);
+  });
+  return merged.slice(0, limit);
 }
 
 function initRouteAutocomplete() {
   const input = document.getElementById("route-end");
   const list = document.getElementById("route-end-suggestions");
   const findBtn = document.getElementById("btn-find-route");
+  let searchToken = 0; // 늦게 도착한 예전 검색 응답이 최신 입력 결과를 덮어쓰지 않도록
 
   function closeList() { list.hidden = true; list.innerHTML = ""; }
 
@@ -427,17 +469,14 @@ function initRouteAutocomplete() {
     findBtn.disabled = false;
   }
 
-  input.addEventListener("input", () => {
-    findBtn.disabled = true;
-    state.routeDestination = null;
-    const matches = searchDestinations(input.value);
-    if (!matches.length) {
+  function renderList(places) {
+    if (!places.length) {
       list.innerHTML = input.value.trim() ? `<li class="suggestion-empty">일치하는 장소가 없어요</li>` : "";
       list.hidden = !input.value.trim();
       return;
     }
     list.innerHTML = "";
-    matches.forEach(p => {
+    places.forEach(p => {
       const style = DEST_CATEGORY_STYLE[p.category] || { emoji: "📍", label: p.category };
       const li = document.createElement("li");
       li.innerHTML = `<span>${style.emoji} ${p.name}</span><small>${style.label}</small>`;
@@ -445,6 +484,21 @@ function initRouteAutocomplete() {
       list.appendChild(li);
     });
     list.hidden = false;
+  }
+
+  input.addEventListener("input", async () => {
+    findBtn.disabled = true;
+    state.routeDestination = null;
+    const myToken = ++searchToken;
+    const query = input.value;
+
+    const localMatches = searchLocalDestinations(query);
+    renderList(localMatches); // 목록 검색 결과는 항상 즉시 표시
+
+    if (!query.trim()) return;
+    const remoteMatches = await searchTmapPlaces(query);
+    if (myToken !== searchToken) return; // 그 사이 사용자가 다른 검색어를 입력했으면 버림
+    renderList(mergeDestinationResults(localMatches, remoteMatches));
   });
 
   input.addEventListener("blur", () => setTimeout(closeList, 120));

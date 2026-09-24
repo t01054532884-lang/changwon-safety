@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from scoring import FACILITIES, facility_score, grade_from_score, nearest_top10, protection_score_at
 import routing
+import tmap_client
 
 app = FastAPI(title="창원 안심길 Safety & Route API")
 app.add_middleware(
@@ -65,6 +66,24 @@ def get_route(
         return routing.compute_routes(start_lat, start_lng, end_lat, end_lng, age_group)
     except routing.RouteError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/search-place")
+def search_place(
+    q: str = Query(..., min_length=1),
+    limit: int = Query(8, ge=1, le=15),
+    lat: float | None = Query(None),
+    lng: float | None = Query(None),
+):
+    """자유 검색어로 실제 장소를 찾는다(Tmap POI 검색). destinations.json에 없는 장소
+    (예: NC파크 같은 상가·랜드마크)도 찾을 수 있도록 프론트엔드의 사전 정리된 목록 검색을
+    보완하는 용도. Tmap 키가 없거나 호출이 실패하면 빈 목록 + error 필드를 반환하고,
+    프론트엔드는 이 경우 기존 destinations.json 검색 결과만으로 계속 동작한다."""
+    try:
+        places = tmap_client.search_pois(q, count=limit, center_lat=lat, center_lng=lng)
+        return {"source": "tmap", "places": places}
+    except tmap_client.TmapError as exc:
+        return {"source": "none", "places": [], "error": str(exc)}
 
 
 @app.get("/api/health")

@@ -16,6 +16,7 @@ import requests
 
 TMAP_APP_KEY = os.environ.get("TMAP_APP_KEY", "").strip()
 TMAP_URL = "https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&format=json"
+TMAP_POI_URL = "https://apis.openapi.sk.com/tmap/pois"
 TIMEOUT_S = 6.0
 
 
@@ -105,3 +106,81 @@ def fetch_pedestrian_route(
         "distance_m": float(total_distance) if total_distance is not None else None,
         "duration_s": float(total_time) if total_time is not None else None,
     }
+
+
+def search_pois(keyword: str, count: int = 8, center_lat: Optional[float] = None, center_lng: Optional[float] = None) -> list[dict]:
+    """Tmap POI(장소) 검색 API. 네이버 지도처럼 "창원 도서관" 같은 자유 검색어로
+    실제 존재하는 모든 장소(도서관/공원/상가/랜드마크 등)를 폭넓게 찾기 위해 사용한다.
+
+    이 앱의 destinations.json은 도서관·공원·파출소·어린이집·경로당 등 사전에 정리해둔
+    한정된 목록이라, "NC파크"처럼 목록에 없는 장소는 애초에 검색이 안 되는 한계가 있다.
+    이 함수는 그 한계를 보완하기 위한 것.
+
+    ⚠️ 참고: 이 응답 구조(특히 poi 리스트/딕셔너리 형태, 좌표 필드명)는 Tmap 공식 문서를
+    실시간으로 열람하지 못하는 환경에서 일반적으로 알려진 형태를 근거로 방어적으로 작성한
+    것이라, 실제 배포 환경에서 처음 호출해보기 전까지는 100% 확신할 수 없다. 파싱이 실패하면
+    TmapError에 원본 응답 일부를 그대로 담아서, 실제 구조를 보고 바로 고칠 수 있게 했다.
+
+    반환: [{"name":, "lat":, "lng":, "address": str|None}, ...] (최대 count개). 실패 시 TmapError.
+    """
+    if not TMAP_APP_KEY:
+        raise TmapError("TMAP_APP_KEY 환경변수가 설정되지 않았습니다.")
+
+    params = {
+        "version": "1",
+        "searchKeyword": keyword,
+        "resCoordType": "WGS84GEO",
+        "reqCoordType": "WGS84GEO",
+        "count": str(count),
+        "page": "1",
+    }
+    if center_lat is not None and center_lng is not None:
+        # 창원 인근 결과를 우선하도록 중심 좌표를 함께 전달(지원 안 되면 Tmap이 그냥 무시할 것)
+        params["centerLat"] = str(center_lat)
+        params["centerLon"] = str(center_lng)
+
+    try:
+        resp = requests.get(
+            TMAP_POI_URL,
+            params=params,
+            headers={"appKey": TMAP_APP_KEY},
+            timeout=TIMEOUT_S,
+        )
+    except requests.RequestException as exc:
+        raise TmapError(f"Tmap POI 검색 호출 실패(네트워크): {exc}") from exc
+
+    if resp.status_code != 200:
+        raise TmapError(f"Tmap POI 검색 오류 응답: HTTP {resp.status_code} {resp.text[:300]}")
+
+    try:
+        data = resp.json()
+    except ValueError as exc:
+        raise TmapError(f"Tmap POI 응답 JSON 파싱 실패: {exc}") from exc
+
+    try:
+        raw_pois = data["searchPoiInfo"]["pois"]["poi"]
+    except (KeyError, TypeError) as exc:
+        raise TmapError(f"Tmap POI 응답 구조가 예상과 다릅니다: {str(data)[:500]}") from exc
+
+    if isinstance(raw_pois, dict):
+        raw_pois = [raw_pois]  # 결과가 1개일 때 Tmap이 리스트 대신 딕셔너리를 주는 경우 방어
+    if not isinstance(raw_pois, list):
+        raise TmapError(f"Tmap POI 응답의 poi 필드 형식이 예상과 다릅니다: {type(raw_pois)}")
+
+    results = []
+    for poi in raw_pois:
+        name = poi.get("name")
+        lat_raw = poi.get("noorLat") or poi.get("frontLat") or poi.get("lat")
+        lng_raw = poi.get("noorLon") or poi.get("frontLon") or poi.get("lng")
+        if not name or lat_raw is None or lng_raw is None:
+            continue
+        try:
+            lat = float(lat_raw)
+            lng = float(lng_raw)
+        except (TypeError, ValueError):
+            continue
+        address_parts = [poi.get("upperAddrName"), poi.get("middleAddrName"), poi.get("lowerAddrName")]
+        address = " ".join(p for p in address_parts if p) or None
+        results.append({"name": name, "lat": lat, "lng": lng, "address": address})
+
+    return results
