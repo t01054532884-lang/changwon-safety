@@ -165,27 +165,96 @@ const PLACE_STYLE = {
   police: { color: "#4f46e5", emoji: "🚓", label: "지구대·파출소" },
 };
 
+// ---------- 홈 지도 "귀여운" 안전/주의 구간 표시 (2026-09-24 추가) ----------
+// 등급 배지·숫자 점수는 여전히 노출하지 않되(2026-09-24 이전 결정 유지),
+// 실측 데이터 기반 안전시설 근처("안전 영향권")와 취약지역 인근("주의 구간")을
+// 은은한 색 번짐 + 아이콘 배지로만 시각화한다.
+const SAFE_ZONE_COLOR = "#0f9d78";
+const CAUTION_ZONE_COLOR = "#e2554a";
+const CAUTION_ZONE_MAX_DIST_M = 3000; // 이보다 멀면 홈 지도에 주의 구간을 표시하지 않음
+
+function addGlowZone(layerGroup, lat, lng, baseRadius, color) {
+  [
+    { r: baseRadius * 1.9, opacity: 0.06 },
+    { r: baseRadius * 1.35, opacity: 0.11 },
+    { r: baseRadius, opacity: 0.18 },
+  ].forEach(ring => {
+    L.circle([lat, lng], {
+      radius: ring.r, stroke: false, fillColor: color, fillOpacity: ring.opacity,
+      interactive: false,
+    }).addTo(layerGroup);
+  });
+}
+
+function shieldDivIcon() {
+  return L.divIcon({
+    className: "facility-badge",
+    html: `<div class="facility-badge-inner">` +
+      `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M12 3l7 3v5c0 5-3.3 8.4-7 10-3.7-1.6-7-5-7-10V6l7-3z"/></svg></div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16],
+  });
+}
+
+function cautionDivIcon() {
+  return L.divIcon({
+    className: "facility-badge",
+    html: `<div class="facility-badge-inner facility-badge-caution">` +
+      `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">` +
+      `<path d="M12 3.5l9 15.5H3z"/><line x1="12" y1="9.5" x2="12" y2="13.2"/><circle cx="12" cy="16" r="0.35" fill="#fff" stroke="none"/></svg></div>`,
+    iconSize: [32, 32], iconAnchor: [16, 16],
+  });
+}
+
+function nearestHotspot(zoneSet, lat, lng) {
+  if (!zoneSet || !Array.isArray(zoneSet.features) || !zoneSet.features.length) return null;
+  let best = null, bestDist = Infinity;
+  zoneSet.features.forEach(f => {
+    const props = f.properties || {};
+    if (props.latitude == null || props.longitude == null) return;
+    const d = haversineM(lat, lng, props.latitude, props.longitude);
+    if (d < bestDist) { bestDist = d; best = { lat: props.latitude, lng: props.longitude, dist: d }; }
+  });
+  return best;
+}
+
 function renderRecommendedPlaces() {
   const places = state.recommendedPlaces || [];
   const withDist = places.map(p => ({
     ...p,
     dist: state.location ? haversineM(state.location.lat, state.location.lng, p.lat, p.lng) : null,
   }));
+  withDist.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
+  const nearestThree = withDist.slice(0, 3);
 
   if (recommendedLayer) {
     recommendedLayer.clearLayers();
-    withDist.forEach(p => {
-      const style = PLACE_STYLE[p.category] || { color: "#64748b", emoji: "📍", label: p.category };
-      L.circleMarker([p.lat, p.lng], {
-        radius: 6, color: style.color, fillColor: style.color, fillOpacity: 0.8, weight: 1.5,
-      }).addTo(recommendedLayer).bindPopup(`<strong>${style.emoji} ${p.name}</strong><br/>${style.label}`);
+
+    // 안전 영향권: 가장 가까운 추천시설(도서관/공원/파출소) 최대 3곳만 은은하게 표시
+    nearestThree.forEach(p => {
+      const style = PLACE_STYLE[p.category] || { emoji: "📍", label: p.category };
+      addGlowZone(recommendedLayer, p.lat, p.lng, 120, SAFE_ZONE_COLOR);
+      L.marker([p.lat, p.lng], { icon: shieldDivIcon(), interactive: true })
+        .addTo(recommendedLayer)
+        .bindPopup(`<strong>🛡️ ${p.name}</strong><br/>${style.label} · 안전 영향권`);
     });
+
+    // 주의 구간: 연령대별 TOP10 취약지역 중 가장 가까운 한 곳만, 너무 멀면 표시하지 않음
+    if (state.location) {
+      const zoneSet = currentZoneSet();
+      const hotspot = nearestHotspot(zoneSet, state.location.lat, state.location.lng);
+      if (hotspot && hotspot.dist <= CAUTION_ZONE_MAX_DIST_M) {
+        addGlowZone(recommendedLayer, hotspot.lat, hotspot.lng, 130, CAUTION_ZONE_COLOR);
+        L.marker([hotspot.lat, hotspot.lng], { icon: cautionDivIcon(), interactive: true })
+          .addTo(recommendedLayer)
+          .bindPopup("<strong>⚠️ 주의 구간</strong><br/>실측 데이터 기준 안전 인프라 보완이 필요한 구간이에요");
+      }
+    }
   }
 
-  withDist.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
   const ul = document.getElementById("nearby-list");
   ul.innerHTML = "";
-  withDist.slice(0, 3).forEach(item => {
+  nearestThree.forEach(item => {
     const style = PLACE_STYLE[item.category] || { color: "#64748b", emoji: "📍", label: item.category };
     const li = document.createElement("li");
     const distText = item.dist != null ? `${(item.dist / 1000).toFixed(1)}km` : "거리 확인 불가";
@@ -193,7 +262,7 @@ function renderRecommendedPlaces() {
       `<span class="tag" style="background:${style.color}">${distText}</span>`;
     ul.appendChild(li);
   });
-  if (withDist.length === 0) {
+  if (nearestThree.length === 0) {
     ul.innerHTML = "<li>주변 추천시설 정보를 불러오지 못했어요.</li>";
   }
 }
@@ -206,6 +275,45 @@ function renderRecommendedPlaces() {
 let userMarkerHome = null;
 let userMarkerRoute = null;
 let locationWatchId = null;
+
+// 안심경로 지도 전용: 이동 방향(heading)을 계산해 파란 화살표를 그 방향으로 회전시킨다.
+// (홈 지도는 사용자 요청(2026-09-24)에 따라 방향 표시 없이 단순 점으로 유지)
+let lastBearingFix = null; // 직전 위치(화살표 방향 계산용, GPS 노이즈 방지를 위해 일정 거리 이상 이동했을 때만 갱신)
+let currentHeadingDeg = 0;
+const BEARING_MIN_MOVE_M = 3; // 이보다 적게 움직였으면 방향을 갱신하지 않음(제자리 GPS 흔들림 방지)
+
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const toRad = (d) => d * Math.PI / 180;
+  const phi1 = toRad(lat1), phi2 = toRad(lat2);
+  const dLambda = toRad(lon2 - lon1);
+  const y = Math.sin(dLambda) * Math.cos(phi2);
+  const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLambda);
+  const theta = Math.atan2(y, x);
+  return (theta * 180 / Math.PI + 360) % 360;
+}
+
+function updateHeading(lat, lng) {
+  if (lastBearingFix) {
+    const moved = haversineM(lastBearingFix.lat, lastBearingFix.lng, lat, lng);
+    if (moved >= BEARING_MIN_MOVE_M) {
+      currentHeadingDeg = bearingDeg(lastBearingFix.lat, lastBearingFix.lng, lat, lng);
+      lastBearingFix = { lat, lng };
+    }
+  } else {
+    lastBearingFix = { lat, lng };
+  }
+}
+
+function arrowDivIcon(headingDeg) {
+  return L.divIcon({
+    className: "user-arrow-icon",
+    html: `<div class="user-arrow-inner" style="transform: rotate(${headingDeg}deg)">` +
+      `<svg viewBox="0 0 24 24" width="28" height="28">` +
+      `<path d="M12 2.5 L20 20.5 L12 16 L4 20.5 Z" fill="#1d4ed8" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>` +
+      `</svg></div>`,
+    iconSize: [30, 30], iconAnchor: [15, 15],
+  });
+}
 
 function startLocationWatch() {
   if (!navigator.geolocation || !navigator.geolocation.watchPosition) return;
@@ -233,6 +341,7 @@ function refreshLiveLocationUI() {
   const latlng = [state.location.lat, state.location.lng];
 
   if (homeMap) {
+    // 홈 지도는 방향 표시 없이 단순한 점으로 유지(사용자 요청, 2026-09-24)
     if (!userMarkerHome) {
       userMarkerHome = L.circleMarker(latlng, {
         radius: 8, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.9, weight: 3,
@@ -243,12 +352,14 @@ function refreshLiveLocationUI() {
   }
 
   if (routeMap) {
+    // 안심경로 지도는 이동 방향을 알 수 있는 파란 화살표로 표시(사용자 요청, 2026-09-24)
+    updateHeading(state.location.lat, state.location.lng);
     if (!userMarkerRoute) {
-      userMarkerRoute = L.circleMarker(latlng, {
-        radius: 8, color: "#1d4ed8", fillColor: "#60a5fa", fillOpacity: 0.95, weight: 3,
-      }).addTo(routeMap).bindPopup("내 위치(실시간)");
+      userMarkerRoute = L.marker(latlng, { icon: arrowDivIcon(currentHeadingDeg) })
+        .addTo(routeMap).bindPopup("내 위치(실시간)");
     } else {
       userMarkerRoute.setLatLng(latlng);
+      userMarkerRoute.setIcon(arrowDivIcon(currentHeadingDeg));
     }
   }
 

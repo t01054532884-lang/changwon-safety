@@ -14,6 +14,9 @@
   --grade-2: #f97316; /* 위험 */
   --grade-1: #dc2626; /* 매우위험 */
 
+  --safe-zone: #0f9d78;
+  --caution-zone: #e2554a;
+
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
 
@@ -199,6 +202,39 @@ button, input, select, textarea {
 }
 .nearby-list .tag {
   font-size: 11px; font-weight: 700; color: #fff; padding: 2px 8px; border-radius: 999px;
+}
+
+/* 홈 지도 "귀여운" 스타일 (2026-09-24 추가): 타일 색감을 은은한 민트톤으로 */
+#map-home .leaflet-tile-pane {
+  filter: saturate(0.4) hue-rotate(65deg) brightness(1.18) contrast(0.93);
+}
+
+/* 안전 영향권 / 주의 구간 범례 */
+.map-legend {
+  top: 12px; left: 12px; right: auto;
+  display: flex; gap: 12px; padding: 8px 12px;
+  font-size: 11px; font-weight: 600; color: var(--color-text-muted);
+}
+.map-legend .legend-item { display: flex; align-items: center; gap: 5px; }
+.legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.legend-dot-safe { background: var(--safe-zone); }
+.legend-dot-caution { background: var(--caution-zone); }
+
+/* 안전시설/주의구간 아이콘 배지 (홈 지도) */
+.facility-badge-inner {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--safe-zone);
+  border: 2px solid rgba(255,255,255,0.92);
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.25);
+}
+.facility-badge-caution { background: var(--caution-zone); }
+
+/* 안심경로 지도 내 위치 화살표 */
+.user-arrow-inner {
+  display: flex; align-items: center; justify-content: center;
+  transition: transform 0.25s ease;
+  filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.35));
 }
 
 /* 안심경로 */
