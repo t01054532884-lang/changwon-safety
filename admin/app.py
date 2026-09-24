@@ -2382,6 +2382,155 @@ st.set_page_config(
     layout="wide",
 )
 
+def _feature_polygons(feature: dict | None) -> list:
+    """GeoJSON Polygon/MultiPolygon을 폴리곤 목록으로 바꿉니다."""
+    if not feature:
+        return []
+    geometry = feature.get("geometry") or {}
+    coordinates = geometry.get("coordinates") or []
+    if geometry.get("type") == "Polygon":
+        return [coordinates]
+    if geometry.get("type") == "MultiPolygon":
+        return list(coordinates)
+    return []
+
+
+def _is_inside_feature(latitude: float, longitude: float, polygons: list) -> bool:
+    """좌표가 TOP10 영역(격자 합친 폴리곤) 안에 있는지 확인합니다."""
+    for polygon in polygons:
+        if not polygon:
+            continue
+        if priority_analysis._point_in_ring(longitude, latitude, polygon[0]):
+            if not any(
+                priority_analysis._point_in_ring(longitude, latitude, hole)
+                for hole in polygon[1:]
+            ):
+                return True
+    return False
+
+
+def _distance_array(
+    center_latitude: float,
+    center_longitude: float,
+    latitudes: np.ndarray,
+    longitudes: np.ndarray,
+) -> np.ndarray:
+    """중심점에서 여러 좌표까지의 거리(m)를 한 번에 계산합니다."""
+    latitude_difference = np.radians(latitudes - center_latitude)
+    longitude_difference = np.radians(longitudes - center_longitude)
+    average_latitude = np.radians((latitudes + center_latitude) / 2)
+    x_distance = longitude_difference * np.cos(average_latitude)
+    return 6_371_000 * np.sqrt(latitude_difference**2 + x_distance**2)
+
+
+def collect_top10_facilities(
+    feature: dict | None,
+    latitude: float,
+    longitude: float,
+    radius: float = 300,
+) -> tuple[list[dict], dict]:
+    """TOP10 주변 CCTV·보안등·Wi-Fi·파출소를 모읍니다.
+
+    진한색(in_analysis_range)은 TOP10 영역 안에 있는 시설로,
+    Colab 분석의 격자 보유 여부(need_*)와 같은 기준입니다.
+    """
+    polygons = _feature_polygons(feature)
+    points: list[dict] = []
+    summary: dict = {}
+
+    sources = []
+    if not cctv_locations.empty:
+        sources.append(
+            (
+                "cctv",
+                cctv_locations["latitude"].to_numpy(float),
+                cctv_locations["longitude"].to_numpy(float),
+                cctv_locations["address"].astype(str).tolist(),
+            )
+        )
+    if pedestrian_lights:
+        light_array = np.array(
+            [[record[0], record[1]] for record in pedestrian_lights],
+            dtype=float,
+        )
+        sources.append(
+            (
+                "light",
+                light_array[:, 0],
+                light_array[:, 1],
+                [str(record[2]) for record in pedestrian_lights],
+            )
+        )
+    if not wifi_locations.empty:
+        sources.append(
+            (
+                "wifi",
+                wifi_locations["latitude"].to_numpy(float),
+                wifi_locations["longitude"].to_numpy(float),
+                wifi_locations["place"].astype(str).tolist(),
+            )
+        )
+
+    for facility_type, latitudes, longitudes, labels in sources:
+        distances = _distance_array(latitude, longitude, latitudes, longitudes)
+        inside_count = 0
+        nearby_count = 0
+        for index in np.flatnonzero(distances <= radius):
+            point_latitude = float(latitudes[index])
+            point_longitude = float(longitudes[index])
+            inside = _is_inside_feature(point_latitude, point_longitude, polygons)
+            inside_count += int(inside)
+            nearby_count += 1
+            points.append(
+                {
+                    "type": facility_type,
+                    "lat": point_latitude,
+                    "lng": point_longitude,
+                    "label": labels[index],
+                    "distance": round(float(distances[index]), 1),
+                    "in_analysis_range": inside,
+                }
+            )
+        summary[facility_type] = {"inside": inside_count, "nearby": nearby_count}
+
+    summary["police"] = None
+    if not police_frame.empty:
+        police_latitudes = police_frame["latitude"].to_numpy(float)
+        police_longitudes = police_frame["longitude"].to_numpy(float)
+        distances = _distance_array(
+            latitude, longitude, police_latitudes, police_longitudes
+        )
+        nearest = int(np.argmin(distances))
+        name_column = "station_name" if "station_name" in police_frame else None
+        nearest_name = (
+            str(police_frame.iloc[nearest][name_column]) if name_column else "파출소"
+        )
+        summary["police"] = {
+            "name": nearest_name,
+            "distance": float(distances[nearest]),
+        }
+        # 가장 가까운 파출소는 300m 밖이어도 지도에 표시합니다.
+        for index in np.flatnonzero(
+            (distances <= radius) | (np.arange(len(distances)) == nearest)
+        ):
+            points.append(
+                {
+                    "type": "police",
+                    "lat": float(police_latitudes[index]),
+                    "lng": float(police_longitudes[index]),
+                    "label": (
+                        str(police_frame.iloc[index][name_column])
+                        if name_column
+                        else "파출소"
+                    ),
+                    "distance": round(float(distances[index]), 1),
+                    "in_analysis_range": False,
+                }
+            )
+
+    return points, summary
+
+
 @st.dialog("안전취약지역 위치", width="large")
 def show_top10_location_dialog(
     row_data: dict,
@@ -2417,27 +2566,11 @@ def show_top10_location_dialog(
         "지도에서 확대해 표시합니다."
     )
 
-    nearby_cctv = []
-
-    if not cctv_locations.empty:
-        for cctv_row in cctv_locations.itertuples(index=False):
-            distance = distance_in_meters(
-                latitude,
-                longitude,
-                float(cctv_row.latitude),
-                float(cctv_row.longitude),
-            )
-
-            if distance <= 300:
-                nearby_cctv.append(
-                    {
-                        "lat": float(cctv_row.latitude),
-                        "lng": float(cctv_row.longitude),
-                        "address": str(cctv_row.address),
-                        "distance": round(distance, 1),
-                        "in_analysis_range": distance <= 100,
-                    }
-                )
+    facility_points, facility_summary = collect_top10_facilities(
+        selected_feature,
+        latitude,
+        longitude,
+    )
                 
     NAVER_MAP_COMPONENT(
         html=build_naver_location_map_html(
@@ -2447,7 +2580,7 @@ def show_top10_location_dialog(
             longitude,
             target_label,
             top10_label,
-            nearby_cctv,
+            facility_points,
         ),
         height=430,
         key=(
@@ -2456,15 +2589,36 @@ def show_top10_location_dialog(
         ),
         default=None,
     )
-    analysis_cctv_count = sum(
-        1
-        for point in nearby_cctv
-        if point["in_analysis_range"]
-    )
+    summary_lines = []
+    for facility_type, facility_name in (
+        ("cctv", "📹 CCTV"),
+        ("light", "💡 보안등"),
+        ("wifi", "📶 Wi-Fi"),
+    ):
+        counts = facility_summary.get(facility_type)
+        if counts is None:
+            summary_lines.append(f"{facility_name} · 데이터 없음")
+        else:
+            summary_lines.append(
+                f"{facility_name} · 영역 내 {counts['inside']}곳"
+                f" / 주변 300m {counts['nearby']}곳"
+            )
 
+    police_summary = facility_summary.get("police")
+    if police_summary:
+        distance = police_summary["distance"]
+        distance_text = (
+            f"{distance / 1000:.2f}km" if distance >= 1000 else f"{distance:.0f}m"
+        )
+        summary_lines.append(
+            f"🛡 최근접 파출소 · {escape(police_summary['name'])} {distance_text}"
+            " (참고용 · 최종 취약점수 미반영)"
+        )
+
+    st.markdown("  \n".join(summary_lines))
     st.caption(
-        f"CCTV · 분석 기준 100m 이내 {analysis_cctv_count}곳"
-        f" · 주변 300m 이내 {len(nearby_cctv)}곳"
+        "진한색 = TOP10 영역 안(분석 기준, 격자 보유 여부와 동일) · "
+        "연한색 = 영역 밖 300m 이내(참고)"
     )
     st.markdown(
         f"""
