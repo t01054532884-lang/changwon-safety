@@ -456,7 +456,7 @@ const outer=makeDataLayer(
   {
     strokeColor:"#475569",
     strokeWeight:3,
-    strokeOpacity:1,
+    strokeOpacity:0,
     fillColor:"#475569",
     fillOpacity:.01,
     clickable:false,
