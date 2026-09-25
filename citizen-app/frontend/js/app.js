@@ -250,6 +250,21 @@ function watchMapContainerSize(elementId, getMapWrapper, label) {
     if (!entry) return;
     const { width, height } = entry.contentRect;
     console.log("[naver-map][" + (label || elementId) + "] ResizeObserver 콜백, 크기:", width, height);
+    // 2026-09-25 콘솔 로그로 확인: 네이버 지도 SDK가 초기화되면서 컨테이너에 직접
+    // 인라인 height(때로는 width)를 0으로 박아버리는 경우가 있었다(우리 CSS보다
+    // 인라인 스타일이 우선순위가 높아서 그대로 찌그러짐). 폭은 정상인데 높이만(또는
+    // 그 반대) 0인 비정상적인 경우 인라인 값을 지워서 우리 CSS가 다시 크기를
+    // 결정하게 강제한다 — 지우는 것 자체가 또 한 번의 resize를 유발해 정상 크기로
+    // 다시 측정된다.
+    if (el.style.height || el.style.width) {
+      console.log(
+        "[naver-map][" + (label || elementId) + "] 인라인 크기 발견, 제거함 (height=" +
+          el.style.height + ", width=" + el.style.width + ")"
+      );
+      el.style.removeProperty("height");
+      el.style.removeProperty("width");
+      return; // 스타일 제거로 다시 콜백이 불릴 것이므로 이번 콜백에서는 여기서 멈춤
+    }
     if (width <= 0 || height <= 0) return; // 아직 크기가 안 잡혔으면 다음 변화를 기다림
     if (width === lastW && height === lastH) return; // 같은 크기로 중복 호출 방지
     lastW = width;
