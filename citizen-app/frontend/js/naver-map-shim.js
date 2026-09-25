@@ -208,6 +208,23 @@ NMap.map = function (elementId, opts = {}) {
           "[NMap] " + this._elementId + " invalidateSize 호출, 컨테이너 크기:",
           containerEl ? containerEl.getBoundingClientRect() : "(엘리먼트 없음)"
         );
+        // 2026-09-25 콘솔 로그로 실제 원인 확인: 생성 직후엔 컨테이너 높이가 정상(예:
+        // 1186px)이었는데, 얼마 뒤 같은 엘리먼트를 다시 재보면 height만 0으로 찌그러져
+        // 있었다(width는 그대로 480 유지) — 이건 우리 CSS(position:absolute; inset:0)가
+        // 무너진 게 아니라, 네이버 지도 SDK가 초기화(isReady 전환) 과정에서 컨테이너
+        // 엘리먼트 자체에 인라인 height(또는 width)를 직접 써버려서(=우리 CSS보다
+        // 우선순위가 높은 인라인 스타일) 생기는 문제로 보인다. 그 인라인 값을 지워서
+        // 다시 우리 CSS가 크기를 결정하게 강제한다 — 지우는 것 자체가 레이아웃을
+        // 바꾸는 동작이라, 이후 resize 이벤트+재중심이 이번엔 "정상 크기" 기준으로
+        // 다시 일어나게 된다.
+        if (containerEl && (containerEl.style.height || containerEl.style.width)) {
+          console.log(
+            "[NMap] " + this._elementId + " 인라인 크기 발견, 제거함 (height=" +
+              containerEl.style.height + ", width=" + containerEl.style.width + ")"
+          );
+          containerEl.style.removeProperty("height");
+          containerEl.style.removeProperty("width");
+        }
       }
       // 2026-09-25 실기기 확인 결과: 홈 지도는 아예 안 보이고, 안심경로 지도는 생성 당시의
       // 작은 크기로만 타일이 채워진 채 나머지는 빈 화면으로 남는 문제가 발견됨. 원인은
