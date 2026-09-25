@@ -200,6 +200,24 @@ NMap.map = function (elementId, opts = {}) {
       }
       return this;
     },
+    // 2026-09-26 추가: 안심경로 화면에서 실제로 걸어 이동할 때 지도가 내 위치를
+    // 계속 따라가도록(내비게이션 앱처럼) 하기 위한 메서드. setView와 달리 줌 레벨은
+    // 건드리지 않는다(사용자가 손으로 확대/축소해둔 걸 매번 되돌리면 오히려 불편함).
+    // 네이버 지도 SDK의 panTo(부드럽게 이동)를 우선 쓰고, 없으면 setCenter로 대체한다.
+    panTo(center) {
+      if (!this._naverMap) return this;
+      try {
+        const latlng = new naver.maps.LatLng(center[0], center[1]);
+        if (typeof this._naverMap.panTo === "function") {
+          this._naverMap.panTo(latlng);
+        } else {
+          this._naverMap.setCenter(latlng);
+        }
+      } catch (e) {
+        // 패닝이 실패해도(예: 지도가 아직 준비 안 됨) 앱이 멈추면 안 되므로 무시한다.
+      }
+      return this;
+    },
     invalidateSize() {
       if (!this._naverMap) return this;
       {
@@ -455,4 +473,3 @@ NMap.polyline = function (latlngs, opts = {}) {
   };
   return overlay;
 };
- 
