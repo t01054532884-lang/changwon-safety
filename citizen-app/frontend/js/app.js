@@ -166,6 +166,46 @@ function initProfileEdit() {
   });
 }
  
+// 2026-09-26 추가: 아직 실사용자에게 배포하지 않은 테스트 단계라, 실기기 GPS 없이도
+// 창원시 여러 지점에서 앱을 확인해볼 수 있어야 한다는 요청으로 추가한 개발용 버튼.
+// 백엔드 /api/random-location이 창원시 행정구역 경계(BOUNDARY, scoring.py의 동일한
+// point_in_polygon 로직 재사용) 내부에서 뽑아준 좌표를 실제 GPS 위치처럼 그대로
+// state.location에 덮어쓰고, 실시간 위치 갱신과 완전히 같은 경로(refreshLiveLocationUI)
+// 를 태워 마커·추천 장소·안전도 등이 전부 그 좌표 기준으로 다시 계산되게 한다.
+function initAdminRandomLocation() {
+  const btn = document.getElementById("btn-admin-random-location");
+  if (!btn) return;
+  const originalLabel = btn.textContent;
+  let resetTimer = null;
+ 
+  btn.addEventListener("click", async () => {
+    if (resetTimer) clearTimeout(resetTimer);
+    btn.disabled = true;
+    btn.textContent = "위치 찾는 중…";
+    try {
+      const res = await fetch("/api/random-location");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      state.location = { lat: data.lat, lng: data.lng };
+      // 실시간 위치 갱신(watchPosition)과 달리 이건 순간이동이라, 지도가 새 위치를
+      // 따라가지 못하고 마커만 화면 밖 어딘가에서 움직이는 것처럼 보일 수 있다 —
+      // 홈 지도를 새 좌표로 직접 재중심시켜준다.
+      if (homeMap) homeMap.setView([data.lat, data.lng], 15);
+      refreshLiveLocationUI();
+      console.log("[admin-random-location] 새 테스트 위치:", data.lat, data.lng);
+      btn.textContent = "✅ 이동됨";
+    } catch (e) {
+      console.error("[admin-random-location] 위치 뽑기 실패:", e);
+      btn.textContent = "⚠️ 실패";
+    } finally {
+      resetTimer = setTimeout(() => {
+        btn.textContent = originalLabel;
+        btn.disabled = false;
+      }, 1600);
+    }
+  });
+}
+ 
 // ---------- 탭 네비게이션 ----------
 function initTabs() {
   document.querySelectorAll(".nav-item").forEach(btn => {
@@ -1258,6 +1298,7 @@ async function initApp() {
   await Promise.all([loadTopZones(), loadRecommendedPlaces(), loadDestinations()]);
   initTabs();
   initProfileEdit();
+  initAdminRandomLocation();
  
   const mapReady = await loadNaverSdk();
   if (mapReady) {
