@@ -468,13 +468,14 @@ if(colabRiskGrid){
     const color=pct>=25?"#991B1B":pct>=10?"#EF4444":"#F87171";
     if(riskOutlineMode){
       return{
-        strokeColor:color,
-        strokeWeight:2,
-        strokeOpacity:.95,
-        fillColor:color,
-        fillOpacity:0,
+        strokeColor:pct>=25?"#7F1D1D":pct>=10?"#DC2626":"#F87171",
+        strokeWeight:pct>=25?4:pct>=10?2.5:1.5,
+        strokeOpacity:pct>=25?1:.9,
+        strokeStyle:pct>=10?"solid":"shortdash",
+        fillColor:"#7F1D1D",
+        fillOpacity:pct>=25?.12:0,
         clickable:false,
-        zIndex:140
+        zIndex:pct>=25?142:pct>=10?141:140
       };
     }
     return{
