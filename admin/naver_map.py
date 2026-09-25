@@ -39,7 +39,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
     <div class="panel-title">안전 분석 표시</div>
     <div class="legend-row">
   <span style="display:inline-block;width:22px;height:10px;border-radius:3px;
-        background:linear-gradient(90deg,#FDE68A,#FBBF24,#D97706)"></span>
+        background:linear-gradient(90deg,#FCD34D,#F59E0B,#B45309)"></span>
   원본 범죄위험 지도 (진할수록 위험)
 </div>
 
