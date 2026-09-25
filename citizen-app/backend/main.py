@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -166,6 +167,22 @@ def patch_report(report_id: int, payload: ReportStatusUpdate):
     if not updated:
         raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
     return {"ok": True}
+
+
+@app.get("/api/config")
+def get_public_config():
+    """프론트엔드가 지도 표시(홈/안심경로)에 필요로 하는 공개 설정값.
+
+    2026-09-26: 지도 표시 엔진을 Leaflet+OpenStreetMap(키 불필요) → 네이버 지도 JS SDK로
+    교체하면서 추가. 여기서 반환하는 Client ID는 브라우저에 그대로 노출되는 걸 전제로
+    하는 값이다(비밀키가 아님) — 네이버 지도 JS SDK는 애초에 "이 Client ID로 어떤 도메인
+    에서 호출해도 되는지"를 네이버클라우드 콘솔의 Web 서비스 URL 허용 목록으로 막는
+    방식이라, 그 목록에 이 서비스의 도메인이 등록돼 있어야만 실제로 지도가 뜬다
+    (admin/app.py도 이미 같은 값을 화면에 그대로 노출하고 있음). 그래서 다른 API 키들과
+    달리 이 값은 .env/Render 환경변수에만 두면 되고, 별도 인증 처리는 필요 없다."""
+    return {
+        "naverMapClientId": os.environ.get("NAVER_MAP_CLIENT_ID", "").strip(),
+    }
 
 
 @app.get("/api/health")

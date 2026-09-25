@@ -172,14 +172,10 @@ let recommendedLayer; // 추천시설 마커 레이어(위치 갱신 시마다 �
 
 function initHomeMap() {
   const center = state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER;
-  homeMap = L.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
-    maxZoom: 19,
-    detectRetina: true, // 폰 화면(고해상도)에서 타일 일부만 채워지는 문제 방지
-  }).addTo(homeMap);
+  homeMap = NMap.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
+  // 네이버 지도는 Map 생성 시 자체 타일을 그려주므로 별도 타일 레이어 추가가 필요 없다.
 
-  recommendedLayer = L.layerGroup().addTo(homeMap);
+  recommendedLayer = NMap.layerGroup().addTo(homeMap);
   renderRecommendedPlaces();
   refreshLiveLocationUI();
 }
@@ -204,7 +200,7 @@ function addGlowZone(layerGroup, lat, lng, baseRadius, color) {
     { r: baseRadius * 1.35, opacity: 0.11 },
     { r: baseRadius, opacity: 0.18 },
   ].forEach(ring => {
-    L.circle([lat, lng], {
+    NMap.circle([lat, lng], {
       radius: ring.r, stroke: false, fillColor: color, fillOpacity: ring.opacity,
       interactive: false,
     }).addTo(layerGroup);
@@ -212,7 +208,7 @@ function addGlowZone(layerGroup, lat, lng, baseRadius, color) {
 }
 
 function shieldDivIcon() {
-  return L.divIcon({
+  return NMap.divIcon({
     className: "facility-badge",
     html: `<div class="facility-badge-inner">` +
       `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">` +
@@ -222,7 +218,7 @@ function shieldDivIcon() {
 }
 
 function cautionDivIcon() {
-  return L.divIcon({
+  return NMap.divIcon({
     className: "facility-badge",
     html: `<div class="facility-badge-inner facility-badge-caution">` +
       `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">` +
@@ -259,7 +255,7 @@ function renderRecommendedPlaces() {
     nearestThree.forEach(p => {
       const style = PLACE_STYLE[p.category] || { emoji: "📍", label: p.category };
       addGlowZone(recommendedLayer, p.lat, p.lng, 120, SAFE_ZONE_COLOR);
-      L.marker([p.lat, p.lng], { icon: shieldDivIcon(), interactive: true })
+      NMap.marker([p.lat, p.lng], { icon: shieldDivIcon(), interactive: true })
         .addTo(recommendedLayer)
         .bindPopup(`<strong>🛡️ ${p.name}</strong><br/>${style.label} · 안전 영향권`);
     });
@@ -270,7 +266,7 @@ function renderRecommendedPlaces() {
       const hotspot = nearestHotspot(zoneSet, state.location.lat, state.location.lng);
       if (hotspot && hotspot.dist <= CAUTION_ZONE_MAX_DIST_M) {
         addGlowZone(recommendedLayer, hotspot.lat, hotspot.lng, 130, CAUTION_ZONE_COLOR);
-        L.marker([hotspot.lat, hotspot.lng], { icon: cautionDivIcon(), interactive: true })
+        NMap.marker([hotspot.lat, hotspot.lng], { icon: cautionDivIcon(), interactive: true })
           .addTo(recommendedLayer)
           .bindPopup("<strong>⚠️ 주의 구간</strong><br/>실측 데이터 기준 안전 인프라 보완이 필요한 구간이에요");
       }
@@ -330,7 +326,7 @@ function updateHeading(lat, lng) {
 }
 
 function arrowDivIcon(headingDeg) {
-  return L.divIcon({
+  return NMap.divIcon({
     className: "user-arrow-icon",
     html: `<div class="user-arrow-inner" style="transform: rotate(${headingDeg}deg)">` +
       `<svg viewBox="0 0 24 24" width="28" height="28">` +
@@ -368,7 +364,7 @@ function refreshLiveLocationUI() {
   if (homeMap) {
     // 홈 지도는 방향 표시 없이 단순한 점으로 유지(사용자 요청, 2026-09-24)
     if (!userMarkerHome) {
-      userMarkerHome = L.circleMarker(latlng, {
+      userMarkerHome = NMap.circleMarker(latlng, {
         radius: 8, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.9, weight: 3,
       }).addTo(homeMap).bindPopup("내 위치(실시간)");
     } else {
@@ -380,7 +376,7 @@ function refreshLiveLocationUI() {
     // 안심경로 지도는 이동 방향을 알 수 있는 파란 화살표로 표시(사용자 요청, 2026-09-24)
     updateHeading(state.location.lat, state.location.lng);
     if (!userMarkerRoute) {
-      userMarkerRoute = L.marker(latlng, { icon: arrowDivIcon(currentHeadingDeg) })
+      userMarkerRoute = NMap.marker(latlng, { icon: arrowDivIcon(currentHeadingDeg) })
         .addTo(routeMap).bindPopup("내 위치(실시간)");
     } else {
       userMarkerRoute.setLatLng(latlng);
@@ -406,17 +402,13 @@ const DEST_CATEGORY_STYLE = {
   address: { color: "#0891b2", emoji: "🏠", label: "주소" },
 };
 
-const ROUTE_TYPE_COLOR = { fast: "#94a3b8", balanced: "#f97316", safe: "#16a34a" };
+const ROUTE_TYPE_COLOR = { fast: "#94a3b8", safe: "#16a34a" };
 
 function initRouteMap() {
-  routeMap = L.map("route-map", { zoomControl: false, dragging: true }).setView(
+  routeMap = NMap.map("route-map", { zoomControl: false }).setView(
     state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER, 13
   );
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    attribution: "&copy; OpenStreetMap contributors",
-    detectRetina: true, // 폰 화면(고해상도)에서 타일 일부만 채워지는 문제 방지
-  }).addTo(routeMap);
-  routeLayers = L.layerGroup().addTo(routeMap);
+  routeLayers = NMap.layerGroup().addTo(routeMap);
 }
 
 async function loadDestinations() {
@@ -678,22 +670,29 @@ function setRouteStatus(message, isError = false) {
 
 function renderRouteResult(data) {
   state.routeResult = data;
-  routeLayers.clearLayers();
 
-  L.circleMarker([data.start.lat, data.start.lng], { radius: 7, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.95, weight: 3 })
-    .addTo(routeLayers).bindPopup(state.routeStart ? `출발지 · ${state.routeStart.name}` : "출발지 · 내 현재 위치");
-  L.circleMarker([data.end.lat, data.end.lng], { radius: 7, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 0.95, weight: 3 })
-    .addTo(routeLayers).bindPopup(state.routeDestination ? state.routeDestination.name : "도착지");
+  // 지도가 아직 안 떠 있어도(네이버 지도 SDK 로딩 실패 등) 아래 경로 옵션 목록/시간·거리
+  // 정보는 계속 보여준다 — 지도 관련 부분만 건너뛴다.
+  if (routeMap && routeLayers) {
+    routeLayers.clearLayers();
 
-  const polylines = {};
-  Object.entries(data.routes).forEach(([type, r]) => {
-    const latlngs = r.path.map(p => [p.lat, p.lng]);
-    polylines[type] = L.polyline(latlngs, {
-      color: ROUTE_TYPE_COLOR[type], weight: type === state.selectedRouteType ? 6 : 3,
-      opacity: type === state.selectedRouteType ? 0.95 : 0.45,
-    }).addTo(routeLayers);
-  });
-  state._routePolylines = polylines;
+    NMap.circleMarker([data.start.lat, data.start.lng], { radius: 7, color: "#1d4ed8", fillColor: "#1d4ed8", fillOpacity: 0.95, weight: 3 })
+      .addTo(routeLayers).bindPopup(state.routeStart ? `출발지 · ${state.routeStart.name}` : "출발지 · 내 현재 위치");
+    NMap.circleMarker([data.end.lat, data.end.lng], { radius: 7, color: "#dc2626", fillColor: "#dc2626", fillOpacity: 0.95, weight: 3 })
+      .addTo(routeLayers).bindPopup(state.routeDestination ? state.routeDestination.name : "도착지");
+
+    const polylines = {};
+    Object.entries(data.routes).forEach(([type, r]) => {
+      const latlngs = r.path.map(p => [p.lat, p.lng]);
+      polylines[type] = NMap.polyline(latlngs, {
+        color: ROUTE_TYPE_COLOR[type], weight: type === state.selectedRouteType ? 6 : 3,
+        opacity: type === state.selectedRouteType ? 0.95 : 0.45,
+      }).addTo(routeLayers);
+    });
+    state._routePolylines = polylines;
+  } else {
+    state._routePolylines = null;
+  }
 
   const options = document.getElementById("route-options");
   options.hidden = false;
@@ -716,9 +715,11 @@ function renderRouteResult(data) {
   // 검색 직전에 도착지 입력창 포커스가 빠지면서 폰 키보드가 내려가고, 그 사이 지도
   // 크기가 바뀌었을 수 있다 — fitBounds로 화면을 맞추기 직전에 한 번 더 크기를
   // 재계산해서, 이미 사라진 키보드 공간만큼 지도가 반절 잘려 보이는 걸 방지한다.
-  routeMap.invalidateSize();
-  const selected = polylines[state.selectedRouteType];
-  if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
+  if (routeMap && state._routePolylines) {
+    routeMap.invalidateSize();
+    const selected = state._routePolylines[state.selectedRouteType];
+    if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
+  }
 }
 
 function highlightRouteType(type) {
@@ -730,7 +731,7 @@ function highlightRouteType(type) {
     if (t === type) line.bringToFront();
   });
   const selected = state._routePolylines[type];
-  if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
+  if (routeMap && selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
 }
 
 // 안심경로 출발지 좌표를 돌려준다: 사용자가 "✏️ 수정"으로 직접 고른 장소가 있으면 그걸,
@@ -1084,12 +1085,47 @@ function initReportForm() {
   });
 }
 
+// 2026-09-26: 지도 표시 엔진을 Leaflet+OpenStreetMap → 네이버 지도 JS SDK로 교체.
+// 네이버 지도는 Client ID(NAVER_MAP_CLIENT_ID)를 서버에서 받아와 SDK 스크립트를
+// 그때그때 불러와야 해서, 지도 초기화 전에 이 과정을 먼저 기다린다. Client ID가
+// 아직 설정 안 됐거나(Render 환경변수 미등록) 네이버 쪽에 이 도메인이 아직 허용
+// 목록에 없으면 로딩이 실패할 수 있는데, 그 경우에도 앱 자체는 계속 쓸 수 있도록
+// 지도만 빈 화면으로 남기고 나머지 기능(경로 찾기 결과 목록, 위험신고 등)은 그대로 동작시킨다.
+async function loadNaverSdk() {
+  try {
+    const config = await fetch(`${SAFETY_API_BASE}/api/config`).then(r => r.json());
+    await NMap.loadSdk(config.naverMapClientId);
+    return true;
+  } catch (e) {
+    console.warn("[naver-map] 지도 SDK 로딩 실패(지도 없이 계속 진행):", e);
+    return false;
+  }
+}
+
+function showMapUnavailableNotice() {
+  ["map-home", "route-map"].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;' +
+      'padding:16px;text-align:center;font-size:13px;color:#64748b;background:#f1f4f9;">' +
+      '지도를 불러오지 못했어요. 잠시 후 앱을 다시 열어주세요.</div>';
+  });
+}
+
 // ---------- 앱 초기화 ----------
 async function initApp() {
   await Promise.all([loadTopZones(), loadRecommendedPlaces(), loadDestinations()]);
   initTabs();
-  initHomeMap();
-  initRouteMap();
+
+  const mapReady = await loadNaverSdk();
+  if (mapReady) {
+    initHomeMap();
+    initRouteMap();
+  } else {
+    showMapUnavailableNotice();
+  }
+
   initMapResizeSafety();
   refreshLiveLocationUI(); // 홈 지도 초기화 시점엔 없던 안심경로 지도에도 현재 위치 마커를 바로 찍는다
   initRouteForm();

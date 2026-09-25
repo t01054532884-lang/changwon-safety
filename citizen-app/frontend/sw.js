@@ -1,19 +1,17 @@
-const CACHE_NAME = "anshim-gil-v3";
+// 2026-09-26: 지도 표시 엔진을 Leaflet+OpenStreetMap → 네이버 지도 JS SDK로 교체하면서
+// 캐시 이름을 올려 예전 v3 캐시(leaflet 파일 포함)를 정리한다(activate 핸들러가 처리).
+const CACHE_NAME = "anshim-gil-v4";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./css/style.css",
+  "./js/naver-map-shim.js",
   "./js/app.js",
   "./manifest.json",
   "./data/child_top10.geojson",
   "./data/elderly_top10.geojson",
   "./data/recommended_places.json",
   "./data/destinations.json",
-  "./vendor/leaflet/leaflet.css",
-  "./vendor/leaflet/leaflet.js",
-  "./vendor/leaflet/images/marker-icon.png",
-  "./vendor/leaflet/images/marker-icon-2x.png",
-  "./vendor/leaflet/images/marker-shadow.png",
 ];
 
 self.addEventListener("install", (event) => {
