@@ -162,6 +162,43 @@ button, input, select, textarea {
   cursor: pointer;
 }
 
+/* ===================== 프로필 수정(연령대/성별 다시 고르기) ===================== */
+/* 2026-09-26 추가: 온보딩과 같은 choice-card 스타일을 재사용하되, 전체 화면을 덮는
+   온보딩과 달리 헤더 프로필 버튼을 눌렀을 때 뜨는 작은 시트 형태로 만든다. */
+.profile-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 200;
+}
+.profile-edit-card {
+  width: 100%;
+  max-width: 480px;
+  background: var(--color-surface);
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px calc(20px + var(--safe-area-bottom));
+  max-height: 82vh;
+  overflow-y: auto;
+}
+.profile-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.profile-edit-head h2 { font-size: 17px; margin: 0; }
+.profile-edit-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  margin: 16px 0 8px;
+}
+.profile-edit-card .choice-grid { margin-bottom: 0; }
+.profile-edit-card .choice-card { padding: 12px 14px; font-size: 14.5px; }
+
 /* ===================== 앱 셸 ===================== */
 .app {
   height: 100%;
