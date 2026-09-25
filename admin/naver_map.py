@@ -465,7 +465,7 @@ if(risk){
 const safeCells=DATA.safeCells||[];
 if(safeCells.length){
   const safeIcon=
-    '<svg width="18" height="17" viewBox="0 0 30 28">'+
+    '<svg width="24" height="22" viewBox="0 0 30 28">'+
     '<polygon points="15,2 28,26 2,26" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round"/>'+
     '<polygon points="15,2 28,26 2,26" fill="rgba(22,163,74,.15)" stroke="#16A34A" stroke-width="3.5" stroke-linejoin="round"/>'+
     '</svg>';
@@ -476,8 +476,8 @@ if(safeCells.length){
       title:"안전요소 3종 충족 (CCTV·보안등·Wi-Fi)",
       icon:{
         content:safeIcon,
-        size:new naver.maps.Size(18,17),
-        anchor:new naver.maps.Point(9,9)
+        size:new naver.maps.Size(24,22),
+        anchor:new naver.maps.Point(12,11)
       },
       zIndex:120
     });
