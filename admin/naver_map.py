@@ -432,7 +432,37 @@ if(legendLabel){
 }  
   function markerContent(kind,count){const symbols={cctv:"C",light:"L",wifi:"W",police:"P"};return '<div class="facility-marker '+kind+'">'+(count>1?count:symbols[kind])+'</div>';}
   function clearFacility(kind){(groups[kind]||[]).forEach(m=>m.setMap(null));groups[kind]=[];}
-  function redrawFacility(kind){clearFacility(kind);if(!facilityState[kind])return;const points=DATA.facilities[kind]||[];if(!points.length)return;const zoom=map.getZoom();const bounds=map.getBounds();const cell=zoom>=17?0.00002:0.035/Math.pow(2,Math.max(0,zoom-10));const buckets=new Map();for(const point of points){const pos=new naver.maps.LatLng(point[0],point[1]);if(bounds&&!bounds.hasLatLng(pos))continue;const key=Math.floor(point[0]/cell)+":"+Math.floor(point[1]/cell);let bucket=buckets.get(key);if(!bucket){bucket={lat:0,lng:0,count:0,label:point[2]||"",address:point[3]||""};buckets.set(key,bucket)}bucket.lat+=point[0];bucket.lng+=point[1];bucket.count++}for(const bucket of buckets.values()){const marker=new naver.maps.Marker({position:new naver.maps.LatLng(bucket.lat/bucket.count,bucket.lng/bucket.count),map,title:bucket.count>1?bucket.count+"개 시설":bucket.label,icon:{content:markerContent(kind,bucket.count),size:new naver.maps.Size(30,26),anchor:new naver.maps.Point(15,13)},zIndex:90});if(bucket.label)naver.maps.Event.addListener(marker,"click",()=>openInfo(marker,kind==="police"&&bucket.count===1?'<b>'+esc(bucket.label)+'</b><br>주소: '+esc(bucket.address):'<b>'+esc(bucket.label)+'</b><br>'+(bucket.count>1?"주변 시설 "+bucket.count+"개":"원본 시설 위치")));groups[kind].push(marker)}}
+  function redrawFacility(kind){
+    clearFacility(kind);
+    if(!facilityState[kind])return;
+    const points=DATA.facilities[kind]||[];
+    if(!points.length)return;
+    const zoom=map.getZoom();
+    const bounds=map.getBounds();
+    const sw=bounds?bounds.getSW():null;
+    const ne=bounds?bounds.getNE():null;
+    const south=sw?sw.lat():-90,west=sw?sw.lng():-180;
+    const north=ne?ne.lat():90,east=ne?ne.lng():180;
+    const visible=[];
+    for(const point of points){
+      if(point[0]<south||point[0]>north||point[1]<west||point[1]>east)continue;
+      visible.push(point);
+    }
+    const MAX_MARKERS=200;
+    let cell=zoom>=19?0.00002:0.035/Math.pow(2,Math.max(0,zoom-10));
+    let buckets;
+    for(let attempt=0;attempt<6;attempt++){
+      buckets=new Map();
+      for(const point of visible){
+        const key=Math.floor(point[0]/cell)+":"+Math.floor(point[1]/cell);
+        let bucket=buckets.get(key);
+        if(!bucket){bucket={lat:0,lng:0,count:0,label:point[2]||"",address:point[3]||""};buckets.set(key,bucket)}
+        bucket.lat+=point[0];bucket.lng+=point[1];bucket.count++;
+      }
+      if(buckets.size<=MAX_MARKERS)break;
+      cell*=2;
+    }
+    for(const bucket of buckets.values()){const marker=new naver.maps.Marker({position:new naver.maps.LatLng(bucket.lat/bucket.count,bucket.lng/bucket.count),map,title:bucket.count>1?bucket.count+"개 시설":bucket.label,icon:{content:markerContent(kind,bucket.count),size:new naver.maps.Size(30,26),anchor:new naver.maps.Point(15,13)},zIndex:90});if(bucket.label)naver.maps.Event.addListener(marker,"click",()=>openInfo(marker,kind==="police"&&bucket.count===1?'<b>'+esc(bucket.label)+'</b><br>주소: '+esc(bucket.address):'<b>'+esc(bucket.label)+'</b><br>'+(bucket.count>1?"주변 시설 "+bucket.count+"개":"원본 시설 위치")));groups[kind].push(marker)}}
   function redrawFacilities(){Object.keys(facilityState).forEach(redrawFacility)}
   function initNaverMap(){
     try{
