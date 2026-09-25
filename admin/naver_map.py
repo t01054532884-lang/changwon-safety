@@ -48,21 +48,26 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   <span style="font-weight:600;color:#64748b;font-size:10.5px">· 확대 시 표시</span>
 </div>
 
+<div class="legend-row" style="margin:2px 0 0 0;color:#64748b;font-size:10px;font-weight:700;white-space:nowrap">
+  <span style="display:inline-block;width:34px;text-align:center">격자만</span>
+  <span style="display:inline-block;width:52px;text-align:center">원본과 함께</span>
+</div>
+
 <div class="legend-row">
-  <span class="dot"
-        style="background:#FCA5A5;border:2px solid #F87171;border-radius:2px"></span>
+  <span style="display:inline-block;width:34px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;background:#FCA5A5;border:2px solid #F87171"></span></span>
+  <span style="display:inline-block;width:52px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;border:1.5px dashed #F87171"></span></span>
   10% 미만
 </div>
 
 <div class="legend-row">
-  <span class="dot"
-        style="background:#EF4444;border:2px solid #B91C1C;border-radius:2px"></span>
+  <span style="display:inline-block;width:34px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;background:#EF4444;border:2px solid #B91C1C"></span></span>
+  <span style="display:inline-block;width:52px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;border:2.5px solid #DC2626"></span></span>
   10 ~ 25%
 </div>
 
 <div class="legend-row">
-  <span class="dot"
-        style="background:#991B1B;border:2px solid #450A0A;border-radius:2px"></span>
+  <span style="display:inline-block;width:34px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;background:#991B1B;border:2px solid #450A0A"></span></span>
+  <span style="display:inline-block;width:52px;text-align:center"><span style="display:inline-block;width:13px;height:13px;border-radius:2px;box-sizing:border-box;background:rgba(127,29,29,.12);border:3px solid #7F1D1D"></span></span>
   25% 이상
 </div>
 
