@@ -1,9 +1,9 @@
-"""창원 안심길 — Stage 3(+Tmap 연동): 안심경로(최단/안심우선) 라우팅 엔진.
+"""창원 안심길 — Stage 3(+Tmap 연동): 안심경로(최단/균형/안심우선) 라우팅 엔진.
  
 우선순위:
 1. TMAP_APP_KEY가 설정돼 있으면 Tmap(SK Open API) 보행자 경로 API로 "최단" 경로를
    실제 도로(보도)를 따라 받아오고, 실측 위험도가 낮은 지점들을 경유지로 넣어 다시
-   Tmap을 호출해가며 "안심 우선" 경로 후보를 탐색한다 (_tmap_compute_routes).
+   Tmap을 호출해가며 "균형"/"안심 우선" 경로 후보를 탐색한다 (_tmap_compute_routes).
 2. Tmap 호출이 실패하면(키 없음/네트워크 오류/응답 이상) 아래 격자 기반 다익스트라
    방식으로 자동 폴백한다(_compute_routes_grid) — 이 샌드박스 개발 환경은 애초에
    Tmap 서버에 네트워크로 접근할 수 없어서 만든 임시 방식이었고, 배포 환경에서
@@ -36,6 +36,7 @@ WALK_SPEED_M_PER_MIN = 80.0  # 도보 약 4.8km/h 가정
  
 VARIANTS = {
     "fast": {"label": "최단", "risk_weight": 0.0},
+    "balanced": {"label": "균형", "risk_weight": 1.4},
     "safe": {"label": "안심 우선", "risk_weight": 4.5},
 }
  
@@ -299,13 +300,18 @@ def _tmap_route_result(key: str, label: str, tmap_result: dict, age_group: str) 
  
  
 def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str) -> dict:
-    """Tmap 보행자 API로 실제 도로 형상의 2경로(최단/안심우선)를 만든다.
+    """Tmap 보행자 API로 실제 도로 형상의 3경로(최단/균형/안심우선)를 만든다.
  
     Tmap 자체는 위험도 기반 경로를 지원하지 않으므로, 우리가 risk_at()으로 뽑은
     저위험 경유지 후보들을 하나씩 넣어 Tmap을 다시 호출해보고, 그중 실제로 평균
-    위험도가 낮아지는 경로를 "안심 우선"으로 채택한다. 후보 호출이 전부
+    위험도가 낮아지는 경로를 "균형"/"안심 우선"으로 채택한다. 후보 호출이 전부
     실패하거나 개선이 없으면 "최단" 경로를 그대로 재사용한다(그래도 실제 도로
     형상은 유지됨).
+ 
+    2026-09-26 재추가: 최단 대비 안심우선(1.8배 상한) 경로가 너무 많이 돌아갈 수
+    있다는 우려로, 더 짧게 돌아가는 중간 선택지가 다시 필요해졌다 — 최단의
+    1.3배까지만 돌아가도록 상한을 좁힌 "균형" 경로를 복원한다(이전에 한 번
+    제거했던 것과 정확히 같은 정의: risk_weight=1.4, max_distance_ratio=1.3).
     """
     straight_m = haversine_m(start_lat, start_lng, end_lat, end_lng)
     if straight_m > MAX_STRAIGHT_M:
@@ -341,9 +347,10 @@ def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str)
         picked["label"] = label
         return picked
  
+    balanced = pick_variant("balanced", "균형", 1.3, fast)
     safe = pick_variant("safe", "안심 우선", 1.8, fast)
  
-    routes = {"fast": fast, "safe": safe}
+    routes = {"fast": fast, "balanced": balanced, "safe": safe}
     return {
         "start": {"lat": start_lat, "lng": start_lng},
         "end": {"lat": end_lat, "lng": end_lng},
@@ -353,7 +360,7 @@ def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str)
         "engine": "tmap",
         "note": (
             "Tmap(SK Open API) 보행자 경로 API로 계산한 실제 도로(보도) 기반 경로입니다. "
-            "안심 우선 경로는 실측 CCTV·보안등·Wi-Fi·파출소 접근성 및 연령대별 TOP10 "
+            "균형/안심 우선 경로는 실측 CCTV·보안등·Wi-Fi·파출소 접근성 및 연령대별 TOP10 "
             "취약지역 근접도(risk_at)가 낮은 경유지를 지나도록 Tmap에 재요청해 선택한 결과입니다."
         ),
     }
