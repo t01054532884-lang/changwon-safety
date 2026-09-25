@@ -170,16 +170,30 @@ NMap.map = function (elementId, opts = {}) {
     _zoomControl: !!opts.zoomControl,
     setView(center, zoom) {
       if (!this._naverMap) {
-        this._naverMap = new naver.maps.Map(this._elementId, {
-          center: new naver.maps.LatLng(center[0], center[1]),
-          zoom: zoom,
-          zoomControl: this._zoomControl,
-        });
-        this._infoWindow = new naver.maps.InfoWindow({
-          borderWidth: 0,
-          backgroundColor: "transparent",
-          anchorSize: new naver.maps.Size(10, 8),
-        });
+        // 2026-09-25 추가: 홈 지도가 계속 빈 화면으로 남는 원인을 실기기 콘솔 로그로
+        // 직접 확인하기 위한 진단용 로그(+ 지금까지는 생성자를 try/catch로 감싸지
+        // 않고 있었는데, 혹시 여기서 조용히 예외가 나고 있을 가능성도 같이 확인한다).
+        const containerEl = document.getElementById(this._elementId);
+        console.log(
+          "[NMap] " + this._elementId + " 지도 생성 시도, 컨테이너 크기:",
+          containerEl ? containerEl.getBoundingClientRect() : "(엘리먼트 없음)"
+        );
+        try {
+          this._naverMap = new naver.maps.Map(this._elementId, {
+            center: new naver.maps.LatLng(center[0], center[1]),
+            zoom: zoom,
+            zoomControl: this._zoomControl,
+          });
+          this._infoWindow = new naver.maps.InfoWindow({
+            borderWidth: 0,
+            backgroundColor: "transparent",
+            anchorSize: new naver.maps.Size(10, 8),
+          });
+          console.log("[NMap] " + this._elementId + " 지도 생성 성공:", this._naverMap);
+        } catch (e) {
+          console.error("[NMap] " + this._elementId + " 지도 생성 중 예외 발생:", e);
+          throw e;
+        }
       } else {
         this._naverMap.setCenter(new naver.maps.LatLng(center[0], center[1]));
         this._naverMap.setZoom(zoom);
@@ -188,6 +202,13 @@ NMap.map = function (elementId, opts = {}) {
     },
     invalidateSize() {
       if (!this._naverMap) return this;
+      {
+        const containerEl = document.getElementById(this._elementId);
+        console.log(
+          "[NMap] " + this._elementId + " invalidateSize 호출, 컨테이너 크기:",
+          containerEl ? containerEl.getBoundingClientRect() : "(엘리먼트 없음)"
+        );
+      }
       // 2026-09-25 실기기 확인 결과: 홈 지도는 아예 안 보이고, 안심경로 지도는 생성 당시의
       // 작은 크기로만 타일이 채워진 채 나머지는 빈 화면으로 남는 문제가 발견됨. 원인은
       // 두 가지였다 — (1) refresh(true)만 믿고 resize 이벤트+재중심을 항상 하지는
