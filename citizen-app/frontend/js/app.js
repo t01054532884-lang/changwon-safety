@@ -231,6 +231,12 @@ function initHomeMap() {
   homeMap = NMap.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
   // 네이버 지도는 Map 생성 시 자체 타일을 그려주므로 별도 타일 레이어 추가가 필요 없다.
  
+  // 2026-09-25 추가: 실기기에서 홈 지도가 아예 안 보이는 문제 확인 — 다른 탭(안심경로)은
+  // switchTab()에서 탭을 바꿀 때마다 invalidateSize()를 불러주지만, 홈은 앱이 열리자마자
+  // 이미 활성 탭이라 그 코드를 한 번도 못 거친다. 레이아웃이 자리잡을 시간을 살짝 준 뒤
+  // 강제로 한 번 크기를 다시 맞춰준다.
+  setTimeout(() => { if (homeMap) homeMap.invalidateSize(); }, 120);
+ 
   recommendedLayer = NMap.layerGroup().addTo(homeMap);
   renderRecommendedPlaces();
   refreshLiveLocationUI();
