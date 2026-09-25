@@ -438,6 +438,7 @@ if(legendLabel){
     const points=DATA.facilities[kind]||[];
     if(!points.length)return;
     const zoom=map.getZoom();
+    if(zoom<14)return;
     const bounds=map.getBounds();
     const sw=bounds?bounds.getSW():null;
     const ne=bounds?bounds.getNE():null;
@@ -448,7 +449,7 @@ if(legendLabel){
       if(point[0]<south||point[0]>north||point[1]<west||point[1]>east)continue;
       visible.push(point);
     }
-    const MAX_MARKERS=200;
+    const MAX_MARKERS=100;
     let cell=zoom>=19?0.00002:0.035/Math.pow(2,Math.max(0,zoom-10));
     let buckets;
     for(let attempt=0;attempt<6;attempt++){
