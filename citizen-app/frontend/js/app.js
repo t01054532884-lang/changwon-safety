@@ -265,6 +265,7 @@ function currentZoneSet() {
 }
  
 let recommendedLayer; // 추천시설 마커 레이어(위치 갱신 시마다 다시 그리므로 그룹으로 관리)
+let safetyTriangleLayer; // "안전요소 3종 충족" 초록 삼각형 마커 레이어(2026-09-26 추가)
  
 // 2026-09-25 추가(2차 수정): setTimeout 120ms로 홈 지도 크기를 강제 보정해봤지만 실기기
 // 스크린샷에서 여전히 빈 화면으로 남는 사례가 확인됨. 홈 지도 컨테이너(#map-home)는
@@ -332,12 +333,18 @@ function initHomeMap() {
   watchMapContainerSize("map-home", () => homeMap, "home");
  
   recommendedLayer = NMap.layerGroup().addTo(homeMap);
+  safetyTriangleLayer = NMap.layerGroup().addTo(homeMap);
   // 2026-09-25 추가: 이 두 함수 중 하나가 조용히 예외를 던지면 이후 코드(안심경로 지도
   // 생성 포함)까지 통째로 멈출 수 있어서, 문제를 격리하기 위해 각각 try/catch로 감쌈.
   try {
     renderRecommendedPlaces();
   } catch (e) {
     console.error("[naver-map][home] renderRecommendedPlaces 중 예외:", e);
+  }
+  try {
+    renderSafetyTriangles();
+  } catch (e) {
+    console.error("[naver-map][home] renderSafetyTriangles 중 예외:", e);
   }
   try {
     refreshLiveLocationUI();
@@ -391,6 +398,20 @@ function cautionDivIcon() {
       `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#fff" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">` +
       `<path d="M12 3.5l9 15.5H3z"/><line x1="12" y1="9.5" x2="12" y2="13.2"/><circle cx="12" cy="16" r="0.35" fill="#fff" stroke="none"/></svg></div>`,
     iconSize: [32, 32], iconAnchor: [16, 16],
+  });
+}
+ 
+// 2026-09-26 추가: 관리자 웹 지도에 이미 있는 "안전요소 3종 충족"(CCTV+보안등+공공Wi-Fi가
+// 모두 가까운 지점) 초록 삼각형(△)을 시민 앱 홈 지도에도 그대로 옮겨왔다 — admin/app.py
+// (admin/naver_map.py)의 safe-support-triangle과 같은 흰 테두리+초록 삼각형 모양.
+function safetyTriangleDivIcon() {
+  return NMap.divIcon({
+    html: `<div style="filter: drop-shadow(0 2px 2px rgba(20,83,45,.5));">` +
+      `<svg width="26" height="24" viewBox="0 0 30 28">` +
+      `<polygon points="15,2 28,26 2,26" fill="none" stroke="#fff" stroke-width="5" stroke-linejoin="round"/>` +
+      `<polygon points="15,2 28,26 2,26" fill="rgba(22,163,74,.10)" stroke="#16a34a" stroke-width="3" stroke-linejoin="round"/>` +
+      `</svg></div>`,
+    iconSize: [26, 24], iconAnchor: [13, 23],
   });
 }
  
@@ -452,6 +473,53 @@ function renderRecommendedPlaces() {
   });
   if (nearestThree.length === 0) {
     ul.innerHTML = "<li>주변 추천시설 정보를 불러오지 못했어요.</li>";
+  }
+}
+ 
+// 2026-09-26 추가: 관리자 웹 지도에 이미 있는 "안전요소 3종 충족"(CCTV+보안등+공공Wi-Fi)
+// 초록 삼각형을 시민 앱 홈 지도에도 표시. 도시 전역이 아니라 /api/safety-triangles가
+// 내 위치 주변 반경만 걸러서 주므로, 여기서는 그 결과를 그대로 그리기만 한다.
+// GPS가 몇 초마다 갱신될 때마다 매번 다시 요청하면 낭비이므로, 마지막으로 불러온
+// 지점에서 일정 거리 이상 움직였을 때만 다시 불러온다(안심경로 화살표 방향 계산과
+// 같은 방식의 스로틀링).
+let lastTriangleFetchAt = null;
+const TRIANGLE_REFRESH_MIN_MOVE_M = 80;
+ 
+function triangleGlow(lat, lng) {
+  NMap.circle([lat, lng], {
+    radius: 26, stroke: false, fillColor: "#16a34a", fillOpacity: 0.10, interactive: false,
+  }).addTo(safetyTriangleLayer);
+}
+ 
+async function renderSafetyTriangles() {
+  if (!homeMap || !safetyTriangleLayer || !state.location) return;
+  const { lat, lng } = state.location;
+ 
+  if (lastTriangleFetchAt) {
+    const moved = haversineM(lastTriangleFetchAt.lat, lastTriangleFetchAt.lng, lat, lng);
+    if (moved < TRIANGLE_REFRESH_MIN_MOVE_M) return; // 크게 안 움직였으면 다시 불러오지 않음
+  }
+  lastTriangleFetchAt = { lat, lng };
+ 
+  try {
+    const res = await fetch(`/api/safety-triangles?lat=${lat}&lng=${lng}&radius_m=700&limit=30`);
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    if (!safetyTriangleLayer) return; // 응답 오는 사이 지도가 없어졌을 수도 있음
+    safetyTriangleLayer.clearLayers();
+    (data.sites || []).forEach(site => {
+      triangleGlow(site.lat, site.lng);
+      NMap.marker([site.lat, site.lng], { icon: safetyTriangleDivIcon(), interactive: true })
+        .addTo(safetyTriangleLayer)
+        .bindPopup(
+          `<strong style="color:#15803d">안전요소 3종 충족 △</strong><br/>` +
+          `CCTV 최근접 ${Math.round(site.cctv_distance_m)}m · 보안등 최근접 ${Math.round(site.light_distance_m)}m<br/>` +
+          `<small style="color:#6b7280">CCTV·보안등·공공Wi-Fi가 모두 가까운 지점이에요. ` +
+          `시설 접근성을 나타내며 절대적인 안전을 보장하지는 않아요.</small>`
+        );
+    });
+  } catch (e) {
+    console.error("[safety-triangles] 불러오기 실패:", e);
   }
 }
  
@@ -549,9 +617,18 @@ function refreshLiveLocationUI() {
       userMarkerRoute.setLatLng(latlng);
       userMarkerRoute.setIcon(arrowDivIcon(currentHeadingDeg));
     }
+    // 2026-09-26 추가: 화살표는 이미 실시간으로 움직이고 있었지만, 지도 화면 자체는
+    // 처음 지정한 위치에 고정돼 있어서 많이 걸으면 화살표가 화면 밖으로 나가버리는
+    // 문제가 있었다("경로만 뜨고 내 위치를 못 따라간다"는 요청) — 안심경로 탭을
+    // 보고 있는 동안에는 위치가 갱신될 때마다 지도를 내 위치로 같이 이동시킨다.
+    // 줌 레벨은 건드리지 않아(panTo) 사용자가 손으로 확대/축소해둔 상태는 유지된다.
+    if (state.activeTab === "route") routeMap.panTo(latlng);
   }
  
-  if (state.activeTab === "home") renderRecommendedPlaces();
+  if (state.activeTab === "home") {
+    renderRecommendedPlaces();
+    renderSafetyTriangles();
+  }
   if (state.activeTab === "report") updateReportLocationText();
 }
  
