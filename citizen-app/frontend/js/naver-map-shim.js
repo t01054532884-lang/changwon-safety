@@ -223,6 +223,22 @@ NMap.map = function (elementId, opts = {}) {
         // 스타일과, 네이버 지도가 안에 실제로 그려넣은 자식 구조를 같이 찍어서 정확히
         // 어느 레벨에서 0이 되는지 확인한다.
         if (containerEl && rect && (rect.width > 0) !== (rect.height > 0)) {
+          // 2026-09-26 추가: 부모 체인 로그로 #map-home의 바로 위 부모(.tab-panel)는
+          // height:1186으로 정상인데 #map-home 자신만 height:0으로 붕괴하는 것이
+          // 실제로 확인됨 — 인라인 스타일도 없으므로, 네이버 SDK가 별도 <style> 삽입
+          // 등으로 position을 덮어썼을 가능성을 getComputedStyle로 직접 확인한다.
+          try {
+            const cs = window.getComputedStyle ? window.getComputedStyle(containerEl) : null;
+            if (cs) {
+              console.log(
+                "[NMap-debug] " + this._elementId + " computedStyle position=" + cs.position +
+                  " display=" + cs.display + " height=" + cs.height + " width=" + cs.width +
+                  " top=" + cs.top + " bottom=" + cs.bottom
+              );
+            }
+          } catch (e) {
+            // getComputedStyle 자체가 실패해도 아래 부모 체인 로그는 계속 진행한다.
+          }
           let el = containerEl;
           for (let depth = 0; depth <= 3 && el; depth++) {
             console.log(
@@ -439,3 +455,4 @@ NMap.polyline = function (latlngs, opts = {}) {
   };
   return overlay;
 };
+ 
