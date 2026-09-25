@@ -1169,6 +1169,16 @@ function showMapUnavailableNotice() {
   });
 }
  
+// 2026-09-25 추가: 네이버 지도의 인증 실패(window.navermap_authFailure)는 스크립트
+// 로딩 자체는 성공한 뒤에도 뒤늦게 발생할 수 있다(admin/naver_map.py에서도 같은
+// 이유로 fail()을 아무 때나 다시 호출해도 되게 짜여 있음). loadNaverSdk()가 이미
+// true를 반환해서 지도 초기화까지 끝난 뒤라도, 이 훅이 불리면 똑같이 "지도를 쓸 수
+// 없다"는 안내로 바꿔서 사용자가 깨진 지도를 보지 않게 한다.
+NMap.onAuthFailure = function (err) {
+  console.warn("[naver-map] 지도 초기화 이후 인증 실패 감지:", err);
+  showMapUnavailableNotice();
+};
+ 
 // ---------- 앱 초기화 ----------
 async function initApp() {
   await Promise.all([loadTopZones(), loadRecommendedPlaces(), loadDestinations()]);
