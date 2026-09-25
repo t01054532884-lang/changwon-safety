@@ -11,11 +11,11 @@
 <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-
+ 
   <!-- ===================== 온보딩 ===================== -->
   <div id="onboarding" class="onboarding">
     <div class="onboarding-card">
-
+ 
       <section class="ob-step" data-step="location">
         <div class="ob-icon">📍</div>
         <h1>내 주변 안전 정보를 보려면</h1>
@@ -23,7 +23,7 @@
         <button class="btn-primary" id="btn-allow-location">위치 허용하고 시작하기</button>
         <button class="btn-text" id="btn-skip-location">나중에 허용할게요</button>
       </section>
-
+ 
       <section class="ob-step" data-step="age" hidden>
         <div class="ob-icon">🧑‍🤝‍🧑</div>
         <h1>연령대를 선택해주세요</h1>
@@ -34,7 +34,7 @@
           <button class="choice-card" data-value="senior">🧓<span>고령자</span><small>노인 생활권 분석 적용</small></button>
         </div>
       </section>
-
+ 
       <section class="ob-step" data-step="gender" hidden>
         <div class="ob-icon">🙋</div>
         <h1>성별을 선택해주세요</h1>
@@ -45,18 +45,27 @@
           <button class="choice-card" data-value="none"><span>선택 안 함</span></button>
         </div>
       </section>
-
+ 
     </div>
   </div>
-
+ 
   <!-- ===================== 앱 본체 ===================== -->
   <div id="app" class="app" hidden>
-
+ 
     <header class="app-header">
       <span class="app-title">창원 안심길</span>
-      <button class="profile-chip" id="profile-chip">🧒 어린이 모드</button>
+      <div class="app-header-actions">
+        <!-- 2026-09-26 추가: 아직 실사용자에게 배포 전이라 실기기 GPS 없이도 창원시
+             곳곳에서 테스트해볼 수 있도록 만든 개발/테스트 전용 버튼. 누르면 백엔드
+             /api/random-location이 창원시 행정구역 경계(BOUNDARY) 내부에서 뽑아준
+             좌표로 내 위치를 그대로 덮어쓴다. 실사용자 배포 시 이 버튼을 뺄지 여부는
+             별도로 논의 필요(지금은 테스트 편의를 위해 항상 보이게 둠). -->
+        <button class="admin-random-btn" id="btn-admin-random-location"
+                title="테스트용: 창원시 경계 내 임의 위치로 내 위치를 바꿉니다">🎯 위치 랜덤</button>
+        <button class="profile-chip" id="profile-chip">🧒 어린이 모드</button>
+      </div>
     </header>
-
+ 
     <!-- 2026-09-26 추가: 온보딩 때 연령대/성별을 잘못 골랐을 수 있으니, 헤더의 프로필
          버튼(모든 탭에서 계속 보임)을 눌러서 언제든 다시 고칠 수 있게 함 -->
     <div id="profile-edit" class="profile-edit-overlay" hidden>
@@ -65,14 +74,14 @@
           <h2>프로필 수정</h2>
           <button type="button" class="btn-text" id="btn-close-profile-edit">닫기</button>
         </div>
-
+ 
         <p class="profile-edit-label">연령대</p>
         <div class="choice-grid" id="profile-age-choices">
           <button class="choice-card" data-value="child">🧒<span>어린이·청소년</span><small>어린이 생활권 분석 적용</small></button>
           <button class="choice-card" data-value="adult">🧑<span>성인</span><small>전체 지역 안전 분석 적용</small></button>
           <button class="choice-card" data-value="senior">🧓<span>고령자</span><small>노인 생활권 분석 적용</small></button>
         </div>
-
+ 
         <p class="profile-edit-label">성별</p>
         <div class="choice-grid choice-grid-3" id="profile-gender-choices">
           <button class="choice-card" data-value="female"><span>여성</span></button>
@@ -81,24 +90,24 @@
         </div>
       </div>
     </div>
-
+ 
     <main class="app-main">
-
+ 
       <!-- 홈 -->
       <section class="tab-panel" id="tab-home" data-tab="home">
         <div id="map-home" class="map"></div>
-
+ 
         <div class="floating-card map-legend">
           <span class="legend-item"><i class="legend-dot legend-dot-safe"></i>안전 영향권</span>
           <span class="legend-item"><i class="legend-dot legend-dot-caution"></i>주의 구간</span>
         </div>
-
+ 
         <div class="floating-card nearby-card nearby-card-compact">
           <div class="nearby-title">내 주변 안전시설 · 추천시설</div>
           <ul id="nearby-list" class="nearby-list"></ul>
         </div>
       </section>
-
+ 
       <!-- 안심경로 -->
       <section class="tab-panel" id="tab-route" data-tab="route" hidden>
         <div class="route-form">
@@ -118,11 +127,11 @@
           <p class="route-hint">목록에서 골라도 되고, 이름/주소를 입력한 채로 바로 경로 찾기를 눌러도 돼요.</p>
           <button class="btn-primary" id="btn-find-route" disabled>경로 찾기</button>
         </div>
-
+ 
         <p class="route-status" id="route-status" hidden></p>
-
+ 
         <div id="route-map" class="map map-short"></div>
-
+ 
         <div class="route-options" id="route-options" hidden>
           <button class="route-option" data-type="fast">
             <div class="route-option-head"><span>⚡ 최단</span><span class="route-time">-</span></div>
@@ -135,7 +144,7 @@
           <button class="btn-secondary" id="btn-save-destination" type="button">⭐ 이 장소 자주가는 곳으로 저장</button>
         </div>
       </section>
-
+ 
       <!-- 위험신고 -->
       <section class="tab-panel" id="tab-report" data-tab="report" hidden>
         <form id="report-form" class="report-form">
@@ -143,7 +152,7 @@
             <span>📍 신고 위치</span>
             <strong id="report-location-text">위치 확인 중…</strong>
           </div>
-
+ 
           <label class="report-field">
             <span>신고 유형 <em>필수</em></span>
             <select id="report-type" required>
@@ -155,26 +164,26 @@
               <option value="etc">기타</option>
             </select>
           </label>
-
+ 
           <label class="report-field">
             <span>사진 첨부 <em>(사진 또는 내용 중 1개 이상 필수)</em></span>
             <input id="report-image" type="file" accept="image/*" capture="environment" />
             <img id="report-image-preview" class="report-image-preview" hidden />
           </label>
-
+ 
           <label class="report-field">
             <span>상황 설명</span>
             <textarea id="report-desc" rows="4" placeholder="어떤 위험이 있었는지 알려주세요"></textarea>
           </label>
-
+ 
           <p class="report-status" id="report-status" hidden></p>
           <button type="submit" class="btn-primary" id="btn-submit-report" disabled>신고 접수하기</button>
           <p class="report-note">접수된 신고는 관리자 웹의 신고 접수함으로 전달됩니다.</p>
         </form>
-
+ 
         <div class="report-toast" id="report-toast" hidden>✅ 신고가 접수되었어요. 안전한 창원을 위해 알려주셔서 감사합니다.</div>
       </section>
-
+ 
       <!-- 저장 -->
       <section class="tab-panel" id="tab-save" data-tab="save" hidden>
         <div class="route-form">
@@ -184,29 +193,29 @@
             <ul id="save-search-suggestions" class="suggestion-list" hidden></ul>
           </label>
         </div>
-
+ 
         <p class="save-status" id="save-status" hidden></p>
-
+ 
         <ul class="saved-places-list" id="saved-places-list"></ul>
-
+ 
         <div class="empty-state" id="saved-places-empty">
           <div class="empty-icon">🔖</div>
           <p>아직 저장한 장소가 없어요.</p>
           <p class="empty-sub">위 검색창에서 자주 가는 곳을 최대 5개까지 저장해보세요. 저장한 장소를 누르면 바로 경로를 찾아줘요.</p>
         </div>
       </section>
-
+ 
     </main>
-
+ 
     <nav class="bottom-nav">
       <button class="nav-item is-active" data-tab="home"><span class="nav-icon">🏠</span><span>홈</span></button>
       <button class="nav-item" data-tab="route"><span class="nav-icon">🧭</span><span>안심경로</span></button>
       <button class="nav-item nav-item-report" data-tab="report"><span class="nav-icon">🚨</span><span>위험신고</span></button>
       <button class="nav-item" data-tab="save"><span class="nav-icon">📌</span><span>저장</span></button>
     </nav>
-
+ 
   </div>
-
+ 
 <script src="js/naver-map-shim.js"></script>
 <script src="js/app.js"></script>
 </body>
