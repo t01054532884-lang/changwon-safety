@@ -80,7 +80,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
         style="background:#fb923c;border:2px solid #c2410c;border-radius:2px"></span>
   <span id="final-top10-legend-label">최종 안전취약지역 TOP 10</span>
 </div>
-    <div class="legend-row"><span class="triangle">△</span>안전요소 3종 충족</div>
+    <div class="legend-row"><span class="triangle">△</span>안전요소 3종 충족 격자 <span style="font-weight:600;color:#64748b;font-size:10.5px">· 체크 시 표시</span></div>
     <div class="legend-row"><span class="boundary" style="border-top:3px solid #475569"></span>창원시 행정경계 (5개 구)</div>
   </div>
   <div id="map-error" class="error">네이버 지도를 불러오지 못했습니다.<br>API 서비스와 허용 Web 서비스 URL을 확인해 주세요.</div>
@@ -459,6 +459,45 @@ if(risk){
       riskOutlineMode=v;
       restyleRiskGrid();
     }
+  );
+}
+
+const safeCells=DATA.safeCells||[];
+if(safeCells.length){
+  const safeIcon=
+    '<svg width="18" height="17" viewBox="0 0 30 28">'+
+    '<polygon points="15,2 28,26 2,26" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round"/>'+
+    '<polygon points="15,2 28,26 2,26" fill="rgba(22,163,74,.15)" stroke="#16A34A" stroke-width="3.5" stroke-linejoin="round"/>'+
+    '</svg>';
+  const safeMarkers=safeCells.map(cell=>{
+    const marker=new naver.maps.Marker({
+      position:new naver.maps.LatLng(Number(cell.lat),Number(cell.lng)),
+      map:null,
+      title:"안전요소 3종 충족 (CCTV·보안등·Wi-Fi)",
+      icon:{
+        content:safeIcon,
+        size:new naver.maps.Size(18,17),
+        anchor:new naver.maps.Point(9,9)
+      },
+      zIndex:120
+    });
+    naver.maps.Event.addListener(marker,"click",()=>openInfo(
+      marker,
+      '<div style="background:#fff;border:1px solid #cbd5e1;border-radius:10px;'+
+      'padding:8px 11px;box-shadow:0 3px 12px rgba(15,23,42,.18);white-space:nowrap">'+
+      '<b style="color:#15803d">△ 안전요소 3종 충족</b><br>'+
+      'CCTV·보안등·Wi-Fi가 모두 있는 100m 격자<br>'+
+      '<span style="color:#64748b;font-size:11px">부족 시설이 없어 설치 우선순위 대상이 아님</span>'+
+      '</div>'
+    ));
+    return marker;
+  });
+
+  addControl(
+    "safe",
+    "안전요소 3종 충족 격자 (△)",
+    false,
+    v=>setObjects(safeMarkers,v)
   );
 }
 
