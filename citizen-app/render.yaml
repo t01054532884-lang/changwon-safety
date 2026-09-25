@@ -24,3 +24,9 @@ services:
         value: 3.11.0
       - key: TMAP_APP_KEY
         sync: false  # Render 대시보드 > Environment 탭에서 직접 입력(저장소에는 절대 커밋하지 않음)
+      - key: NAVER_MAP_CLIENT_ID
+        sync: false  # 2026-09-26 추가: 홈/안심경로 지도 표시(네이버 지도 JS SDK)용 Client ID.
+        # 네이버클라우드 콘솔에서 발급받은 값을 Render 대시보드 > Environment 탭에서 입력.
+        # admin 웹이 이미 쓰는 것과 같은 Client ID를 재사용해도 되지만, 그 경우 네이버클라우드
+        # 콘솔의 해당 애플리케이션 "Web 서비스 URL" 허용 목록에 이 서비스 도메인
+        # (예: changwon-ansimgil.onrender.com)도 함께 등록해야 지도가 뜬다.
