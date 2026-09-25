@@ -20,10 +20,24 @@
  *      완전히 검증되지 않은 부분)
  *   2) 지도 크기 재계산(invalidateSize 대응) — map.refresh()가 안 되면
  *      naver.maps.Event.trigger(map,"resize")로 대체 시도하도록 방어적으로 짰다.
+ *
+ * 2026-09-25 추가: 실제 배포본에서 "네이버 지도 open API 인증 실패"가 발생한다는
+ * 제보를 받고서야 깨달은 부분 — 네이버 지도 SDK는 <script> 태그 자체는 정상적으로
+ * 로드(onload 발생)되더라도, 그 뒤에 도메인/키 인증에 실패하면 script.onload와는
+ * 완전히 별개로 전역 콜백 window.navermap_authFailure를 호출해서 실패를 알려준다.
+ * 이 콜백은 admin/naver_map.py에서 이미 두 곳(지도 페이지, 인기 지역 위젯)에서
+ * 검증된 패턴이며, 이 콜백을 등록해두지 않으면 인증 실패 시 아무 에러도 못 잡고
+ * 그냥 빈 화면(또는 깨진 지도)만 남는다 — 지금까지 이 파일에 빠져 있던 부분이라
+ * 별도로 추가했다.
  */
-
+ 
 const NMap = {};
-
+ 
+// 인증 실패를 늦게(스크립트 로드 Promise가 이미 resolve된 뒤에) 감지했을 때 앱 쪽에
+// 알려주기 위한 훅. app.js가 지도 초기화 전에 이 함수를 지정해두면(예: 지도 사용 불가
+// 안내로 교체) 뒤늦은 인증 실패도 놓치지 않고 사용자에게 보여줄 수 있다.
+NMap.onAuthFailure = null;
+ 
 // ---------- SDK 스크립트 로딩 ----------
 NMap._sdkPromise = null;
 NMap.loadSdk = function (clientId) {
@@ -37,24 +51,59 @@ NMap.loadSdk = function (clientId) {
       reject(new Error("네이버 지도 Client ID가 아직 설정되지 않았습니다."));
       return;
     }
+ 
+    let settled = false;
+ 
+    // admin/naver_map.py와 동일한 패턴: 인증 실패는 onload/onerror가 아니라 이 전역
+    // 콜백으로 통보된다. onload가 먼저 발생해 지도가 만들어진 것처럼 보이더라도, 그
+    // 직후 이 콜백이 호출되면 실패로 취급한다(admin 쪽 fail()이 그때그때 호출돼도
+    // 화면을 안전하게 덮어쓰는 것과 같은 방식).
+    window.navermap_authFailure = function () {
+      const err = new Error(
+        "네이버 지도 인증에 실패했습니다. Web Dynamic Map 사용 설정과 등록된 서비스 URL을 확인해주세요."
+      );
+      if (!settled) {
+        settled = true;
+        reject(err);
+      } else if (typeof NMap.onAuthFailure === "function") {
+        try {
+          NMap.onAuthFailure(err);
+        } catch (e) {
+          // 안내 UI 전환 자체가 실패해도 앱을 멈추게 하지 않는다.
+        }
+      }
+    };
+ 
     const script = document.createElement("script");
     script.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(clientId);
     script.async = true;
     script.onload = () => {
-      if (window.naver && window.naver.maps) resolve();
-      else reject(new Error("네이버 지도 SDK 응답이 올바르지 않습니다."));
+      if (settled) return;
+      if (window.naver && window.naver.maps) {
+        settled = true;
+        resolve();
+      } else {
+        settled = true;
+        reject(new Error("네이버 지도 SDK 응답이 올바르지 않습니다."));
+      }
     };
-    script.onerror = () => reject(new Error("네이버 지도 SDK를 불러오지 못했습니다."));
+    script.onerror = () => {
+      if (settled) return;
+      settled = true;
+      reject(new Error("네이버 지도 SDK를 불러오지 못했습니다."));
+    };
     document.head.appendChild(script);
     setTimeout(() => {
+      if (settled) return;
       if (!(window.naver && window.naver.maps)) {
+        settled = true;
         reject(new Error("네이버 지도 연결 시간이 초과되었습니다. API 서비스 URL 등록 상태를 확인해주세요."));
       }
     }, 10000);
   });
   return NMap._sdkPromise;
 };
-
+ 
 // ---------- 공통 오버레이(마커/원/폴리라인) 베이스 ----------
 // Leaflet의 "레이어 그룹에 addTo하면 그 그룹이 지도에 붙을 때 같이 붙는다"는 동작을
 // 그대로 흉내낸다. target이 layerGroup이면 그룹에 등록하고, target이 지도 래퍼(NMap.map()의
@@ -102,7 +151,7 @@ function createOverlayBase() {
     },
   };
 }
-
+ 
 function iconSpecToNaverIcon(spec) {
   if (!spec) return undefined;
   return {
@@ -111,7 +160,7 @@ function iconSpecToNaverIcon(spec) {
     anchor: new naver.maps.Point(spec.iconAnchor[0], spec.iconAnchor[1]),
   };
 }
-
+ 
 // ---------- 지도 ----------
 NMap.map = function (elementId, opts = {}) {
   const wrapper = {
@@ -168,13 +217,13 @@ NMap.map = function (elementId, opts = {}) {
   };
   return wrapper;
 };
-
+ 
 // Leaflet은 별도 타일 레이어를 지도에 추가해야 했지만, 네이버 지도는 Map 생성 시
 // 자체 지도 타일을 이미 그려주므로 이 함수는 아무 것도 하지 않는 자리표시자다.
 NMap.tileLayer = function () {
   return { addTo() { return this; } };
 };
-
+ 
 // ---------- 레이어 그룹(마커 묶음 관리) ----------
 NMap.layerGroup = function () {
   const group = {
@@ -195,12 +244,12 @@ NMap.layerGroup = function () {
   };
   return group;
 };
-
+ 
 // ---------- divIcon (Leaflet의 커스텀 HTML 아이콘 스펙과 동일한 모양으로 반환) ----------
 NMap.divIcon = function (spec) {
   return { html: spec.html, iconSize: spec.iconSize, iconAnchor: spec.iconAnchor };
 };
-
+ 
 // ---------- 마커 ----------
 NMap.marker = function (latlng, opts = {}) {
   const overlay = createOverlayBase();
@@ -220,7 +269,7 @@ NMap.marker = function (latlng, opts = {}) {
   };
   return overlay;
 };
-
+ 
 // ---------- 원형 마커(픽셀 고정 크기 — 내 위치 점, 출발/도착 점) ----------
 // Leaflet의 L.circleMarker는 반경이 "화면 픽셀" 기준이라 확대/축소해도 크기가 그대로다.
 // naver.maps.Circle은 "실제 거리(m)" 기준이라 다르게 동작하므로, 대신 SVG를 그려넣은
@@ -235,7 +284,7 @@ NMap.circleMarker = function (latlng, opts = {}) {
     `<circle cx="${half}" cy="${half}" r="${radius}" fill="${opts.fillColor || opts.color || "#1d4ed8"}" ` +
     `fill-opacity="${opts.fillOpacity != null ? opts.fillOpacity : 1}" ` +
     `stroke="${opts.color || "#1d4ed8"}" stroke-width="${strokeW}" /></svg>`;
-
+ 
   const overlay = createOverlayBase();
   overlay._real = new naver.maps.Marker({
     position: new naver.maps.LatLng(latlng[0], latlng[1]),
@@ -249,7 +298,7 @@ NMap.circleMarker = function (latlng, opts = {}) {
   };
   return overlay;
 };
-
+ 
 // ---------- 원(실거리 반경 — 홈 지도의 은은한 "번짐" 표시) ----------
 NMap.circle = function (latlng, opts = {}) {
   const overlay = createOverlayBase();
@@ -271,7 +320,7 @@ NMap.circle = function (latlng, opts = {}) {
   }
   return overlay;
 };
-
+ 
 // ---------- 폴리라인(경로 선) ----------
 // setStyle/bringToFront은 naver.maps.Polyline에 옵션을 직접 바꾸는 메서드가 있는지
 // 확인할 방법이 없어서, 대신 "지우고 새로 그리기"로 안전하게 구현했다(생성/setMap(null)은
@@ -283,7 +332,7 @@ NMap.polyline = function (latlngs, opts = {}) {
   overlay._weight = opts.weight != null ? opts.weight : 4;
   overlay._opacity = opts.opacity != null ? opts.opacity : 0.9;
   overlay._zIndex = 100;
-
+ 
   function buildReal(mapInstance) {
     return new naver.maps.Polyline({
       map: mapInstance || null,
@@ -297,7 +346,7 @@ NMap.polyline = function (latlngs, opts = {}) {
     });
   }
   overlay._real = buildReal(null);
-
+ 
   overlay._redraw = function () {
     const wasOnMap = this._mapWrapper && this._mapWrapper._naverMap;
     if (this._real) this._real.setMap(null);
