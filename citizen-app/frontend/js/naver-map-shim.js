@@ -204,19 +204,9 @@ NMap.map = function (elementId, opts = {}) {
       if (!this._naverMap) return this;
       {
         const containerEl = document.getElementById(this._elementId);
-        console.log(
-          "[NMap] " + this._elementId + " invalidateSize 호출, 컨테이너 크기:",
-          containerEl ? containerEl.getBoundingClientRect() : "(엘리먼트 없음)"
-        );
-        // 2026-09-25 콘솔 로그로 실제 원인 확인: 생성 직후엔 컨테이너 높이가 정상(예:
-        // 1186px)이었는데, 얼마 뒤 같은 엘리먼트를 다시 재보면 height만 0으로 찌그러져
-        // 있었다(width는 그대로 480 유지) — 이건 우리 CSS(position:absolute; inset:0)가
-        // 무너진 게 아니라, 네이버 지도 SDK가 초기화(isReady 전환) 과정에서 컨테이너
-        // 엘리먼트 자체에 인라인 height(또는 width)를 직접 써버려서(=우리 CSS보다
-        // 우선순위가 높은 인라인 스타일) 생기는 문제로 보인다. 그 인라인 값을 지워서
-        // 다시 우리 CSS가 크기를 결정하게 강제한다 — 지우는 것 자체가 레이아웃을
-        // 바꾸는 동작이라, 이후 resize 이벤트+재중심이 이번엔 "정상 크기" 기준으로
-        // 다시 일어나게 된다.
+        const rect = containerEl ? containerEl.getBoundingClientRect() : null;
+        console.log("[NMap] " + this._elementId + " invalidateSize 호출, 컨테이너 크기:", rect);
+ 
         if (containerEl && (containerEl.style.height || containerEl.style.width)) {
           console.log(
             "[NMap] " + this._elementId + " 인라인 크기 발견, 제거함 (height=" +
@@ -224,6 +214,29 @@ NMap.map = function (elementId, opts = {}) {
           );
           containerEl.style.removeProperty("height");
           containerEl.style.removeProperty("width");
+        }
+ 
+        // 2026-09-25 2차 진단: 컨테이너 자신에는 인라인 height/width가 없는데도 height만
+        // 계속 0으로 나오는 것으로 재확인됨(가로만 정상, 세로만 0인 비정상 패턴일 때만) —
+        // 원인이 #map-home 자신이 아니라 부모 체인(.tab-panel/.app-main) 중 한 곳일 가능성이
+        // 높다고 보고, 그 순간에만(로그 폭주 방지) 부모 2단계까지의 실제 크기·인라인
+        // 스타일과, 네이버 지도가 안에 실제로 그려넣은 자식 구조를 같이 찍어서 정확히
+        // 어느 레벨에서 0이 되는지 확인한다.
+        if (containerEl && rect && (rect.width > 0) !== (rect.height > 0)) {
+          let el = containerEl;
+          for (let depth = 0; depth <= 3 && el; depth++) {
+            console.log(
+              "[NMap-debug] depth=" + depth + " <" + el.tagName + (el.id ? "#" + el.id : "") +
+                (el.className ? "." + String(el.className).replace(/\s+/g, ".") : "") + ">" +
+                " rect=" + JSON.stringify(el.getBoundingClientRect()) +
+                " inlineStyle=\"" + el.getAttribute("style") + "\""
+            );
+            el = el.parentElement;
+          }
+          console.log(
+            "[NMap-debug] " + this._elementId + " 자식 노드 수=" + containerEl.children.length +
+              ", 첫 자식=" + (containerEl.children[0] ? containerEl.children[0].outerHTML.slice(0, 300) : "(없음)")
+          );
         }
       }
       // 2026-09-25 실기기 확인 결과: 홈 지도는 아예 안 보이고, 안심경로 지도는 생성 당시의
