@@ -83,6 +83,7 @@ COLAB_GRID_FILES = {
     "노인": BASE_DIR / "data" / "elderly_grid_colab.csv",
 }
 COLAB_RISK_GRID_FILE = BASE_DIR / "data" / "risk_grid_colab.geojson"
+SAFE_CELLS_FILE = BASE_DIR / "data" / "safe_cells_colab.csv"
 ANALYSIS_GRID_SIZE = 100
 RISK_RASTER_SIZE = 1024
 CHANGWON_BOUNDS = (34.75, 128.10, 35.55, 129.00)
@@ -2422,6 +2423,22 @@ def load_colab_risk_grid(target_label: str) -> dict | None:
     ]
 
     return {"type": "FeatureCollection", "features": features}
+
+@st.cache_data(show_spinner=False)
+def load_safe_cells() -> list[dict]:
+    """Colab 1-8 기준 CCTV·보안등·Wi-Fi가 모두 있는 100m 격자(3종 충족)를 읽습니다."""
+    if not SAFE_CELLS_FILE.exists():
+        return []
+
+    frame = pd.read_csv(SAFE_CELLS_FILE, encoding="utf-8-sig")
+    return [
+        {
+            "lat": float(row.latitude),
+            "lng": float(row.longitude),
+            "gridId": str(row.grid_id),
+        }
+        for row in frame.itertuples(index=False)
+    ]
     
 def add_top10_addresses(geojson_data: dict | None) -> dict | None:
     """TOP10 GeoJSON에 지도 요약용 대표 주소를 붙입니다."""
@@ -4528,6 +4545,7 @@ if naver_map_client_id:
         "riskImage": png_data_url(risk_density_image_bytes),
         "riskGridImage": png_data_url(risk_grid_image_bytes),
         "colabRiskGrid": load_colab_risk_grid(final_top10_target),
+        "safeCells": load_safe_cells(),
         "riskBounds": (
             route_risk_grid["bounds"] if route_risk_grid else None
         ),
