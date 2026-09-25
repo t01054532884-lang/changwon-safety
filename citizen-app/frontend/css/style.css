@@ -227,6 +227,7 @@ button, input, select, textarea {
   border-bottom: 1px solid var(--color-border);
 }
 .app-title { font-weight: 800; font-size: 17px; color: var(--color-primary-dark); }
+.app-header-actions { display: flex; align-items: center; gap: 6px; }
 .profile-chip {
   border: none;
   background: #eff4ff;
@@ -236,6 +237,20 @@ button, input, select, textarea {
   padding: 6px 12px;
   border-radius: 999px;
 }
+/* 2026-09-26 추가: 테스트 전용 "위치 랜덤" 버튼 — profile-chip과 헷갈리지 않도록
+   경고성 amber 톤으로 구분. 배포 전 테스트 편의 목적이라 크게 눈에 띄지 않는
+   선에서 정리했다. */
+.admin-random-btn {
+  border: none;
+  background: #fff3e0;
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.admin-random-btn:disabled { opacity: 0.6; }
  
 .app-main { flex: 1; position: relative; overflow: hidden; }
  
@@ -419,4 +434,3 @@ button, input, select, textarea {
 .nav-icon { font-size: 20px; }
 .nav-item.is-active { color: var(--color-primary); }
 .nav-item-report.is-active { color: var(--color-danger); }
- 
