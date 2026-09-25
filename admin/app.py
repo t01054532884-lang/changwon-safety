@@ -1526,7 +1526,7 @@ def red_risk_density_image(image_bytes: bytes) -> bytes:
 
     alpha = np.where(
         intensity > 0.03,
-        35 + intensity * 145,
+        70 + intensity * 170,
         0,
     )
 
@@ -1539,21 +1539,21 @@ def red_risk_density_image(image_bytes: bytes) -> bytes:
     # 100m 고위험 격자의 적색과 시각적으로 구분한다.
     overlay[:, :, 0] = np.where(
         intensity > 0.65,
-        217,
-        251,
+        180,
+        245,
     ).astype(np.uint8)
 
     overlay[:, :, 1] = np.where(
         intensity > 0.65,
-        119,
-        191,
+        83,
+        158,
     ).astype(np.uint8)
 
     overlay[:, :, 2] = np.where(
         intensity > 0.65,
-        6,
-        36,
-    ).astype(np.uint8)
+        9,
+        11,
+    ).astype(np.uint8) 
 
     overlay[:, :, 3] = alpha.astype(np.uint8)
 
