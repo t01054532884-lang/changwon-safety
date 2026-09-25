@@ -188,11 +188,28 @@ NMap.map = function (elementId, opts = {}) {
     },
     invalidateSize() {
       if (!this._naverMap) return this;
+      // 2026-09-25 실기기 확인 결과: 홈 지도는 아예 안 보이고, 안심경로 지도는 생성 당시의
+      // 작은 크기로만 타일이 채워진 채 나머지는 빈 화면으로 남는 문제가 발견됨. 원인은
+      // 두 가지였다 — (1) refresh(true)만 믿고 resize 이벤트+재중심을 항상 하지는
+      // 않았던 것, (2) 처음부터 활성 탭인 홈 지도는 이 함수 자체가 한 번도 안 불렸던 것
+      // (아래 initHomeMap() 쪽에서 별도로 고침). naver.maps는 컨테이너 크기가 바뀐 뒤
+      // "resize" 이벤트를 쏴주고 중심 좌표를 다시 세팅해줘야 타일을 새 크기에 맞게
+      // 다시 그린다(네이버 지도 커뮤니티에 흔히 나오는 표준 대응 방식) — refresh()가
+      // 있어도 이 과정을 대신해주지 않는 것으로 보여, 항상 같이 수행하도록 고쳤다.
       try {
         if (typeof this._naverMap.refresh === "function") {
           this._naverMap.refresh(true);
-        } else if (window.naver && naver.maps && naver.maps.Event) {
+        }
+      } catch (e) {
+        // 무시 — refresh가 없거나 실패해도 아래 resize 이벤트 방식으로 계속 시도한다.
+      }
+      try {
+        if (window.naver && naver.maps && naver.maps.Event) {
           naver.maps.Event.trigger(this._naverMap, "resize");
+          if (typeof this._naverMap.getCenter === "function" && typeof this._naverMap.setCenter === "function") {
+            const center = this._naverMap.getCenter();
+            if (center) this._naverMap.setCenter(center);
+          }
         }
       } catch (e) {
         // 지도 크기 재계산이 실패해도 앱이 멈추면 안 되므로 무시한다.
