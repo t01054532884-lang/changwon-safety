@@ -434,6 +434,8 @@ if(legendLabel){
     naver=window.naver;
     status.textContent="네이버 지도와 안전 데이터를 불러오는 중…";
     const focus=DATA.focus||{lat:35.18,lng:128.62,zoom:10,name:"창원시"};map=new naver.maps.Map("changwon-naver-map",{center:new naver.maps.LatLng(focus.lat,focus.lng),zoom:focus.zoom||10,mapTypeControl:true,zoomControl:true,zoomControlOptions:{position:naver.maps.Position.LEFT_CENTER},scaleControl:true});infoWindow=new naver.maps.InfoWindow({borderWidth:0,backgroundColor:"transparent",anchorSize:new naver.maps.Size(12,8)});if((focus.zoom||10)>10)new naver.maps.Marker({map,position:new naver.maps.LatLng(focus.lat,focus.lng),title:focus.name||"검색 위치",zIndex:180});
+    let riskOutlineMode=false;
+    let restyleRiskGrid=()=>{};
     const risk=addGround(
   DATA.riskImage,
   DATA.riskBounds,
@@ -447,7 +449,11 @@ if(risk){
     "risk",
     "원본 범죄위험 지도 (경찰청·참고)",
     false,
-    v=>risk.setMap(v?map:null)
+    v=>{
+      risk.setMap(v?map:null);
+      riskOutlineMode=v;
+      restyleRiskGrid();
+    }
   );
 }
 
@@ -457,19 +463,32 @@ const colabRiskGrid=DATA.colabRiskGrid&&DATA.colabRiskGrid.features
 if(colabRiskGrid){
   const riskLayer=new naver.maps.Data({map});
   riskLayer.addGeoJson(colabRiskGrid);
-  riskLayer.setStyle(feature=>{
+  const riskGridStyle=feature=>{
     const pct=Number(feature.getProperty("risk_pct")||0);
-    const color=pct>=25?"#991B1B":pct>=10?"#EF4444":"#FCA5A5";
+    const color=pct>=25?"#991B1B":pct>=10?"#EF4444":"#F87171";
+    if(riskOutlineMode){
+      return{
+        strokeColor:color,
+        strokeWeight:2,
+        strokeOpacity:.95,
+        fillColor:color,
+        fillOpacity:0,
+        clickable:false,
+        zIndex:140
+      };
+    }
     return{
       strokeColor:color,
       strokeWeight:0,
       strokeOpacity:0,
-      fillColor:color,
+      fillColor:pct>=10?color:"#FCA5A5",
       fillOpacity:pct>=25?.6:pct>=10?.45:.3,
       clickable:false,
       zIndex:140
     };
-  });
+  };
+  riskLayer.setStyle(riskGridStyle);
+  restyleRiskGrid=()=>riskLayer.setStyle(riskGridStyle);
 
   let riskGridEnabled=true;
   let riskGridShown=null;
