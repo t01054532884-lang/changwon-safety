@@ -226,16 +226,45 @@ function currentZoneSet() {
  
 let recommendedLayer; // 추천시설 마커 레이어(위치 갱신 시마다 다시 그리므로 그룹으로 관리)
  
+// 2026-09-25 추가(2차 수정): setTimeout 120ms로 홈 지도 크기를 강제 보정해봤지만 실기기
+// 스크린샷에서 여전히 빈 화면으로 남는 사례가 확인됨. 홈 지도 컨테이너(#map-home)는
+// position:absolute; inset:0 로 부모(.app-main) 높이에 맞춰지는데, 이 부모의 실제 높이는
+// 폰트 로딩·동적 뷰포트 단위(dvh) 계산 등으로 페이지 로드 초반엔 아직 확정 안 돼 있을 수
+// 있다 — 반대로 안심경로 지도(.map-short)는 CSS에 height:220px가 고정값으로 박혀 있어서
+// 이런 타이밍 문제에서 자유로웠고, 그래서 그쪽만 먼저 고쳐진 것으로 보인다.
+// 특정 지연시간을 추측하는 대신, 컨테이너의 "실제 렌더링 크기가 바뀌는 순간"을
+// ResizeObserver로 직접 감지해서 그때마다 invalidateSize()를 불러주도록 일반화한다 —
+// 0×0에서 실제 크기로 바뀌는 최초 순간은 물론, 이후 키보드가 열리거나 화면 회전이 있을
+// 때도 전부 이 하나의 메커니즘으로 커버된다. (구형 브라우저 등 ResizeObserver가 없는
+// 경우를 대비해 기존 setTimeout 보정도 그대로 남겨둔다 — 두 경로가 겹쳐도 invalidateSize를
+// 한 번 더 부르는 것뿐이라 문제 없음.)
+function watchMapContainerSize(elementId, getMapWrapper) {
+  const el = document.getElementById(elementId);
+  if (!el || typeof ResizeObserver === "undefined") return;
+  let lastW = 0, lastH = 0;
+  const ro = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    if (!entry) return;
+    const { width, height } = entry.contentRect;
+    if (width <= 0 || height <= 0) return; // 아직 크기가 안 잡혔으면 다음 변화를 기다림
+    if (width === lastW && height === lastH) return; // 같은 크기로 중복 호출 방지
+    lastW = width;
+    lastH = height;
+    const wrapper = getMapWrapper();
+    if (wrapper) wrapper.invalidateSize();
+  });
+  ro.observe(el);
+}
+ 
 function initHomeMap() {
   const center = state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER;
   homeMap = NMap.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
   // 네이버 지도는 Map 생성 시 자체 타일을 그려주므로 별도 타일 레이어 추가가 필요 없다.
  
-  // 2026-09-25 추가: 실기기에서 홈 지도가 아예 안 보이는 문제 확인 — 다른 탭(안심경로)은
-  // switchTab()에서 탭을 바꿀 때마다 invalidateSize()를 불러주지만, 홈은 앱이 열리자마자
-  // 이미 활성 탭이라 그 코드를 한 번도 못 거친다. 레이아웃이 자리잡을 시간을 살짝 준 뒤
-  // 강제로 한 번 크기를 다시 맞춰준다.
+  // 홈은 앱이 열리자마자 이미 활성 탭이라 switchTab()의 invalidateSize를 한 번도 못
+  // 거친다 — 아래 두 가지로 이중 보정한다.
   setTimeout(() => { if (homeMap) homeMap.invalidateSize(); }, 120);
+  watchMapContainerSize("map-home", () => homeMap);
  
   recommendedLayer = NMap.layerGroup().addTo(homeMap);
   renderRecommendedPlaces();
@@ -471,6 +500,9 @@ function initRouteMap() {
     state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER, 13
   );
   routeLayers = NMap.layerGroup().addTo(routeMap);
+  // 안심경로 탭은 처음엔 hidden 상태로 생성되므로, 나중에 탭을 열 때 실제 크기를 갖게
+  // 되는 순간을 여기서도 감지해둔다(홈 지도와 같은 이유 — watchMapContainerSize 참고).
+  watchMapContainerSize("route-map", () => routeMap);
 }
  
 async function loadDestinations() {
