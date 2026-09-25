@@ -2387,31 +2387,39 @@ st.set_page_config(
 
 @st.cache_data(show_spinner=False)
 def load_colab_risk_grid(target_label: str) -> dict | None:
-    """Colab 1-8 적색영역 비율 격자 중 선택 대상의 값이 있는 격자만 읽습니다."""
+    """Colab 1-8 적색영역 비율 격자를 색 구간별 3개 도형으로 묶어 읽습니다.
+
+    격자 2천여 개를 하나씩 그리면 지도 확대·축소가 느려지므로,
+    같은 색 구간(10% 미만 / 10~25% / 25% 이상)끼리 MultiPolygon 하나로 합칩니다.
+    """
     if not COLAB_RISK_GRID_FILE.exists():
         return None
 
     column = "child_risk_pct" if target_label == "어린이" else "elderly_risk_pct"
     source = json.loads(COLAB_RISK_GRID_FILE.read_text(encoding="utf-8"))
-    features = []
+
+    # 지도 색 구간 대표값 (naver_map.py의 색 기준: 10 미만 / 10~25 / 25 이상)
+    class_polygons = {5.0: [], 17.5: [], 30.0: []}
 
     for feature in source.get("features", []):
-        properties = feature.get("properties", {})
-        value = float(properties.get(column) or 0)
+        value = float(feature.get("properties", {}).get(column) or 0)
+        geometry = feature.get("geometry") or {}
 
-        if value <= 0:
+        if value <= 0 or geometry.get("type") != "Polygon":
             continue
 
-        features.append(
-            {
-                "type": "Feature",
-                "properties": {
-                    "grid_id": properties.get("grid_id"),
-                    "risk_pct": round(value, 2),
-                },
-                "geometry": feature.get("geometry"),
-            }
-        )
+        representative = 30.0 if value >= 25 else 17.5 if value >= 10 else 5.0
+        class_polygons[representative].append(geometry["coordinates"])
+
+    features = [
+        {
+            "type": "Feature",
+            "properties": {"risk_pct": representative},
+            "geometry": {"type": "MultiPolygon", "coordinates": polygons},
+        }
+        for representative, polygons in class_polygons.items()
+        if polygons
+    ]
 
     return {"type": "FeatureCollection", "features": features}
     
