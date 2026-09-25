@@ -45,6 +45,7 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
 
 <div class="legend-row" style="margin-top:8px;font-weight:900">
   범죄 고위험 면적 비율 (100m 격자)
+  <span style="font-weight:600;color:#64748b;font-size:10.5px">· 확대 시 표시</span>
 </div>
 
 <div class="legend-row">
@@ -461,27 +462,36 @@ if(colabRiskGrid){
     const color=pct>=25?"#991B1B":pct>=10?"#EF4444":"#FCA5A5";
     return{
       strokeColor:color,
-      strokeWeight:1,
-      strokeOpacity:.9,
+      strokeWeight:0,
+      strokeOpacity:0,
       fillColor:color,
-      fillOpacity:pct>=25?.75:pct>=10?.6:.45,
+      fillOpacity:pct>=25?.6:pct>=10?.45:.3,
       clickable:false,
       zIndex:140
     };
   });
 
-  const reattachRiskGrid=()=>{
+  let riskGridEnabled=true;
+  let riskGridShown=null;
+  const updateRiskGrid=force=>{
+    const show=riskGridEnabled&&map.getZoom()>=13;
+    if(!force&&show===riskGridShown)return;
+    riskGridShown=show;
     riskLayer.setMap(null);
-    riskLayer.setMap(map);
+    if(show)riskLayer.setMap(map);
   };
-  naver.maps.Event.once(map,"idle",reattachRiskGrid);
-  setTimeout(reattachRiskGrid,800);
+  naver.maps.Event.once(map,"idle",()=>updateRiskGrid(true));
+  setTimeout(()=>updateRiskGrid(true),800);
+  naver.maps.Event.addListener(map,"zoom_changed",()=>updateRiskGrid(false));
 
   addControl(
     "grid",
     "범죄 고위험 면적 비율 (100m 격자)",
     true,
-    v=>riskLayer.setMap(v?map:null)
+    v=>{
+      riskGridEnabled=v;
+      updateRiskGrid(true);
+    }
   );
 }else{
   const grid=addGround(
