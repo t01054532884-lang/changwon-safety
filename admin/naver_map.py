@@ -38,13 +38,13 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   <div class="legend panel">
     <div class="panel-title">안전 분석 표시</div>
     <div class="legend-row">
-  <span class="dot"
-        style="background:#F97316;border:2px solid #C2410C"></span>
-  원본 범죄위험 지도 (경찰청)
+  <span style="display:inline-block;width:22px;height:10px;border-radius:3px;
+        background:linear-gradient(90deg,#FDE68A,#FBBF24,#D97706)"></span>
+  원본 범죄위험 지도 (진할수록 위험)
 </div>
 
 <div class="legend-row" style="margin-top:8px;font-weight:900">
-  분석 격자 · 적색영역 비율
+  범죄 고위험 면적 비율 (100m 격자)
 </div>
 
 <div class="legend-row">
@@ -63,6 +63,10 @@ def build_naver_map_html(client_id: str, payload: dict) -> str:
   <span class="dot"
         style="background:#991B1B;border:2px solid #450A0A;border-radius:2px"></span>
   25% 이상
+</div>
+
+<div style="margin:3px 0 6px 0;color:#64748b;font-size:10.5px;font-weight:600;line-height:1.45;width:200px;word-break:keep-all">
+  ※ 100m 칸 안에서 경찰청 최고위험(적색) 구역이 차지하는 면적 (25% = 칸의 1/4)
 </div>
     <div class="legend-row">
   <span id="final-top10-swatch"
@@ -432,7 +436,7 @@ if(legendLabel){
     const risk=addGround(
   DATA.riskImage,
   DATA.riskBounds,
-  .62
+  .9
 );
 
 if(risk){
@@ -475,7 +479,7 @@ if(colabRiskGrid){
 
   addControl(
     "grid",
-    "분석 격자 · 적색영역 비율 (Colab)",
+    "범죄 고위험 면적 비율 (100m 격자)",
     true,
     v=>riskLayer.setMap(v?map:null)
   );
