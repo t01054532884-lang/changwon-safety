@@ -5,7 +5,9 @@
 2) /api/route  : 출발지→도착지 최단/균형/안심우선 3경로 (routing.py, Stage 3 신규)
 3) /api/random-location : 관리자/테스트 전용 — 창원시 경계 내 임의 좌표 하나 반환
    (실사용자 배포 전, GPS 없이 시내 여러 지점에서 테스트하기 위한 용도, 2026-09-26 신규)
-4) 그 외 모든 경로 : ../frontend(PWA 정적 파일)를 그대로 서빙 — 배포 시 백엔드와 프론트를
+4) /api/safety-triangles : 홈 화면 지도용 "안전요소 3종 충족"(CCTV+보안등+공공Wi-Fi)
+   초록 삼각형 지점 — 관리자 웹과 동일 정의, 요청 좌표 주변 반경만 반환 (2026-09-26 신규)
+5) 그 외 모든 경로 : ../frontend(PWA 정적 파일)를 그대로 서빙 — 배포 시 백엔드와 프론트를
    같은 도메인 하나로 띄워서(동일 출처) 공개 주소를 하나만 발급받으면 되게 했다
    (Tmap 등 외부 API 앱 등록에 필요한 "서비스 URL" 하나로 충분하도록).
  
@@ -25,7 +27,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
  
-from scoring import BOUNDARY, FACILITIES, facility_score, grade_from_score, nearest_top10, point_in_polygon, protection_score_at
+from scoring import (
+    BOUNDARY,
+    FACILITIES,
+    facility_score,
+    grade_from_score,
+    nearest_top10,
+    point_in_polygon,
+    protection_score_at,
+    three_factor_support_sites_near,
+)
 import routing
 import tmap_client
 import reports_store
@@ -61,6 +72,23 @@ def get_safety(lat: float = Query(...), lng: float = Query(...), age_group: str 
             "생활안전지도 WMS 범죄위험 API 키가 연동되면 도시 전역 실제 범죄위험을 반영해 교체할 예정입니다."
         ),
     }
+ 
+ 
+@app.get("/api/safety-triangles")
+def get_safety_triangles(
+    lat: float = Query(...),
+    lng: float = Query(...),
+    radius_m: float = Query(700.0, ge=50.0, le=3000.0),
+    limit: int = Query(30, ge=1, le=100),
+):
+    """홈 화면 지도의 "안전요소 3종 충족"(CCTV+보안등+공공Wi-Fi) 초록 삼각형 마커용.
+ 
+    관리자 웹 지도에 이미 표시 중인 것과 완전히 같은 정의(scoring.py의
+    three_factor_support_sites, admin/app.py의 build_three_factor_support_sites()와
+    동일 로직)를 재사용하되, 도시 전역이 아니라 요청 좌표 주변 radius_m 이내만,
+    가까운 순으로 최대 limit개까지만 돌려준다(작은 화면에 마커가 뒤덮이는 것 방지)."""
+    sites = three_factor_support_sites_near(lat, lng, radius_m=radius_m, limit=limit)
+    return {"lat": lat, "lng": lng, "radius_m": radius_m, "sites": sites}
  
  
 @app.get("/api/route")
