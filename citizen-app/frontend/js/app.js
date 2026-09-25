@@ -238,14 +238,18 @@ let recommendedLayer; // 추천시설 마커 레이어(위치 갱신 시마다 �
 // 때도 전부 이 하나의 메커니즘으로 커버된다. (구형 브라우저 등 ResizeObserver가 없는
 // 경우를 대비해 기존 setTimeout 보정도 그대로 남겨둔다 — 두 경로가 겹쳐도 invalidateSize를
 // 한 번 더 부르는 것뿐이라 문제 없음.)
-function watchMapContainerSize(elementId, getMapWrapper) {
+function watchMapContainerSize(elementId, getMapWrapper, label) {
   const el = document.getElementById(elementId);
-  if (!el || typeof ResizeObserver === "undefined") return;
+  if (!el || typeof ResizeObserver === "undefined") {
+    console.log("[naver-map][" + (label || elementId) + "] ResizeObserver 사용 불가 또는 엘리먼트 없음");
+    return;
+  }
   let lastW = 0, lastH = 0;
   const ro = new ResizeObserver((entries) => {
     const entry = entries[0];
     if (!entry) return;
     const { width, height } = entry.contentRect;
+    console.log("[naver-map][" + (label || elementId) + "] ResizeObserver 콜백, 크기:", width, height);
     if (width <= 0 || height <= 0) return; // 아직 크기가 안 잡혔으면 다음 변화를 기다림
     if (width === lastW && height === lastH) return; // 같은 크기로 중복 호출 방지
     lastW = width;
@@ -257,6 +261,12 @@ function watchMapContainerSize(elementId, getMapWrapper) {
 }
  
 function initHomeMap() {
+  // 2026-09-25 추가: ResizeObserver/setTimeout 보정을 다 넣어봤는데도 실기기에서
+  // 홈 지도가 계속 빈 화면으로 남는다는 제보가 이어져, 더 이상 추측만으로 고치기보다
+  // 실제 콘솔 로그를 받아서 정확한 원인을 잡기 위한 진단 로그를 임시로 추가한다
+  // (naver-map-shim.js의 [NMap] 로그와 짝을 이룸). 문제가 해결되면 나중에 정리해도 됨.
+  console.log("[naver-map][home] initHomeMap 시작, state.location:", state.location);
+ 
   const center = state.location ? [state.location.lat, state.location.lng] : CHANGWON_CENTER;
   homeMap = NMap.map("map-home", { zoomControl: false }).setView(center, state.location ? 15 : 12);
   // 네이버 지도는 Map 생성 시 자체 타일을 그려주므로 별도 타일 레이어 추가가 필요 없다.
@@ -264,11 +274,22 @@ function initHomeMap() {
   // 홈은 앱이 열리자마자 이미 활성 탭이라 switchTab()의 invalidateSize를 한 번도 못
   // 거친다 — 아래 두 가지로 이중 보정한다.
   setTimeout(() => { if (homeMap) homeMap.invalidateSize(); }, 120);
-  watchMapContainerSize("map-home", () => homeMap);
+  watchMapContainerSize("map-home", () => homeMap, "home");
  
   recommendedLayer = NMap.layerGroup().addTo(homeMap);
-  renderRecommendedPlaces();
-  refreshLiveLocationUI();
+  // 2026-09-25 추가: 이 두 함수 중 하나가 조용히 예외를 던지면 이후 코드(안심경로 지도
+  // 생성 포함)까지 통째로 멈출 수 있어서, 문제를 격리하기 위해 각각 try/catch로 감쌈.
+  try {
+    renderRecommendedPlaces();
+  } catch (e) {
+    console.error("[naver-map][home] renderRecommendedPlaces 중 예외:", e);
+  }
+  try {
+    refreshLiveLocationUI();
+  } catch (e) {
+    console.error("[naver-map][home] refreshLiveLocationUI 중 예외:", e);
+  }
+  console.log("[naver-map][home] initHomeMap 완료");
 }
  
 const PLACE_STYLE = {
@@ -502,7 +523,7 @@ function initRouteMap() {
   routeLayers = NMap.layerGroup().addTo(routeMap);
   // 안심경로 탭은 처음엔 hidden 상태로 생성되므로, 나중에 탭을 열 때 실제 크기를 갖게
   // 되는 순간을 여기서도 감지해둔다(홈 지도와 같은 이유 — watchMapContainerSize 참고).
-  watchMapContainerSize("route-map", () => routeMap);
+  watchMapContainerSize("route-map", () => routeMap, "route");
 }
  
 async function loadDestinations() {
