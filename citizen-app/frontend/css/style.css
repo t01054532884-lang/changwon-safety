@@ -242,7 +242,21 @@ button, input, select, textarea {
 .tab-panel { position: absolute; inset: 0; overflow-y: auto; }
  
 /* 지도 */
-.map { position: absolute; inset: 0; z-index: 0; }
+/* 2026-09-26 추가: 실기기 콘솔 로그(부모 체인 진단)로 확인된 실제 원인 —
+   #map-home은 .tab-panel(부모, 높이 1186px로 정상) 바로 아래에 있고 인라인
+   스타일도 전혀 없는데도 매번 height:0으로 측정됐다. .map은 지금까지
+   position:absolute + inset:0 "만" 믿고 있었는데, 이 조합은 position이
+   실제로 absolute로 적용될 때만 유효하다 — 네이버 지도 SDK가 컨테이너에
+   자기만의 스타일(별도 <style> 삽입 등, 인라인 style 속성이 아니라서
+   getAttribute('style')로는 안 잡힘)로 position을 relative/static으로
+   바꿔버리면, inset:0은 더 이상 크기에 영향을 주지 못하고, 안에 있는
+   네이버 내부 요소들이 전부 absolute라 정상 흐름(flow) 콘텐츠가 하나도
+   없어 auto-height가 0으로 붕괴한다(가로는 block 기본값이라 그대로 480
+   유지되는 것과 정확히 일치). width/height를 100%로 명시하면 position이
+   absolute가 아니게 되어도(부모가 명확한 높이를 갖고 있는 한) 여전히
+   부모 크기를 그대로 물려받아 이 붕괴를 막는다 — position:absolute;inset:0
+   조합이 정상 동작할 때는 이 값과 결과가 같으므로 부작용은 없다. */
+.map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .map-short { position: relative; height: 220px; margin: 0 16px; border-radius: 16px; overflow: hidden; }
  
 /* 홈 플로팅 카드 */
