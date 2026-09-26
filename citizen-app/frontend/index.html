@@ -127,14 +127,14 @@
       <!-- 안심경로 -->
       <section class="tab-panel" id="tab-route" data-tab="route" hidden>
         <div class="route-form">
-          <label class="route-field route-field-autocomplete">
+          <div class="route-field route-field-autocomplete">
             <span>출발지</span>
             <div class="route-start-row">
-              <input id="route-start" type="text" value="내 현재 위치" readonly />
+              <input id="route-start" type="text" value="내 현재 위치" readonly autocomplete="off" />
               <button type="button" class="btn-link" id="btn-edit-start">✏️ 수정</button>
             </div>
             <ul id="route-start-suggestions" class="suggestion-list" hidden></ul>
-          </label>
+          </div>
           <label class="route-field route-field-autocomplete">
             <span>도착지</span>
             <input id="route-end" type="text" placeholder="장소 이름이나 도로명·지번 주소를 입력해보세요 (예: 창원중앙도서관, 중앙대로 151)" autocomplete="off" />
