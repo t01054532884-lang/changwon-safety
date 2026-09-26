@@ -166,6 +166,61 @@ function initProfileEdit() {
   });
 }
 
+// 2026-09-26 추가: 위험신고 화면에서 "신고를 접수하지 않고도" 지금 내 위치를 다른
+// 사람에게 바로 알릴 수 있게 하는 기능. 카카오 SDK를 새로 붙이려면 Kakao Developers에
+// 앱을 만들고 JS 키를 발급받아 도메인까지 등록해야 하는데(네이버 지도 때와 비슷한
+// 절차), 그 대신 브라우저 표준 기능인 Web Share API(navigator.share)를 쓰면 등록·키
+// 없이도 똑같은 효과를 낼 수 있다 — 이 API를 호출하면 운영체제의 기본 "공유하기" 시트가
+// 뜨는데, 폰에 카카오톡이 설치돼 있으면 그 목록에 카카오톡이 그대로 나타난다(문자
+// 메시지·다른 앱들과 함께). 즉 "카카오톡 공유" 버튼을 우리가 직접 그리는 대신, 운영체제가
+// 이미 가지고 있는 공유 목록을 그대로 빌려 쓰는 방식.
+// Web Share API를 지원하지 않는 환경(주로 데스크톱 브라우저)에서는 대신 위치 링크를
+// 클립보드에 복사해주고, 그것도 안 되면 마지막 수단으로 prompt 창에 링크를 띄워
+// 사용자가 직접 길게 눌러 복사할 수 있게 한다.
+function buildShareLocationText() {
+  const { lat, lng } = state.location;
+  // 구글 지도의 "URL로 지도 열기" 공식 포맷(api=1) — 별도 API 키 없이 좌표만으로
+  // 어떤 기기에서 열어도(지도 앱 설치 여부와 무관하게) 정확한 위치로 연결된다.
+  const mapUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}`;
+  return { mapUrl, text: `[창원 안심길] 제 현재 위치예요.\n${mapUrl}` };
+}
+
+function initShareLocation() {
+  const btn = document.getElementById("btn-share-location");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    if (!state.location) {
+      setReportStatus("아직 위치 정보를 확인하지 못했어요. 위치 권한을 허용했는지 확인해주세요.", true);
+      return;
+    }
+    const { mapUrl, text } = buildShareLocationText();
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "창원 안심길 - 내 위치 공유", text, url: mapUrl });
+      } catch (e) {
+        // 사용자가 공유 시트에서 "취소"를 누른 경우도 항상 이 catch로 들어온다
+        // (AbortError) — 실패가 아니라 정상적인 취소이므로 에러로 표시하지 않는다.
+        if (e && e.name !== "AbortError") {
+          console.warn("[share-location] 공유 실패:", e);
+          setReportStatus("공유 중 문제가 발생했어요. 다시 시도해주세요.", true);
+        }
+      }
+      return;
+    }
+
+    // Web Share API 미지원 브라우저(주로 데스크톱) — 클립보드 복사로 대체.
+    try {
+      await navigator.clipboard.writeText(text);
+      setReportStatus("내 위치 링크를 복사했어요. 카카오톡 등에 붙여넣기 해주세요.");
+    } catch (e) {
+      // 클립보드 권한도 막혀있는 아주 드문 경우의 최후 수단.
+      window.prompt("아래 링크를 길게 눌러 복사한 뒤 카카오톡 등에 붙여넣어 주세요.", mapUrl);
+    }
+  });
+}
+
 // 2026-09-26 추가: 아직 실사용자에게 배포하지 않은 테스트 단계라, 실기기 GPS 없이도
 // 창원시 여러 지점에서 앱을 확인해볼 수 있어야 한다는 요청으로 추가한 개발용 버튼.
 // 백엔드 /api/random-location이 창원시 행정구역 경계(BOUNDARY, scoring.py의 동일한
@@ -1389,6 +1444,7 @@ async function initApp() {
   initTabs();
   initProfileEdit();
   initAdminRandomLocation();
+  initShareLocation();
 
   const mapReady = await loadNaverSdk();
   if (mapReady) {
