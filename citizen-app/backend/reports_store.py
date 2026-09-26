@@ -65,6 +65,10 @@ def init_db() -> None:
             )
             """
         )
+        # 2026-09-26: 숨기기 기능용 칸. 예전에 만들어진 DB에는 없으므로 없을 때만 추가한다.
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(reports)")}
+        if "hidden" not in columns:
+            conn.execute("ALTER TABLE reports ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
 
 
 def create_report(
@@ -107,12 +111,17 @@ def _row_to_dict(row: sqlite3.Row, include_image: bool) -> dict:
     return d
 
 
-def list_reports(status: Optional[str] = None, include_image: bool = False) -> list[dict]:
-    query = "SELECT * FROM reports"
-    params: tuple = ()
+def list_reports(
+    status: Optional[str] = None,
+    include_image: bool = False,
+    hidden: bool = False,
+) -> list[dict]:
+    """hidden=False면 보이는 신고만, hidden=True면 숨긴 신고만 반환한다."""
+    query = "SELECT * FROM reports WHERE hidden = ?"
+    params: tuple = (1 if hidden else 0,)
     if status:
-        query += " WHERE status = ?"
-        params = (status,)
+        query += " AND status = ?"
+        params = params + (status,)
     query += " ORDER BY id DESC"
     with _connect() as conn:
         rows = conn.execute(query, params).fetchall()
@@ -136,4 +145,22 @@ def update_report_status(report_id: int, status: str, admin_note: Optional[str])
             "UPDATE reports SET status = ?, admin_note = ?, updated_at = ? WHERE id = ?",
             (status, admin_note, updated_at, report_id),
         )
+        return cursor.rowcount > 0
+
+
+def set_report_hidden(report_id: int, hidden: bool) -> bool:
+    """신고 숨기기/복원 (2026-09-26). DB에서 지우지 않고 목록에서만 뺀다."""
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with _connect() as conn:
+        cursor = conn.execute(
+            "UPDATE reports SET hidden = ?, updated_at = ? WHERE id = ?",
+            (1 if hidden else 0, updated_at, report_id),
+        )
+        return cursor.rowcount > 0
+
+
+def delete_report(report_id: int) -> bool:
+    """신고 완전 삭제 (2026-09-26). 사진까지 DB에서 영구 삭제되며 되돌릴 수 없다."""
+    with _connect() as conn:
+        cursor = conn.execute("DELETE FROM reports WHERE id = ?", (report_id,))
         return cursor.rowcount > 0
