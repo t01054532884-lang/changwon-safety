@@ -2745,6 +2745,286 @@ st.write(
     "안전 인프라 공백을 분석하는 지도입니다."
 )
 st.caption("행정경계 데이터: © OpenStreetMap contributors (참고용)")
+# ==================== 위험신고 접수함 기능 (2026-09-26) ====================
+CITIZEN_APP_API_BASE = get_secret("CITIZEN_APP_API_BASE") or "https://changwon-ansimgil.onrender.com"
+# 2026-09-26: 관리자 키. Render(시민 앱 서버)의 REPORTS_ADMIN_KEY와 같은 값을
+# Streamlit Secrets에 REPORTS_ADMIN_KEY로 등록한다. 모든 관리자 요청 헤더에 붙여 보낸다.
+REPORTS_ADMIN_KEY = get_secret("REPORTS_ADMIN_KEY")
+
+REPORT_STATUS_OPTIONS = ["접수됨", "확인중", "처리완료", "반려"]
+REPORT_STATUS_ICONS = {
+    "접수됨": "🔴",
+    "확인중": "🟠",
+    "처리완료": "🟢",
+    "반려": "⚪",
+}
+REPORT_TYPE_LABELS_FALLBACK = {
+    "dark_alley": "어둡고 인적 드문 골목",
+    "broken_facility": "파손된 시설(가로등·CCTV 등)",
+    "suspicious_person": "불안한 사람·행동",
+    "traffic": "교통·보행 위험",
+    "etc": "기타 위험 상황",
+}
+
+
+def report_api_headers() -> dict:
+    """관리자 API 요청 헤더 (관리자 키 포함)."""
+    return {"X-Admin-Key": REPORTS_ADMIN_KEY} if REPORTS_ADMIN_KEY else {}
+
+
+def report_api_error_text(exc: Exception) -> str:
+    """요청 실패 원인을 알기 쉬운 문장으로 바꾼다."""
+    response = getattr(exc, "response", None)
+    if response is not None and response.status_code == 401:
+        return "관리자 키가 맞지 않습니다. Streamlit Secrets와 Render의 REPORTS_ADMIN_KEY 값을 확인하세요."
+    if response is not None and response.status_code == 404:
+        return "해당 신고를 찾을 수 없습니다. 이미 삭제됐을 수 있습니다."
+    return str(exc)
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def fetch_reports(status_filter: str, show_hidden: bool) -> tuple[list[dict], str]:
+    """시민 앱 백엔드에서 위험신고 목록을 가져온다. 실패하면 (빈 목록, 오류 메시지)."""
+    try:
+        params = {} if status_filter == "전체" else {"status": status_filter}
+        if show_hidden:
+            params["hidden"] = "true"
+        response = requests.get(
+            f"{CITIZEN_APP_API_BASE}/api/reports",
+            params=params,
+            headers=report_api_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json().get("reports", []), ""
+    except Exception as exc:
+        return [], report_api_error_text(exc)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def fetch_report_image(report_id: int) -> tuple[str, str]:
+    """신고 하나의 첨부 이미지(data URL)를 가져온다. 5분 동안 저장해 매번 다시 받지 않는다."""
+    try:
+        response = requests.get(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
+            headers=report_api_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json().get("image_data_url") or "", ""
+    except Exception as exc:
+        return "", report_api_error_text(exc)
+
+
+def update_report_status(report_id: int, status: str, admin_note: str) -> str:
+    """상태/메모를 갱신한다. 성공하면 빈 문자열, 실패하면 오류 메시지를 반환."""
+    try:
+        response = requests.patch(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
+            json={"status": status, "admin_note": admin_note},
+            headers=report_api_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return ""
+    except Exception as exc:
+        return report_api_error_text(exc)
+
+
+def set_report_hidden(report_id: int, hidden: bool) -> str:
+    """신고 숨기기(hidden=True) / 복원(hidden=False). 성공하면 빈 문자열."""
+    try:
+        response = requests.patch(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}/visibility",
+            json={"hidden": hidden},
+            headers=report_api_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return ""
+    except Exception as exc:
+        return report_api_error_text(exc)
+
+
+def delete_report_permanently(report_id: int) -> str:
+    """신고를 사진까지 영구 삭제한다. 성공하면 빈 문자열."""
+    try:
+        response = requests.delete(
+            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
+            headers=report_api_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        return ""
+    except Exception as exc:
+        return report_api_error_text(exc)
+
+
+def refresh_reports_after_change(message: str) -> None:
+    """변경 후 목록 캐시를 비우고 결과 메시지를 남긴 뒤 화면을 다시 그린다."""
+    fetch_reports.clear()
+    st.session_state["report_flash"] = message
+    st.rerun()
+
+
+# ==================== 🚨 위험신고 접수함 (페이지 맨 위에 표시) ====================
+with st.container(border=True):
+    st.subheader("🚨 위험신고 접수함")
+    st.caption(
+        "창원 안심길 시민 앱에서 접수된 위험신고를 확인하고 처리 상태를 관리합니다. "
+        "무료 서버 특성상 신고 데이터는 시민 앱을 다시 배포할 때 초기화될 수 있습니다."
+    )
+
+    if not REPORTS_ADMIN_KEY:
+        st.caption("⚠️ 관리자 키(REPORTS_ADMIN_KEY)가 등록되지 않았습니다.")
+
+    if "report_flash" in st.session_state:
+        st.success(st.session_state.pop("report_flash"))
+
+    if not st.session_state.get("reports_loaded", False):
+        st.caption(
+            "지도 로딩 속도를 위해 버튼을 눌렀을 때만 불러옵니다. "
+            "시민 앱 서버가 잠들어 있으면 처음 한 번은 1분 정도 걸릴 수 있습니다."
+        )
+        if st.button("📥 신고 목록 열기", key="report_load_btn", type="primary"):
+            st.session_state["reports_loaded"] = True
+            st.rerun()
+    else:
+        report_filter_col, report_hidden_col, report_refresh_col, report_close_col = st.columns(
+            [2.2, 1.3, 1, 1]
+        )
+        with report_filter_col:
+            report_status_filter = st.selectbox(
+                "상태 필터",
+                ["전체"] + REPORT_STATUS_OPTIONS,
+                key="report_status_filter",
+            )
+        with report_hidden_col:
+            st.write("")
+            show_hidden_reports = st.checkbox("🗂 숨긴 신고 보기", key="report_show_hidden")
+        with report_refresh_col:
+            st.write("")
+            if st.button("🔄 새로고침", key="report_refresh_btn", use_container_width=True):
+                fetch_reports.clear()
+                fetch_report_image.clear()
+        with report_close_col:
+            st.write("")
+            if st.button("⬆ 접기", key="report_close_btn", use_container_width=True):
+                st.session_state["reports_loaded"] = False
+                st.rerun()
+
+        with st.spinner("신고 목록을 불러오는 중…"):
+            reports, reports_fetch_error = fetch_reports(
+                report_status_filter, show_hidden_reports
+            )
+
+        if reports_fetch_error:
+            st.warning(
+                "신고 목록을 불러오지 못했습니다. 시민 앱 서버가 무료 플랜 특성상 잠들어 있다가 "
+                "첫 요청에 깨어나는 중이라 1분 정도 걸릴 수 있습니다 — 잠시 후 새로고침 해보세요.\n\n"
+                f"(오류 내용: {reports_fetch_error})"
+            )
+        elif not reports:
+            st.info("숨긴 신고가 없습니다." if show_hidden_reports else "접수된 위험신고가 없습니다.")
+        else:
+            status_counts = [
+                sum(1 for item in reports if item.get("status") == status)
+                for status in REPORT_STATUS_OPTIONS
+            ]
+            count_columns = st.columns(len(REPORT_STATUS_OPTIONS) + 1)
+            count_columns[0].metric(
+                "숨긴 신고" if show_hidden_reports else "전체", f"{len(reports)}건"
+            )
+            for column, status, count in zip(
+                count_columns[1:], REPORT_STATUS_OPTIONS, status_counts
+            ):
+                column.metric(f"{REPORT_STATUS_ICONS[status]} {status}", f"{count}건")
+            for report in reports:
+                report_id = report["id"]
+                status_icon = REPORT_STATUS_ICONS.get(report.get("status", ""), "❔")
+                type_label = report.get("report_type_label") or REPORT_TYPE_LABELS_FALLBACK.get(
+                    report.get("report_type"), report.get("report_type")
+                )
+                created_display = str(report.get("created_at") or "")[:16].replace("T", " ")
+                expander_title = (
+                    f"{'🗂 ' if show_hidden_reports else ''}{status_icon} #{report_id} · "
+                    f"{type_label} · {created_display} · {report.get('status')}"
+                )
+                with st.expander(expander_title):
+                    detail_col, action_col = st.columns([2, 1])
+                    with detail_col:
+                        st.write(report.get("description") or "_(작성된 설명 없음)_")
+                        if report.get("lat") is not None and report.get("lng") is not None:
+                            st.caption(f"위치: {report['lat']:.5f}, {report['lng']:.5f}")
+                        if report.get("age_group"):
+                            st.caption(f"신고자 프로필: {report['age_group']}")
+                        if report.get("has_image"):
+                            image_data_url, image_error = fetch_report_image(report_id)
+                            if image_data_url:
+                                st.image(image_data_url, caption="첨부 사진", width=280)
+                            elif image_error:
+                                st.caption(f"사진을 불러오지 못했습니다: {image_error}")
+                    with action_col:
+                        current_status = report.get("status")
+                        status_index = (
+                            REPORT_STATUS_OPTIONS.index(current_status)
+                            if current_status in REPORT_STATUS_OPTIONS
+                            else 0
+                        )
+                        new_status = st.selectbox(
+                            "처리 상태",
+                            REPORT_STATUS_OPTIONS,
+                            index=status_index,
+                            key=f"report_status_select_{report_id}",
+                        )
+                        new_note = st.text_area(
+                            "관리자 메모",
+                            value=report.get("admin_note") or "",
+                            key=f"report_note_{report_id}",
+                            height=80,
+                        )
+                        if st.button("💾 저장", key=f"report_save_{report_id}", use_container_width=True):
+                            save_error = update_report_status(report_id, new_status, new_note)
+                            if save_error:
+                                st.error(f"저장 실패: {save_error}")
+                            else:
+                                refresh_reports_after_change(f"#{report_id} 신고를 저장했습니다.")
+
+                        if show_hidden_reports:
+                            if st.button("↩️ 복원", key=f"report_restore_{report_id}", use_container_width=True):
+                                hide_error = set_report_hidden(report_id, False)
+                                if hide_error:
+                                    st.error(f"복원 실패: {hide_error}")
+                                else:
+                                    refresh_reports_after_change(f"#{report_id} 신고를 목록으로 복원했습니다.")
+                        else:
+                            if st.button("🗂 숨기기", key=f"report_hide_{report_id}", use_container_width=True):
+                                hide_error = set_report_hidden(report_id, True)
+                                if hide_error:
+                                    st.error(f"숨기기 실패: {hide_error}")
+                                else:
+                                    refresh_reports_after_change(
+                                        f"#{report_id} 신고를 숨겼습니다. '숨긴 신고 보기'에서 복원할 수 있습니다."
+                                    )
+
+                        confirm_delete = st.checkbox(
+                            "영구 삭제 확인 (되돌릴 수 없음)",
+                            key=f"report_delete_confirm_{report_id}",
+                        )
+                        if st.button(
+                            "🗑 완전 삭제",
+                            key=f"report_delete_{report_id}",
+                            disabled=not confirm_delete,
+                            use_container_width=True,
+                        ):
+                            delete_error = delete_report_permanently(report_id)
+                            if delete_error:
+                                st.error(f"삭제 실패: {delete_error}")
+                            else:
+                                fetch_report_image.clear()
+                                refresh_reports_after_change(f"#{report_id} 신고를 사진까지 영구 삭제했습니다.")
+
+
 safemap_service_key = get_safemap_service_key()
 naver_map_client_id = get_naver_map_client_id()
 if not safemap_service_key:
@@ -4621,263 +4901,3 @@ else:
 #
 # ⚠️ 인증 없음: 지금은 URL만 알면 누구나 신고 목록을 볼 수 있다(공모전 데모 단계라
 # 우선순위에서 미룸). 실제 운영 전에는 최소한 API 키 정도는 붙이는 걸 권장한다.
-CITIZEN_APP_API_BASE = get_secret("CITIZEN_APP_API_BASE") or "https://changwon-ansimgil.onrender.com"
-# 2026-09-26: 관리자 키. Render(시민 앱 서버)의 REPORTS_ADMIN_KEY와 같은 값을
-# Streamlit Secrets에 REPORTS_ADMIN_KEY로 등록한다. 모든 관리자 요청 헤더에 붙여 보낸다.
-REPORTS_ADMIN_KEY = get_secret("REPORTS_ADMIN_KEY")
-
-REPORT_STATUS_OPTIONS = ["접수됨", "확인중", "처리완료", "반려"]
-REPORT_STATUS_ICONS = {
-    "접수됨": "🔴",
-    "확인중": "🟠",
-    "처리완료": "🟢",
-    "반려": "⚪",
-}
-REPORT_TYPE_LABELS_FALLBACK = {
-    "dark_alley": "어둡고 인적 드문 골목",
-    "broken_facility": "파손된 시설(가로등·CCTV 등)",
-    "suspicious_person": "불안한 사람·행동",
-    "traffic": "교통·보행 위험",
-    "etc": "기타 위험 상황",
-}
-
-
-def report_api_headers() -> dict:
-    """관리자 API 요청 헤더 (관리자 키 포함)."""
-    return {"X-Admin-Key": REPORTS_ADMIN_KEY} if REPORTS_ADMIN_KEY else {}
-
-
-def report_api_error_text(exc: Exception) -> str:
-    """요청 실패 원인을 알기 쉬운 문장으로 바꾼다."""
-    response = getattr(exc, "response", None)
-    if response is not None and response.status_code == 401:
-        return "관리자 키가 맞지 않습니다. Streamlit Secrets와 Render의 REPORTS_ADMIN_KEY 값을 확인하세요."
-    if response is not None and response.status_code == 404:
-        return "해당 신고를 찾을 수 없습니다. 이미 삭제됐을 수 있습니다."
-    return str(exc)
-
-
-@st.cache_data(ttl=20, show_spinner=False)
-def fetch_reports(status_filter: str, show_hidden: bool) -> tuple[list[dict], str]:
-    """시민 앱 백엔드에서 위험신고 목록을 가져온다. 실패하면 (빈 목록, 오류 메시지)."""
-    try:
-        params = {} if status_filter == "전체" else {"status": status_filter}
-        if show_hidden:
-            params["hidden"] = "true"
-        response = requests.get(
-            f"{CITIZEN_APP_API_BASE}/api/reports",
-            params=params,
-            headers=report_api_headers(),
-            timeout=15,
-        )
-        response.raise_for_status()
-        return response.json().get("reports", []), ""
-    except Exception as exc:
-        return [], report_api_error_text(exc)
-
-
-@st.cache_data(ttl=300, show_spinner=False)
-def fetch_report_image(report_id: int) -> tuple[str, str]:
-    """신고 하나의 첨부 이미지(data URL)를 가져온다. 5분 동안 저장해 매번 다시 받지 않는다."""
-    try:
-        response = requests.get(
-            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
-            headers=report_api_headers(),
-            timeout=15,
-        )
-        response.raise_for_status()
-        return response.json().get("image_data_url") or "", ""
-    except Exception as exc:
-        return "", report_api_error_text(exc)
-
-
-def update_report_status(report_id: int, status: str, admin_note: str) -> str:
-    """상태/메모를 갱신한다. 성공하면 빈 문자열, 실패하면 오류 메시지를 반환."""
-    try:
-        response = requests.patch(
-            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
-            json={"status": status, "admin_note": admin_note},
-            headers=report_api_headers(),
-            timeout=15,
-        )
-        response.raise_for_status()
-        return ""
-    except Exception as exc:
-        return report_api_error_text(exc)
-
-
-def set_report_hidden(report_id: int, hidden: bool) -> str:
-    """신고 숨기기(hidden=True) / 복원(hidden=False). 성공하면 빈 문자열."""
-    try:
-        response = requests.patch(
-            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}/visibility",
-            json={"hidden": hidden},
-            headers=report_api_headers(),
-            timeout=15,
-        )
-        response.raise_for_status()
-        return ""
-    except Exception as exc:
-        return report_api_error_text(exc)
-
-
-def delete_report_permanently(report_id: int) -> str:
-    """신고를 사진까지 영구 삭제한다. 성공하면 빈 문자열."""
-    try:
-        response = requests.delete(
-            f"{CITIZEN_APP_API_BASE}/api/reports/{report_id}",
-            headers=report_api_headers(),
-            timeout=15,
-        )
-        response.raise_for_status()
-        return ""
-    except Exception as exc:
-        return report_api_error_text(exc)
-
-
-def refresh_reports_after_change(message: str) -> None:
-    """변경 후 목록 캐시를 비우고 결과 메시지를 남긴 뒤 화면을 다시 그린다."""
-    fetch_reports.clear()
-    st.session_state["report_flash"] = message
-    st.rerun()
-
-
-st.divider()
-st.header("🚨 위험신고 접수함")
-st.caption(
-    "창원 안심길 시민 앱에서 접수된 위험신고를 확인하고 처리 상태를 관리합니다. "
-    "무료 서버 특성상 신고 데이터는 시민 앱을 다시 배포할 때 초기화될 수 있습니다."
-)
-
-if not REPORTS_ADMIN_KEY:
-    st.caption("⚠️ 관리자 키(REPORTS_ADMIN_KEY)가 등록되지 않았습니다.")
-
-if "report_flash" in st.session_state:
-    st.success(st.session_state.pop("report_flash"))
-
-if not st.session_state.get("reports_loaded", False):
-    st.info(
-        "지도 로딩 속도를 위해 신고 목록은 버튼을 눌렀을 때만 불러옵니다. "
-        "시민 앱 서버가 잠들어 있으면 처음 한 번은 1분 정도 걸릴 수 있습니다."
-    )
-    if st.button("📥 신고 목록 불러오기", key="report_load_btn", type="primary"):
-        st.session_state["reports_loaded"] = True
-        st.rerun()
-else:
-    report_filter_col, report_hidden_col, report_refresh_col = st.columns([2.2, 1.3, 1])
-    with report_filter_col:
-        report_status_filter = st.selectbox(
-            "상태 필터",
-            ["전체"] + REPORT_STATUS_OPTIONS,
-            key="report_status_filter",
-        )
-    with report_hidden_col:
-        st.write("")
-        show_hidden_reports = st.checkbox("🗂 숨긴 신고 보기", key="report_show_hidden")
-    with report_refresh_col:
-        st.write("")
-        if st.button("🔄 새로고침", key="report_refresh_btn", use_container_width=True):
-            fetch_reports.clear()
-            fetch_report_image.clear()
-
-    with st.spinner("신고 목록을 불러오는 중…"):
-        reports, reports_fetch_error = fetch_reports(
-            report_status_filter, show_hidden_reports
-        )
-
-    if reports_fetch_error:
-        st.warning(
-            "신고 목록을 불러오지 못했습니다. 시민 앱 서버가 무료 플랜 특성상 잠들어 있다가 "
-            "첫 요청에 깨어나는 중이라 1분 정도 걸릴 수 있습니다 — 잠시 후 새로고침 해보세요.\n\n"
-            f"(오류 내용: {reports_fetch_error})"
-        )
-    elif not reports:
-        st.info("숨긴 신고가 없습니다." if show_hidden_reports else "접수된 위험신고가 없습니다.")
-    else:
-        st.caption(
-            f"{'숨긴 신고' if show_hidden_reports else '총'} {len(reports)}건"
-        )
-        for report in reports:
-            report_id = report["id"]
-            status_icon = REPORT_STATUS_ICONS.get(report.get("status", ""), "❔")
-            type_label = report.get("report_type_label") or REPORT_TYPE_LABELS_FALLBACK.get(
-                report.get("report_type"), report.get("report_type")
-            )
-            created_display = str(report.get("created_at") or "")[:16].replace("T", " ")
-            expander_title = (
-                f"{'🗂 ' if show_hidden_reports else ''}{status_icon} #{report_id} · "
-                f"{type_label} · {created_display} · {report.get('status')}"
-            )
-            with st.expander(expander_title):
-                detail_col, action_col = st.columns([2, 1])
-                with detail_col:
-                    st.write(report.get("description") or "_(작성된 설명 없음)_")
-                    if report.get("lat") is not None and report.get("lng") is not None:
-                        st.caption(f"위치: {report['lat']:.5f}, {report['lng']:.5f}")
-                    if report.get("age_group"):
-                        st.caption(f"신고자 프로필: {report['age_group']}")
-                    if report.get("has_image"):
-                        image_data_url, image_error = fetch_report_image(report_id)
-                        if image_data_url:
-                            st.image(image_data_url, caption="첨부 사진", width=280)
-                        elif image_error:
-                            st.caption(f"사진을 불러오지 못했습니다: {image_error}")
-                with action_col:
-                    current_status = report.get("status")
-                    status_index = (
-                        REPORT_STATUS_OPTIONS.index(current_status)
-                        if current_status in REPORT_STATUS_OPTIONS
-                        else 0
-                    )
-                    new_status = st.selectbox(
-                        "처리 상태",
-                        REPORT_STATUS_OPTIONS,
-                        index=status_index,
-                        key=f"report_status_select_{report_id}",
-                    )
-                    new_note = st.text_area(
-                        "관리자 메모",
-                        value=report.get("admin_note") or "",
-                        key=f"report_note_{report_id}",
-                        height=80,
-                    )
-                    if st.button("💾 저장", key=f"report_save_{report_id}", use_container_width=True):
-                        save_error = update_report_status(report_id, new_status, new_note)
-                        if save_error:
-                            st.error(f"저장 실패: {save_error}")
-                        else:
-                            refresh_reports_after_change(f"#{report_id} 신고를 저장했습니다.")
-
-                    if show_hidden_reports:
-                        if st.button("↩️ 복원", key=f"report_restore_{report_id}", use_container_width=True):
-                            hide_error = set_report_hidden(report_id, False)
-                            if hide_error:
-                                st.error(f"복원 실패: {hide_error}")
-                            else:
-                                refresh_reports_after_change(f"#{report_id} 신고를 목록으로 복원했습니다.")
-                    else:
-                        if st.button("🗂 숨기기", key=f"report_hide_{report_id}", use_container_width=True):
-                            hide_error = set_report_hidden(report_id, True)
-                            if hide_error:
-                                st.error(f"숨기기 실패: {hide_error}")
-                            else:
-                                refresh_reports_after_change(
-                                    f"#{report_id} 신고를 숨겼습니다. '숨긴 신고 보기'에서 복원할 수 있습니다."
-                                )
-
-                    confirm_delete = st.checkbox(
-                        "영구 삭제 확인 (되돌릴 수 없음)",
-                        key=f"report_delete_confirm_{report_id}",
-                    )
-                    if st.button(
-                        "🗑 완전 삭제",
-                        key=f"report_delete_{report_id}",
-                        disabled=not confirm_delete,
-                        use_container_width=True,
-                    ):
-                        delete_error = delete_report_permanently(report_id)
-                        if delete_error:
-                            st.error(f"삭제 실패: {delete_error}")
-                        else:
-                            fetch_report_image.clear()
-                            refresh_reports_after_change(f"#{report_id} 신고를 사진까지 영구 삭제했습니다.")
