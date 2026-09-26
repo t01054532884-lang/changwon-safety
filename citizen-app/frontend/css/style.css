@@ -383,6 +383,10 @@ button, input, select, textarea {
   color: var(--color-primary); font-size: 12.5px; font-weight: 700; white-space: nowrap;
 }
 .btn-link:active { color: var(--color-primary-dark); }
+
+#btn-edit-start { padding: 10px 10px; min-height: 40px; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#route-start { touch-action: manipulation; }
+
 .suggestion-list {
   position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 30;
   list-style: none; margin: 0; padding: 6px; max-height: 240px; overflow-y: auto;
