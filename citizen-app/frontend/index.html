@@ -153,8 +153,15 @@
       <section class="tab-panel" id="tab-report" data-tab="report" hidden>
         <form id="report-form" class="report-form">
           <div class="report-location">
-            <span>📍 신고 위치</span>
-            <strong id="report-location-text">위치 확인 중…</strong>
+            <div class="report-location-info">
+              <span>📍 신고 위치</span>
+              <strong id="report-location-text">위치 확인 중…</strong>
+            </div>
+            <!-- 2026-09-26 추가: 신고를 접수하지 않고도, 지금 내 위치만 카카오톡 등으로
+                 다른 사람에게 바로 알릴 수 있게 하는 버튼. 카카오 SDK/API 키 등록 없이도
+                 브라우저 기본 공유 시트(Web Share API)를 쓰면 폰에 카카오톡이 깔려있을 때
+                 공유 대상 목록에 카카오톡이 그대로 뜬다. -->
+            <button type="button" class="btn-share-location" id="btn-share-location">📤 위치 공유</button>
           </div>
 
           <label class="report-field">
