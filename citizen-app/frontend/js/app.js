@@ -284,6 +284,13 @@ function initShareLocation() {
 // point_in_polygon 로직 재사용) 내부에서 뽑아준 좌표를 실제 GPS 위치처럼 그대로
 // state.location에 덮어쓰고, 실시간 위치 갱신과 완전히 같은 경로(refreshLiveLocationUI)
 // 를 태워 마커·추천 장소·안전도 등이 전부 그 좌표 기준으로 다시 계산되게 한다.
+// 2026-09-27 수정: refreshLiveLocationUI()는 "지금 홈 탭을 보고 있을 때만" 주변
+// 추천시설·안전요소 3종을 다시 그리는데, 이 버튼은 헤더에 있어서 다른 탭(안심경로 등)을
+// 보다가도 누를 수 있다 — 그러면 정작 홈 탭으로 돌아왔을 때 여전히 이전 위치 기준
+// 추천이 떠 있고, 실제 GPS가 없으니 다음 실위치 갱신도 없어서 계속 안 바뀌는 것처럼
+// 보였다("바로바로 안 따라온다"는 제보). 이제 이 버튼은 지금 보고 있는 탭과 무관하게
+// 항상 즉시 홈 탭 데이터를 다시 계산해두고(안전요소 3종은 스로틀도 강제로 건너뜀),
+// 사용자가 홈 탭으로 돌아왔을 때 바로 새 위치 기준으로 보이게 한다.
 function initAdminRandomLocation() {
   const btn = document.getElementById("btn-admin-random-location");
   if (!btn) return;
@@ -304,6 +311,11 @@ function initAdminRandomLocation() {
       // 홈 지도를 새 좌표로 직접 재중심시켜준다.
       if (homeMap) homeMap.setView([data.lat, data.lng], 15);
       refreshLiveLocationUI();
+      // 지금 홈 탭이 아니라 refreshLiveLocationUI가 건너뛰었을 경우를 대비해
+      // 여기서 한 번 더 직접 불러준다(홈 탭일 때 중복 호출되어도 계산만 한 번 더
+      // 할 뿐 부작용은 없다).
+      renderRecommendedPlaces();
+      renderSafetyTriangles(true);
       console.log("[admin-random-location] 새 테스트 위치:", data.lat, data.lng);
       btn.textContent = "✅ 이동됨";
     } catch (e) {
@@ -624,11 +636,14 @@ function triangleGlow(lat, lng) {
   }).addTo(safetyTriangleLayer);
 }
 
-async function renderSafetyTriangles() {
+// force=true면 마지막으로 불러온 지점과 가까워도(80m 미만) 무조건 다시 불러온다 —
+// "위치 테스트" 버튼처럼 실제로는 순간이동인데 우연히 이전 테스트 지점과 가까운 경우까지
+// 스로틀에 걸려 갱신을 건너뛰면 안 되기 때문(2026-09-27, 아래 initAdminRandomLocation 참고).
+async function renderSafetyTriangles(force = false) {
   if (!homeMap || !safetyTriangleLayer || !state.location) return;
   const { lat, lng } = state.location;
 
-  if (lastTriangleFetchAt) {
+  if (!force && lastTriangleFetchAt) {
     const moved = haversineM(lastTriangleFetchAt.lat, lastTriangleFetchAt.lng, lat, lng);
     if (moved < TRIANGLE_REFRESH_MIN_MOVE_M) return; // 크게 안 움직였으면 다시 불러오지 않음
   }
