@@ -61,7 +61,7 @@
              좌표로 내 위치를 그대로 덮어쓴다. 실사용자 배포 시 이 버튼을 뺄지 여부는
              별도로 논의 필요(지금은 테스트 편의를 위해 항상 보이게 둠). -->
         <button class="admin-random-btn" id="btn-admin-random-location"
-                title="테스트용: 창원시 경계 내 임의 위치로 내 위치를 바꿉니다">🎯 위치 랜덤</button>
+                title="테스트용: 창원시 경계 내 임의 위치로 내 위치를 바꿉니다">🎯 위치 테스트</button>
         <button class="profile-chip" id="profile-chip">🧒 어린이 모드</button>
       </div>
     </header>
@@ -88,6 +88,22 @@
           <button class="choice-card" data-value="male"><span>남성</span></button>
           <button class="choice-card" data-value="none"><span>선택 안 함</span></button>
         </div>
+      </div>
+    </div>
+
+    <!-- 2026-09-26 추가: 위험신고 접수와 "내 위치 공유"는 실시간 위치가 있어야만
+         의미가 있는 기능이라, 온보딩에서 위치 허용을 건너뛴 사용자가 이 두 기능 중
+         하나를 쓰려고 하면 이 시트로 위치 허용을 다시 요청한다(ensureLocationPermission). -->
+    <div id="location-permission" class="profile-edit-overlay" hidden>
+      <div class="profile-edit-card">
+        <div class="profile-edit-head">
+          <h2>📍 위치 권한이 필요해요</h2>
+          <button type="button" class="btn-text" id="btn-close-location-permission">닫기</button>
+        </div>
+        <p class="location-permission-desc" id="location-permission-desc">
+          위험신고 접수와 내 위치 공유는 실시간 위치 정보가 있어야 사용할 수 있어요. 위치 접근을 허용해주세요.
+        </p>
+        <button type="button" class="btn-primary" id="btn-request-location-permission">위치 허용하기</button>
       </div>
     </div>
 
@@ -153,15 +169,8 @@
       <section class="tab-panel" id="tab-report" data-tab="report" hidden>
         <form id="report-form" class="report-form">
           <div class="report-location">
-            <div class="report-location-info">
-              <span>📍 신고 위치</span>
-              <strong id="report-location-text">위치 확인 중…</strong>
-            </div>
-            <!-- 2026-09-26 추가: 신고를 접수하지 않고도, 지금 내 위치만 카카오톡 등으로
-                 다른 사람에게 바로 알릴 수 있게 하는 버튼. 카카오 SDK/API 키 등록 없이도
-                 브라우저 기본 공유 시트(Web Share API)를 쓰면 폰에 카카오톡이 깔려있을 때
-                 공유 대상 목록에 카카오톡이 그대로 뜬다. -->
-            <button type="button" class="btn-share-location" id="btn-share-location">📤 위치 공유</button>
+            <span>📍 신고 위치</span>
+            <strong id="report-location-text">위치 확인 중…</strong>
           </div>
 
           <label class="report-field">
@@ -197,6 +206,17 @@
 
       <!-- 저장 -->
       <section class="tab-panel" id="tab-save" data-tab="save" hidden>
+        <!-- 2026-09-26 추가: 원래 위험신고 화면에 뒀던 위치 공유 기능을 여기로 옮김 —
+             신고는 어차피 위치 허용이 전제라 그 화면엔 의미가 없다는 피드백. 카카오톡/문자
+             등으로 지금 내 위치만 바로 알리고 싶을 때 신고 접수 없이 쓸 수 있다. -->
+        <div class="save-share-location">
+          <div class="save-share-location-info">
+            <span>📍 내 위치 공유</span>
+            <small>카카오톡, 문자 등으로 바로 보낼 수 있어요</small>
+          </div>
+          <button type="button" class="btn-share-location" id="btn-share-location">📤 위치 공유</button>
+        </div>
+
         <div class="route-form">
           <label class="route-field route-field-autocomplete">
             <span>자주 가는 곳 추가 (최대 5개)</span>
