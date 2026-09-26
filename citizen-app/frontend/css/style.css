@@ -7,24 +7,24 @@
   --color-text: #0f172a;
   --color-text-muted: #64748b;
   --color-border: #e2e8f0;
- 
+
   --grade-5: #16a34a; /* 매우안전 */
   --grade-4: #65a30d; /* 안전 */
   --grade-3: #eab308; /* 보통 */
   --grade-2: #f97316; /* 위험 */
   --grade-1: #dc2626; /* 매우위험 */
- 
+
   --safe-zone: #0f9d78;
   --caution-zone: #e2554a;
- 
+
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
 }
- 
+
 * { box-sizing: border-box; }
- 
+
 /* 어떤 요소든 display 값을 별도로 지정해도 hidden 속성이 항상 이기도록 강제 */
 [hidden] { display: none !important; }
- 
+
 html, body {
   margin: 0;
   height: 100%;
@@ -33,11 +33,11 @@ html, body {
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   -webkit-tap-highlight-color: transparent;
 }
- 
+
 button, input, select, textarea {
   font-family: inherit;
 }
- 
+
 /* ===================== 온보딩 ===================== */
 .onboarding {
   position: fixed;
@@ -48,7 +48,7 @@ button, input, select, textarea {
   justify-content: center;
   z-index: 100;
 }
- 
+
 .onboarding-card {
   width: 100%;
   max-width: 480px;
@@ -59,12 +59,12 @@ button, input, select, textarea {
   display: flex;
   flex-direction: column;
 }
- 
+
 .ob-step { display: flex; flex-direction: column; height: 100%; }
 .ob-icon { font-size: 42px; margin-bottom: 12px; }
 .ob-step h1 { font-size: 20px; line-height: 1.4; margin: 0 0 8px; }
 .ob-desc { color: var(--color-text-muted); font-size: 14px; line-height: 1.6; margin: 0 0 28px; }
- 
+
 .choice-grid {
   display: flex;
   flex-direction: column;
@@ -72,7 +72,7 @@ button, input, select, textarea {
   margin-bottom: auto;
 }
 .choice-grid-3 { flex-direction: row; }
- 
+
 .choice-card {
   border: 1.5px solid var(--color-border);
   background: var(--color-surface);
@@ -105,7 +105,7 @@ button, input, select, textarea {
   background: #eff4ff;
   color: var(--color-primary-dark);
 }
- 
+
 .btn-primary {
   border: none;
   background: var(--color-primary);
@@ -118,7 +118,7 @@ button, input, select, textarea {
   margin-top: 16px;
 }
 .btn-primary:disabled { background: #b9c4de; cursor: not-allowed; }
- 
+
 .btn-secondary {
   border: 1.5px solid var(--color-primary);
   background: #fff;
@@ -131,7 +131,7 @@ button, input, select, textarea {
   margin-top: 4px;
 }
 .btn-secondary:active { background: #eff4ff; }
- 
+
 /* 저장(북마크) 탭 */
 .save-status { margin: 0 16px 8px; font-size: 12.5px; font-weight: 600; color: var(--color-text-muted); text-align: center; }
 .save-status.is-error { color: var(--color-danger); }
@@ -152,7 +152,7 @@ button, input, select, textarea {
   width: 32px; height: 32px; border-radius: 50%; cursor: pointer; flex-shrink: 0;
 }
 .saved-place-delete:active { background: #f1f4f9; }
- 
+
 .btn-text {
   border: none;
   background: none;
@@ -161,7 +161,7 @@ button, input, select, textarea {
   padding: 12px;
   cursor: pointer;
 }
- 
+
 /* ===================== 프로필 수정(연령대/성별 다시 고르기) ===================== */
 /* 2026-09-26 추가: 온보딩과 같은 choice-card 스타일을 재사용하되, 전체 화면을 덮는
    온보딩과 달리 헤더 프로필 버튼을 눌렀을 때 뜨는 작은 시트 형태로 만든다. */
@@ -198,7 +198,7 @@ button, input, select, textarea {
 }
 .profile-edit-card .choice-grid { margin-bottom: 0; }
 .profile-edit-card .choice-card { padding: 12px 14px; font-size: 14.5px; }
- 
+
 /* ===================== 앱 셸 ===================== */
 /* 2026-09-25 추가: 이 앱은 애초에 폰 화면 기준으로 설계돼서(온보딩 카드도
    max-width:480px로 이미 그렇게 돼 있음), 데스크톱 웹 브라우저처럼 화면이 넓으면
@@ -217,7 +217,7 @@ button, input, select, textarea {
   background: var(--color-surface);
   box-shadow: 0 0 60px rgba(15, 23, 42, 0.10);
 }
- 
+
 .app-header {
   display: flex;
   align-items: center;
@@ -251,11 +251,11 @@ button, input, select, textarea {
   white-space: nowrap;
 }
 .admin-random-btn:disabled { opacity: 0.6; }
- 
+
 .app-main { flex: 1; position: relative; overflow: hidden; }
- 
+
 .tab-panel { position: absolute; inset: 0; overflow-y: auto; }
- 
+
 /* 지도 */
 /* 2026-09-26 추가: 실기기 콘솔 로그(부모 체인 진단)로 확인된 실제 원인 —
    #map-home은 .tab-panel(부모, 높이 1186px로 정상) 바로 아래에 있고 인라인
@@ -273,7 +273,7 @@ button, input, select, textarea {
    조합이 정상 동작할 때는 이 값과 결과가 같으므로 부작용은 없다. */
 .map { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 .map-short { position: relative; height: 220px; margin: 0 16px; border-radius: 16px; overflow: hidden; }
- 
+
 /* 홈 플로팅 카드 */
 .floating-card {
   position: absolute;
@@ -303,7 +303,7 @@ button, input, select, textarea {
 .dot-5 { background: var(--grade-5); } .dot-4 { background: var(--grade-4); }
 .dot-3 { background: var(--grade-3); } .dot-2 { background: var(--grade-2); }
 .dot-1 { background: var(--grade-1); }
- 
+
 .nearby-card { bottom: 12px; max-height: 34%; overflow-y: auto; }
 .nearby-card-compact { max-height: none; }
 .nearby-title { font-weight: 700; font-size: 13px; margin-bottom: 8px; }
@@ -315,13 +315,13 @@ button, input, select, textarea {
 .nearby-list .tag {
   font-size: 11px; font-weight: 700; color: #fff; padding: 2px 8px; border-radius: 999px;
 }
- 
+
 /* 2026-09-26: 지도 표시를 Leaflet+OpenStreetMap → 네이버 지도로 교체하면서, Leaflet 내부
    DOM 구조(.leaflet-tile-pane)에 걸려 있던 "홈 지도 민트톤" 필터는 뺐다. 네이버 지도는
    내부 타일 DOM 구조를 알 수 없어 같은 방식으로 색을 입힐 수 없다 — 필요하면 추후 네이버
    지도의 커스텀 스타일 기능으로 다시 시도해볼 것.
 */
- 
+
 /* 안전 영향권 / 주의 구간 범례 */
 .map-legend {
   top: 12px; left: 12px; right: auto;
@@ -332,7 +332,7 @@ button, input, select, textarea {
 .legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 .legend-dot-safe { background: var(--safe-zone); }
 .legend-dot-caution { background: var(--caution-zone); }
- 
+
 /* 안전시설/주의구간 아이콘 배지 (홈 지도) */
 .facility-badge-inner {
   width: 32px; height: 32px; border-radius: 50%;
@@ -342,14 +342,14 @@ button, input, select, textarea {
   box-shadow: 0 3px 10px rgba(15, 23, 42, 0.25);
 }
 .facility-badge-caution { background: var(--caution-zone); }
- 
+
 /* 안심경로 지도 내 위치 화살표 */
 .user-arrow-inner {
   display: flex; align-items: center; justify-content: center;
   transition: transform 0.25s ease;
   filter: drop-shadow(0 2px 4px rgba(15, 23, 42, 0.35));
 }
- 
+
 /* 안심경로 */
 .route-form { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .route-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--color-text-muted); font-weight: 600; position: relative; }
@@ -392,13 +392,19 @@ button, input, select, textarea {
 .route-option-head { display: flex; justify-content: space-between; font-weight: 700; font-size: 14.5px; }
 .route-time { color: var(--color-primary-dark); }
 .route-option-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 4px; }
- 
+
 /* 위험신고 */
 .report-form { padding: 16px; display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
 .report-location {
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
   background: #fff7ed; color: #9a3412; border-radius: 12px; padding: 10px 14px; font-size: 13px;
 }
+.report-location-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.btn-share-location {
+  flex-shrink: 0; border: none; background: #fed7aa; color: #9a3412; font-weight: 700;
+  font-size: 12px; padding: 8px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer;
+}
+.btn-share-location:active { background: #fdba74; }
 .report-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .report-field em { color: var(--color-danger); font-weight: 700; font-size: 11px; margin-left: 4px; }
 .report-field select, .report-field textarea, .report-field input[type="file"] {
@@ -411,12 +417,12 @@ button, input, select, textarea {
   background: #16a34a; color: #fff; padding: 14px 16px; border-radius: 14px; font-size: 13.5px; font-weight: 600;
   box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 20;
 }
- 
+
 /* 저장 / 빈 상태 */
 .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 32px; text-align: center; color: var(--color-text-muted); }
 .empty-icon { font-size: 40px; margin-bottom: 12px; }
 .empty-sub { font-size: 12.5px; }
- 
+
 /* 하단 네비게이션 */
 .bottom-nav {
   display: flex;
