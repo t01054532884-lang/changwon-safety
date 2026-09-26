@@ -900,6 +900,7 @@ function initRouteStartAutocomplete() {
     input.value = "";
     input.placeholder = "출발지 검색 (장소명·주소)";
     editBtn.textContent = "✖ 취소";
+    if (document.activeElement === input) input.blur();
     input.focus();
     renderList([]);
   }
@@ -972,7 +973,7 @@ function initRouteStartAutocomplete() {
   // 2026-09-26 수정: 휴대폰에서 "✏️ 수정"을 눌러도 반응이 없던 문제 보완.
   // (1) 출발지 칸 자체를 눌러도 바로 입력 모드로 들어가게 하고,
   // (2) 버튼을 누를 때 입력칸 포커스가 빠지지 않게 막아서 입력 모드가 유지되게 했다.
-  input.addEventListener("click", () => { if (input.readOnly) enterEditMode(); });
+  input.addEventListener("pointerdown", () => { if (input.readOnly) enterEditMode(); });
 
   input.addEventListener("blur", () => setTimeout(() => {
     if (!input.readOnly && document.activeElement !== input) exitEditMode();
