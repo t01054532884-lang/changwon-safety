@@ -19,10 +19,11 @@ from __future__ import annotations
  
 import os
 import random
+import secrets
 from pathlib import Path
 from typing import Optional
  
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -179,6 +180,24 @@ class ReportCreate(BaseModel):
 class ReportStatusUpdate(BaseModel):
     status: str
     admin_note: Optional[str] = None
+
+
+class ReportVisibilityUpdate(BaseModel):
+    hidden: bool
+
+
+def require_admin_key(x_admin_key: Optional[str] = Header(None)) -> None:
+    """관리자 전용 API 보호 (2026-09-26).
+
+    Render 환경변수 REPORTS_ADMIN_KEY와 요청 헤더 X-Admin-Key가 같아야 통과한다.
+    시민 신고 등록(POST /api/reports)에는 적용하지 않는다.
+    환경변수가 비어 있으면 (등록 전 전환 기간) 검사하지 않는다.
+    """
+    expected = os.environ.get("REPORTS_ADMIN_KEY", "").strip()
+    if not expected:
+        return
+    if not x_admin_key or not secrets.compare_digest(x_admin_key.strip(), expected):
+        raise HTTPException(status_code=401, detail="관리자 키가 올바르지 않습니다.")
  
  
 @app.post("/api/reports")
@@ -198,16 +217,21 @@ def create_report(payload: ReportCreate):
     return {"ok": True, "id": report_id}
  
  
-@app.get("/api/reports")
+@app.get("/api/reports", dependencies=[Depends(require_admin_key)])
 def get_reports(
     status: Optional[str] = Query(None, description="접수됨/확인중/처리완료/반려 중 하나로 필터링"),
     include_image: bool = Query(False, description="true면 각 신고의 이미지 데이터까지 포함(응답이 커짐)"),
+    hidden: bool = Query(False, description="true면 숨긴 신고만 조회"),
 ):
     """위험신고 목록 조회 (Stage 4/6). 관리자 웹에서 호출한다."""
-    return {"reports": reports_store.list_reports(status=status, include_image=include_image)}
+    return {
+        "reports": reports_store.list_reports(
+            status=status, include_image=include_image, hidden=hidden
+        )
+    }
  
  
-@app.get("/api/reports/{report_id}")
+@app.get("/api/reports/{report_id}", dependencies=[Depends(require_admin_key)])
 def get_report_detail(report_id: int):
     report = reports_store.get_report(report_id, include_image=True)
     if report is None:
@@ -215,7 +239,7 @@ def get_report_detail(report_id: int):
     return report
  
  
-@app.patch("/api/reports/{report_id}")
+@app.patch("/api/reports/{report_id}", dependencies=[Depends(require_admin_key)])
 def patch_report(report_id: int, payload: ReportStatusUpdate):
     """신고 처리 상태 변경 (Stage 6). 관리자 웹에서 호출한다."""
     try:
@@ -225,7 +249,21 @@ def patch_report(report_id: int, payload: ReportStatusUpdate):
     if not updated:
         raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
     return {"ok": True}
- 
+
+@app.patch("/api/reports/{report_id}/visibility", dependencies=[Depends(require_admin_key)])
+def patch_report_visibility(report_id: int, payload: ReportVisibilityUpdate):
+    """신고 숨기기/복원 (2026-09-26). 관리자 웹에서 호출한다."""
+    if not reports_store.set_report_hidden(report_id, payload.hidden):
+        raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
+    return {"ok": True}
+
+
+@app.delete("/api/reports/{report_id}", dependencies=[Depends(require_admin_key)])
+def remove_report(report_id: int):
+    """신고 완전 삭제 (2026-09-26). 사진까지 영구 삭제된다. 관리자 웹에서 호출한다."""
+    if not reports_store.delete_report(report_id):
+        raise HTTPException(status_code=404, detail="해당 신고를 찾을 수 없습니다.")
+    return {"ok": True}
  
 @app.get("/api/config")
 def get_public_config():
