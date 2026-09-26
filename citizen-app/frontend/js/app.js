@@ -960,12 +960,26 @@ function renderRouteResult(data) {
   });
 
   // 검색 직전에 도착지 입력창 포커스가 빠지면서 폰 키보드가 내려가고, 그 사이 지도
-  // 크기가 바뀌었을 수 있다 — fitBounds로 화면을 맞추기 직전에 한 번 더 크기를
-  // 재계산해서, 이미 사라진 키보드 공간만큼 지도가 반절 잘려 보이는 걸 방지한다.
+  // 크기가 바뀌었을 수 있다 — 화면을 맞추기 직전에 한 번 더 크기를 재계산해서,
+  // 이미 사라진 키보드 공간만큼 지도가 반절 잘려 보이는 걸 방지한다.
   if (routeMap && state._routePolylines) {
     routeMap.invalidateSize();
-    const selected = state._routePolylines[state.selectedRouteType];
-    if (selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
+    focusRouteMapOnMe(state._routePolylines[state.selectedRouteType]);
+  }
+}
+
+// 2026-09-26 변경: 경로가 나오거나 옵션을 고르면 예전엔 fitBounds로 "출발~도착 전체"가
+// 다 보이게 화면을 맞췄는데, 그러면 실제로 걸어서 안내를 받을 땐 너무 멀리서 보여서
+// "내 주변으로 확대"되는 느낌이 없었다(사용자 피드백). 이제는 내비게이션 앱처럼
+// 항상 "내 현재 위치" 기준으로 가깝게 확대해서 보여주고, 그 뒤로는 실시간 위치가
+// 갱신될 때마다 refreshLiveLocationUI()의 panTo가 줌은 그대로 둔 채 따라가게 한다.
+// (내 위치 정보가 아직 없는 극히 드문 경우에만, 예전처럼 경로 전체가 보이게 fallback.)
+function focusRouteMapOnMe(selectedLine) {
+  if (!routeMap) return;
+  if (state.location) {
+    routeMap.setView([state.location.lat, state.location.lng], 17);
+  } else if (selectedLine) {
+    routeMap.fitBounds(selectedLine.getBounds(), { padding: [24, 24] });
   }
 }
 
@@ -977,8 +991,7 @@ function highlightRouteType(type) {
     line.setStyle({ weight: t === type ? 6 : 3, opacity: t === type ? 0.95 : 0.45 });
     if (t === type) line.bringToFront();
   });
-  const selected = state._routePolylines[type];
-  if (routeMap && selected) routeMap.fitBounds(selected.getBounds(), { padding: [24, 24] });
+  focusRouteMapOnMe(state._routePolylines[type]);
 }
 
 // 안심경로 출발지 좌표를 돌려준다: 사용자가 "✏️ 수정"으로 직접 고른 장소가 있으면 그걸,
