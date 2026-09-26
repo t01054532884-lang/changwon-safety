@@ -556,15 +556,16 @@ function renderRecommendedPlaces() {
   }));
   withDist.sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
   const nearestThree = withDist.slice(0, 3);
+  const nearbyPlaceMarkers = [];
 
   if (recommendedLayer) {
     recommendedLayer.clearLayers();
 
     // 안전 영향권: 가장 가까운 추천시설(도서관/공원/파출소) 최대 3곳만 은은하게 표시
-    nearestThree.forEach(p => {
+    nearestThree.forEach((p, index) => {
       const style = PLACE_STYLE[p.category] || { emoji: "📍", label: p.category };
       addGlowZone(recommendedLayer, p.lat, p.lng, 120, SAFE_ZONE_COLOR);
-      NMap.marker([p.lat, p.lng], { icon: shieldDivIcon(), interactive: true })
+      nearbyPlaceMarkers[index] = NMap.marker([p.lat, p.lng], { icon: shieldDivIcon(), interactive: true })
         .addTo(recommendedLayer)
         .bindPopup(`<strong>🛡️ ${p.name}</strong><br/>${style.label} · 안전 영향권`);
     });
@@ -584,16 +585,27 @@ function renderRecommendedPlaces() {
 
   const ul = document.getElementById("nearby-list");
   ul.innerHTML = "";
-  nearestThree.forEach(item => {
+  nearestThree.forEach((item, index) => {
     const style = PLACE_STYLE[item.category] || { color: "#64748b", emoji: "📍", label: item.category };
     const li = document.createElement("li");
     const distText = item.dist != null ? `${(item.dist / 1000).toFixed(1)}km` : "거리 확인 불가";
     li.innerHTML = `<span>${style.emoji} ${item.name} <small style="color:#94a3b8">· ${style.label}</small></span>` +
       `<span class="tag" style="background:${style.color}">${distText}</span>`;
+    // 2026-09-26 추가: 목록을 누르면 홈 지도가 그 시설로 이동·확대하고 설명창을 연다.
+    li.style.cursor = "pointer";
+    li.addEventListener("click", () => focusNearbyPlace(item, nearbyPlaceMarkers[index]));
     ul.appendChild(li);
   });
   if (nearestThree.length === 0) {
     ul.innerHTML = "<li>주변 추천시설 정보를 불러오지 못했어요.</li>";
+  }
+}
+
+function focusNearbyPlace(place, marker) {
+  if (!homeMap || place.lat == null || place.lng == null) return;
+  homeMap.setView([place.lat, place.lng], 17);
+  if (marker && marker._real && window.naver && naver.maps && naver.maps.Event) {
+    naver.maps.Event.trigger(marker._real, "click"); // 지도 마커를 누른 것과 같은 설명창 열기
   }
 }
 
@@ -743,7 +755,7 @@ function refreshLiveLocationUI() {
     // 문제가 있었다("경로만 뜨고 내 위치를 못 따라간다"는 요청) — 안심경로 탭을
     // 보고 있는 동안에는 위치가 갱신될 때마다 지도를 내 위치로 같이 이동시킨다.
     // 줌 레벨은 건드리지 않아(panTo) 사용자가 손으로 확대/축소해둔 상태는 유지된다.
-    if (state.activeTab === "route") routeMap.panTo(latlng);
+    if (state.activeTab === "route" && isNearSelectedRoute()) routeMap.panTo(latlng);
   }
 
   if (state.activeTab === "home") {
@@ -1108,15 +1120,29 @@ function renderRouteResult(data) {
 // 항상 "내 현재 위치" 기준으로 가깝게 확대해서 보여주고, 그 뒤로는 실시간 위치가
 // 갱신될 때마다 refreshLiveLocationUI()의 panTo가 줌은 그대로 둔 채 따라가게 한다.
 // (내 위치 정보가 아직 없는 극히 드문 경우에만, 예전처럼 경로 전체가 보이게 fallback.)
+// 2026-09-26 추가: 내 위치가 경로에서 멀면(다른 지역에 있거나 출발지를 다른 곳으로 바꾼 경우)
+// 내 위치로 확대하면 경로가 화면에 안 보인다 — 이때는 경로 전체가 보이게 맞추고 따라가지 않는다.
+// 경로 근처(ROUTE_FOLLOW_MAX_DIST_M 이내)에 있을 때만 위의 "내 위치 기준 확대·따라가기"를 쓴다.
+const ROUTE_FOLLOW_MAX_DIST_M = 500;
+
+function isNearSelectedRoute() {
+  if (!state.location) return false;
+  const routes = state.routeResult && state.routeResult.routes;
+  const selected = routes && routes[state.selectedRouteType];
+  if (!selected || !Array.isArray(selected.path) || !selected.path.length) return true; // 경로가 없으면 예전처럼 따라감
+  return selected.path.some(p =>
+    haversineM(state.location.lat, state.location.lng, p.lat, p.lng) <= ROUTE_FOLLOW_MAX_DIST_M
+  );
+}
+
 function focusRouteMapOnMe(selectedLine) {
   if (!routeMap) return;
-  if (state.location) {
+  if (state.location && (!selectedLine || isNearSelectedRoute())) {
     routeMap.setView([state.location.lat, state.location.lng], 17);
   } else if (selectedLine) {
     routeMap.fitBounds(selectedLine.getBounds(), { padding: [24, 24] });
   }
 }
-
 function highlightRouteType(type) {
   state.selectedRouteType = type;
   document.querySelectorAll(".route-option").forEach(o => o.classList.toggle("is-selected", o.dataset.type === type));
