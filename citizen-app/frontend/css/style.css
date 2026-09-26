@@ -133,6 +133,21 @@ button, input, select, textarea {
 .btn-secondary:active { background: #eff4ff; }
 
 /* 저장(북마크) 탭 */
+/* 2026-09-26 추가: 내 위치를 카카오톡/문자 등으로 바로 공유하는 카드 — 원래 위험신고
+   화면에 있었으나, 신고 자체가 위치 허용을 전제로 해서 그 자리엔 의미가 없다는 피드백으로
+   여기로 옮겼다. */
+.save-share-location {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  background: #eff4ff; color: #1d4ed8; border-radius: 12px; padding: 12px 14px; font-size: 13px;
+  margin: 16px 16px 4px;
+}
+.save-share-location-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.save-share-location-info small { font-weight: 400; color: #3b5bdb; font-size: 11.5px; }
+.btn-share-location {
+  flex-shrink: 0; border: none; background: #dbe4ff; color: #1d4ed8; font-weight: 700;
+  font-size: 12px; padding: 8px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer;
+}
+.btn-share-location:active { background: #c7d5ff; }
 .save-status { margin: 0 16px 8px; font-size: 12.5px; font-weight: 600; color: var(--color-text-muted); text-align: center; }
 .save-status.is-error { color: var(--color-danger); }
 .saved-places-list { list-style: none; margin: 8px 16px 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -198,6 +213,10 @@ button, input, select, textarea {
 }
 .profile-edit-card .choice-grid { margin-bottom: 0; }
 .profile-edit-card .choice-card { padding: 12px 14px; font-size: 14.5px; }
+
+/* 2026-09-26 추가: 위치 권한 재요청 시트(#location-permission)도 같은 profile-edit-card
+   틀을 재사용하므로, 설명 문구/버튼 여백만 별도로 정의한다. */
+.location-permission-desc { color: var(--color-text-muted); font-size: 13.5px; line-height: 1.6; margin: 0 0 16px; }
 
 /* ===================== 앱 셸 ===================== */
 /* 2026-09-25 추가: 이 앱은 애초에 폰 화면 기준으로 설계돼서(온보딩 카드도
@@ -396,15 +415,9 @@ button, input, select, textarea {
 /* 위험신고 */
 .report-form { padding: 16px; display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
 .report-location {
-  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  display: flex; justify-content: space-between; align-items: center;
   background: #fff7ed; color: #9a3412; border-radius: 12px; padding: 10px 14px; font-size: 13px;
 }
-.report-location-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.btn-share-location {
-  flex-shrink: 0; border: none; background: #fed7aa; color: #9a3412; font-weight: 700;
-  font-size: 12px; padding: 8px 12px; border-radius: 999px; white-space: nowrap; cursor: pointer;
-}
-.btn-share-location:active { background: #fdba74; }
 .report-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .report-field em { color: var(--color-danger); font-weight: 700; font-size: 11px; margin-left: 4px; }
 .report-field select, .report-field textarea, .report-field input[type="file"] {
