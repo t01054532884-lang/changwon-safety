@@ -191,6 +191,18 @@
       ? Math.max(1, Math.ceil(route.duration_min * remaining / geo.total))
       : Math.max(1, Math.ceil(remaining / 67)); // 분당 약 67m(시속 4km)
 
+    // 2026-09-27 수정: 경로에서 멀리 있으면(예: 다른 지역) 진행 계산을 하지 않는다.
+    // 가장 가까운 점이 도착지 쪽이면 "남은 거리 0m"처럼 보이고 경로 전체가 회색으로 칠해졌다.
+    if (proj.off > 300) {
+      clearPassedLine();
+      const farText = proj.off >= 10000 ? `${Math.round(proj.off / 1000)}km` : formatDist(proj.off);
+      el("nav-remaining").textContent =
+        `전체 ${formatDist(geo.total)} · 약 ${route.duration_min || Math.ceil(geo.total / 67)}분`;
+      showAlert(`📍 지금 위치가 경로에서 약 ${farText} 떨어져 있어요. 출발지 근처로 가면 안내가 시작돼요.`, "warn");
+      nav.wasFar = true;
+      return;
+    }
+    if (nav.wasFar) { nav.wasFar = false; showAlert("", null); } // 경로 근처로 오면 안내문 지우기
     drawPassedLine(route, proj);
 
     if (remaining <= ARRIVE_M && proj.off <= OFF_ROUTE_M) {
