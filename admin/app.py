@@ -2943,6 +2943,48 @@ with st.container(border=True):
                 count_columns[1:], REPORT_STATUS_OPTIONS, status_counts
             ):
                 column.metric(f"{REPORT_STATUS_ICONS[status]} {status}", f"{count}건")
+                
+            # 2026-09-26 추가: 지금 화면에 보이는 신고 목록(상태 필터·숨김 보기 기준)을 한 번에 CSV로 받기.
+            # 사진은 용량이 커서 빼고 "있음/없음"만 적는다. 엑셀에서 한글이 깨지지 않게 utf-8-sig로 저장한다.
+            def report_time_kst(raw_value):
+                raw_text = str(raw_value or "")
+                if not raw_text:
+                    return ""
+                try:
+                    parsed_time = datetime.fromisoformat(raw_text.replace("Z", "+00:00"))
+                    if parsed_time.tzinfo is None:
+                        parsed_time = parsed_time.replace(tzinfo=ZoneInfo("UTC"))
+                    return parsed_time.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    return raw_text[:16].replace("T", " ")
+
+            reports_csv_df = pd.DataFrame(
+                [
+                    {
+                        "번호": item.get("id"),
+                        "접수 시간": report_time_kst(item.get("created_at")),
+                        "유형": item.get("report_type_label")
+                        or REPORT_TYPE_LABELS_FALLBACK.get(item.get("report_type"), item.get("report_type")),
+                        "내용": item.get("description") or "",
+                        "위도": item.get("lat"),
+                        "경도": item.get("lng"),
+                        "신고자 프로필": item.get("age_group") or "",
+                        "처리 상태": item.get("status") or "",
+                        "관리자 메모": item.get("admin_note") or "",
+                        "처리 시간": report_time_kst(item.get("updated_at")),
+                        "사진": "있음" if item.get("has_image") else "없음",
+                    }
+                    for item in reports
+                ]
+            )
+            st.download_button(
+                f"📥 신고 목록 CSV 다운로드 ({len(reports)}건)",
+                data=reports_csv_df.to_csv(index=False).encode("utf-8-sig"),
+                file_name=f"위험신고_{report_status_filter}_{datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                key="report_csv_download",
+                use_container_width=True,
+            )
             for report in reports:
                 report_id = report["id"]
                 status_icon = REPORT_STATUS_ICONS.get(report.get("status", ""), "❔")
