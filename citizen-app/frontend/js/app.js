@@ -166,14 +166,74 @@ function initProfileEdit() {
   });
 }
 
-// 2026-09-26 추가: 위험신고 화면에서 "신고를 접수하지 않고도" 지금 내 위치를 다른
-// 사람에게 바로 알릴 수 있게 하는 기능. 카카오 SDK를 새로 붙이려면 Kakao Developers에
-// 앱을 만들고 JS 키를 발급받아 도메인까지 등록해야 하는데(네이버 지도 때와 비슷한
-// 절차), 그 대신 브라우저 표준 기능인 Web Share API(navigator.share)를 쓰면 등록·키
-// 없이도 똑같은 효과를 낼 수 있다 — 이 API를 호출하면 운영체제의 기본 "공유하기" 시트가
-// 뜨는데, 폰에 카카오톡이 설치돼 있으면 그 목록에 카카오톡이 그대로 나타난다(문자
-// 메시지·다른 앱들과 함께). 즉 "카카오톡 공유" 버튼을 우리가 직접 그리는 대신, 운영체제가
-// 이미 가지고 있는 공유 목록을 그대로 빌려 쓰는 방식.
+// 2026-09-26 추가: 위험신고 접수와 "내 위치 공유"는 둘 다 실시간 위치가 있어야만
+// 의미가 있는 기능이다. 온보딩에서 위치 허용을 건너뛴 사용자가 나중에 이 둘 중 하나를
+// 쓰려고 하면, 그 시점에 위치 허용을 다시 요청한다 — 이미 허용돼 있으면(state.location)
+// 그냥 바로 진행하고, 없으면 허용 요청 시트를 띄운 뒤 허용을 받아야만 진행한다.
+// (브라우저가 이미 "차단"으로 기억하고 있는 경우 JS로 네이티브 권한창을 다시 띄울 수는
+// 없어서, 그 경우엔 안내 문구로 기기/브라우저 설정에서 직접 풀어달라고 안내한다.)
+let pendingLocationAction = null;
+
+function setLocationPermissionMessage(message) {
+  const el = document.getElementById("location-permission-desc");
+  if (el) el.textContent = message;
+}
+
+function openLocationPermissionSheet(onGranted) {
+  pendingLocationAction = onGranted;
+  setLocationPermissionMessage(
+    "위험신고 접수와 내 위치 공유는 실시간 위치 정보가 있어야 사용할 수 있어요. 위치 접근을 허용해주세요."
+  );
+  document.getElementById("location-permission").hidden = false;
+}
+
+function closeLocationPermissionSheet() {
+  document.getElementById("location-permission").hidden = true;
+  pendingLocationAction = null;
+}
+
+// tab/버튼 등 위치가 꼭 필요한 동작 앞에 이걸로 감싸서 쓴다: 이미 위치가 있으면 바로
+// onGranted()를 실행하고, 없으면 허용 시트를 띄워 허용된 뒤에만 실행한다.
+function ensureLocationPermission(onGranted) {
+  if (state.location) { onGranted(); return; }
+  openLocationPermissionSheet(onGranted);
+}
+
+function initLocationPermissionSheet() {
+  document.getElementById("btn-close-location-permission").addEventListener("click", closeLocationPermissionSheet);
+  document.getElementById("btn-request-location-permission").addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      setLocationPermissionMessage("이 브라우저에서는 위치 기능을 지원하지 않아요.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        refreshLiveLocationUI();
+        const action = pendingLocationAction;
+        closeLocationPermissionSheet();
+        if (action) action();
+      },
+      () => {
+        setLocationPermissionMessage(
+          "위치 권한이 거부되어 있어요. 브라우저나 기기 설정에서 \"창원 안심길\"의 위치 권한을 허용한 뒤 다시 시도해주세요."
+        );
+      },
+      { enableHighAccuracy: true, timeout: 6000 }
+    );
+  });
+}
+
+// 2026-09-26 추가: 처음엔 위험신고 화면에 뒀었는데, 신고 접수 자체가 이미 위치 허용을
+// 전제로 하다보니 그 자리엔 의미가 없다는 피드백을 받아 저장(북마크) 탭으로 옮겼다.
+// "신고를 하지 않고도" 지금 내 위치만 다른 사람에게 바로 알릴 수 있게 하는 기능.
+// 카카오 SDK를 새로 붙이려면 Kakao Developers에 앱을 만들고 JS 키를 발급받아 도메인까지
+// 등록해야 하는데(네이버 지도 때와 비슷한 절차), 그 대신 브라우저 표준 기능인
+// Web Share API(navigator.share)를 쓰면 등록·키 없이도 똑같은 효과를 낼 수 있다 —
+// 이 API를 호출하면 운영체제의 기본 "공유하기" 시트가 뜨는데, 폰에 카카오톡이 설치돼
+// 있으면 그 목록에 카카오톡이 그대로 나타난다(문자 메시지·다른 앱들과 함께). 즉
+// "카카오톡 공유" 버튼을 우리가 직접 그리는 대신, 운영체제가 이미 가지고 있는 공유
+// 목록을 그대로 빌려 쓰는 방식.
 // Web Share API를 지원하지 않는 환경(주로 데스크톱 브라우저)에서는 대신 위치 링크를
 // 클립보드에 복사해주고, 그것도 안 되면 마지막 수단으로 prompt 창에 링크를 띄워
 // 사용자가 직접 길게 눌러 복사할 수 있게 한다.
@@ -185,40 +245,37 @@ function buildShareLocationText() {
   return { mapUrl, text: `[창원 안심길] 제 현재 위치예요.\n${mapUrl}` };
 }
 
+async function doShareLocation() {
+  const { mapUrl, text } = buildShareLocationText();
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: "창원 안심길 - 내 위치 공유", text, url: mapUrl });
+    } catch (e) {
+      // 사용자가 공유 시트에서 "취소"를 누른 경우도 항상 이 catch로 들어온다
+      // (AbortError) — 실패가 아니라 정상적인 취소이므로 에러로 표시하지 않는다.
+      if (e && e.name !== "AbortError") {
+        console.warn("[share-location] 공유 실패:", e);
+        setSaveStatus("공유 중 문제가 발생했어요. 다시 시도해주세요.", true);
+      }
+    }
+    return;
+  }
+
+  // Web Share API 미지원 브라우저(주로 데스크톱) — 클립보드 복사로 대체.
+  try {
+    await navigator.clipboard.writeText(text);
+    setSaveStatus("내 위치 링크를 복사했어요. 카카오톡 등에 붙여넣기 해주세요.");
+  } catch (e) {
+    // 클립보드 권한도 막혀있는 아주 드문 경우의 최후 수단.
+    window.prompt("아래 링크를 길게 눌러 복사한 뒤 카카오톡 등에 붙여넣어 주세요.", mapUrl);
+  }
+}
+
 function initShareLocation() {
   const btn = document.getElementById("btn-share-location");
   if (!btn) return;
-
-  btn.addEventListener("click", async () => {
-    if (!state.location) {
-      setReportStatus("아직 위치 정보를 확인하지 못했어요. 위치 권한을 허용했는지 확인해주세요.", true);
-      return;
-    }
-    const { mapUrl, text } = buildShareLocationText();
-
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "창원 안심길 - 내 위치 공유", text, url: mapUrl });
-      } catch (e) {
-        // 사용자가 공유 시트에서 "취소"를 누른 경우도 항상 이 catch로 들어온다
-        // (AbortError) — 실패가 아니라 정상적인 취소이므로 에러로 표시하지 않는다.
-        if (e && e.name !== "AbortError") {
-          console.warn("[share-location] 공유 실패:", e);
-          setReportStatus("공유 중 문제가 발생했어요. 다시 시도해주세요.", true);
-        }
-      }
-      return;
-    }
-
-    // Web Share API 미지원 브라우저(주로 데스크톱) — 클립보드 복사로 대체.
-    try {
-      await navigator.clipboard.writeText(text);
-      setReportStatus("내 위치 링크를 복사했어요. 카카오톡 등에 붙여넣기 해주세요.");
-    } catch (e) {
-      // 클립보드 권한도 막혀있는 아주 드문 경우의 최후 수단.
-      window.prompt("아래 링크를 길게 눌러 복사한 뒤 카카오톡 등에 붙여넣어 주세요.", mapUrl);
-    }
-  });
+  btn.addEventListener("click", () => ensureLocationPermission(doShareLocation));
 }
 
 // 2026-09-26 추가: 아직 실사용자에게 배포하지 않은 테스트 단계라, 실기기 GPS 없이도
@@ -264,7 +321,16 @@ function initAdminRandomLocation() {
 // ---------- 탭 네비게이션 ----------
 function initTabs() {
   document.querySelectorAll(".nav-item").forEach(btn => {
-    btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+    btn.addEventListener("click", () => {
+      // 2026-09-26 추가: 위험신고 탭은 위치 정보가 있어야 의미가 있으므로, 온보딩에서
+      // 위치 허용을 건너뛴 사용자가 이 탭을 누르면 허용 시트를 먼저 띄우고, 허용된
+      // 뒤에만 실제로 탭을 전환한다.
+      if (btn.dataset.tab === "report") {
+        ensureLocationPermission(() => switchTab("report"));
+        return;
+      }
+      switchTab(btn.dataset.tab);
+    });
   });
 }
 function switchTab(tab) {
@@ -1443,6 +1509,7 @@ async function initApp() {
   await Promise.all([loadTopZones(), loadRecommendedPlaces(), loadDestinations()]);
   initTabs();
   initProfileEdit();
+  initLocationPermissionSheet();
   initAdminRandomLocation();
   initShareLocation();
 
