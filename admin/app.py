@@ -2897,6 +2897,10 @@ with st.container(border=True):
             report_status_filter = st.selectbox(
                 "상태 필터",
                 ["전체"] + REPORT_STATUS_OPTIONS,
+                format_func=lambda option: (
+                    "📋 전체" if option == "전체"
+                    else f"{REPORT_STATUS_ICONS[option]} {option}"
+                ),
                 key="report_status_filter",
             )
         with report_hidden_col:
@@ -2975,6 +2979,7 @@ with st.container(border=True):
                             "처리 상태",
                             REPORT_STATUS_OPTIONS,
                             index=status_index,
+                            format_func=lambda option: f"{REPORT_STATUS_ICONS[option]} {option}",
                             key=f"report_status_select_{report_id}",
                         )
                         new_note = st.text_area(
