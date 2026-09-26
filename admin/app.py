@@ -2949,7 +2949,14 @@ with st.container(border=True):
                 type_label = report.get("report_type_label") or REPORT_TYPE_LABELS_FALLBACK.get(
                     report.get("report_type"), report.get("report_type")
                 )
-                created_display = str(report.get("created_at") or "")[:16].replace("T", " ")
+                created_raw = str(report.get("created_at") or "")
+                try:
+                    created_dt = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+                    if created_dt.tzinfo is None:
+                        created_dt = created_dt.replace(tzinfo=ZoneInfo("UTC"))
+                    created_display = created_dt.astimezone(ZoneInfo("Asia/Seoul")).strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    created_display = created_raw[:16].replace("T", " ")
                 expander_title = (
                     f"{'🗂 ' if show_hidden_reports else ''}{status_icon} #{report_id} · "
                     f"{type_label} · {created_display} · {report.get('status')}"
