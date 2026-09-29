@@ -226,6 +226,11 @@ def _compute_routes_grid(start_lat, start_lng, end_lat, end_lng, age_group: str)
 CANDIDATE_GRID_N = 11  # 경유지 후보 탐색용 (전체 라우팅 격자보다 훨씬 성기게)
 MAX_CANDIDATES = 5  # Tmap 호출 횟수를 제한하기 위한 후보 개수 상한
 RISK_SAMPLE_STRIDE = 3  # Tmap 경로 좌표 중 매 N번째 점만 위험도 샘플링(호출 비용 절감)
+# 2026-09-29: "안심 우선이 너무 돌아간다"는 피드백 — 예전에는 거리 상한(최단의 1.8배) 안에서
+# 위험도가 가장 낮은 후보를 무조건 골라서, 위험도가 0.01만 낮아도 1.7배를 돌아가는 경로가 뽑혔다.
+# (1) 경유지 후보를 출발~도착 사이 "통로" 안에서만 뽑고, (2) 더 돌아가는 만큼 벌점을 줘서
+# "조금 더 걸어서 위험을 확실히 줄이는" 경로를 고른다.
+CORRIDOR_MAX_RATIO = 1.5  # 경유지를 거치는 직선거리가 출발~도착 직선의 1.5배를 넘는 후보는 제외
  
  
 def _sample_path_risk(path: list[tuple[float, float]], age_group: str) -> float:
@@ -246,9 +251,13 @@ def _candidate_waypoints(start_lat, start_lng, end_lat, end_lng, age_group: str)
     idxs2 = np.linspace(0, len(lon_vals) - 1, CANDIDATE_GRID_N).round().astype(int)
     cand_lons = lon_vals[idxs2]
  
+    straight_m = max(1.0, haversine_m(start_lat, start_lng, end_lat, end_lng))
     scored = []
     for la in cand_lats:
         for lo in cand_lons:
+            via_m = haversine_m(start_lat, start_lng, la, lo) + haversine_m(la, lo, end_lat, end_lng)
+            if via_m / straight_m > CORRIDOR_MAX_RATIO:
+                continue  # 너무 옆으로 벗어난 후보(크게 돌아가게 만듦)는 처음부터 제외
             r = risk_at(float(la), float(lo), age_group)
             scored.append((r, float(la), float(lo)))
     scored.sort(key=lambda t: t[0])  # 위험도 낮은 순
@@ -335,20 +344,27 @@ def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str)
             continue
         candidates.append(_tmap_route_result("candidate", "후보", r, age_group))
  
-    def pick_variant(key: str, label: str, max_distance_ratio: float, fallback: dict) -> dict:
-        pool = [c for c in candidates if c["distance_m"] <= fallback["distance_m"] * max_distance_ratio]
-        pool = [c for c in pool if c["avg_risk"] < fallback["avg_risk"]]
+    def pick_variant(key: str, label: str, max_distance_ratio: float, fallback: dict,
+                     detour_penalty: float) -> dict:
+        # 점수 = 평균 위험도 + detour_penalty × (최단 대비 늘어난 거리 비율)
+        # 예) 안심 우선(0.2): 10% 더 걸으려면 평균 위험도가 0.02 이상 낮아져야 선택된다.
+        base_m = max(1.0, fallback["distance_m"])
+        def cost(c):
+            return c["avg_risk"] + detour_penalty * max(0.0, c["distance_m"] / base_m - 1.0)
+        pool = [c for c in candidates if c["distance_m"] <= base_m * max_distance_ratio]
+        pool = [c for c in pool if c["avg_risk"] <= fallback["avg_risk"] - 0.01]  # 위험이 확실히 줄어야 함
+        pool = [c for c in pool if cost(c) < fallback["avg_risk"]]
         if not pool:
             picked = dict(fallback)
         else:
-            picked = min(pool, key=lambda c: c["avg_risk"])
+            picked = min(pool, key=cost)
         picked = dict(picked)
         picked["type"] = key
         picked["label"] = label
         return picked
- 
-    balanced = pick_variant("balanced", "균형", 1.3, fast)
-    safe = pick_variant("safe", "안심 우선", 1.8, fast)
+
+    balanced = pick_variant("balanced", "균형", 1.25, fast, detour_penalty=0.5)
+    safe = pick_variant("safe", "안심 우선", 1.5, fast, detour_penalty=0.2)
  
     routes = {"fast": fast, "balanced": balanced, "safe": safe}
     return {
