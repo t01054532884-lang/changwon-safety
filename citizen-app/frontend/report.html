@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>창원 안심길 검증 리포트</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: 한 줄 기둥(최대 920px) 리포트 — 요약 수치 → 외부 데이터 검증 → 거리·안전 트레이드오프 → 표 → 한계 */
+:root {
+  --bg: #f6f8f9;
+  --surface: #ffffff;
+  --ink: #0f1a22;
+  --ink-2: #4a5a66;
+  --ink-3: #7a8893;
+  --rule: #dfe5e9;
+  --grid: #e9eef1;
+  --accent: #0e5a78;
+  --accent-soft: #e3f0f5;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+  --neutral-bar: #b9c4cc;
+  --good: #1d7a45; --warn: #a15c00;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171b; --surface: #182127; --ink: #eef3f6; --ink-2: #b3c0c9; --ink-3: #8595a0;
+    --rule: #2a363e; --grid: #222d34; --accent: #6cc0e0; --accent-soft: #1b313b;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --neutral-bar: #55646e;
+    --good: #5cc98a; --warn: #e0a34a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171b; --surface: #182127; --ink: #eef3f6; --ink-2: #b3c0c9; --ink-3: #8595a0;
+  --rule: #2a363e; --grid: #222d34; --accent: #6cc0e0; --accent-soft: #1b313b;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --neutral-bar: #55646e;
+  --good: #5cc98a; --warn: #e0a34a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+.wrap { max-width: 920px; margin: 0 auto; padding-inline: 20px; padding-block: 40px 72px; display: flex; flex-direction: column; gap: 48px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 21px; font-weight: 700; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.08em; color: var(--accent); text-transform: uppercase; }
+.muted { color: var(--ink-2); }
+.small { font-size: 13px; color: var(--ink-3); }
+header { display: flex; flex-direction: column; gap: 12px; }
+section { display: flex; flex-direction: column; gap: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tile .label { font-size: 13px; color: var(--ink-2); }
+.tile .value { font-size: 30px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .note { font-size: 12.5px; color: var(--ink-3); }
+.tile.flag { border-color: var(--warn); }
+.tile.flag .value { color: var(--warn); font-size: 22px; line-height: 1.35; padding-block: 4px; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.circle { border-radius: 50%; }
+.chart { width: 100%; overflow-x: auto; position: relative; }
+.chart svg { display: block; width: 100%; height: auto; min-width: 520px; }
+.chart svg text { fill: var(--ink-2); font-family: var(--font-body); font-size: 12px; }
+.chart svg .val { fill: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--bg); }
+.seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--ink-2); padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); font-weight: 600; }
+.seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ctl-label { font-size: 12px; color: var(--ink-3); margin-right: 6px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12.5px; line-height: 1.5; padding: 8px 10px; border-radius: 6px; max-width: 260px; z-index: 5; font-variant-numeric: tabular-nums; }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; min-width: 640px; }
+th, td { text-align: right; padding: 7px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+td.pos { color: var(--good); }
+td.neg { color: var(--warn); }
+.match { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.match-item { background: var(--accent-soft); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.match-num { font-size: 36px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.match-lab { font-size: 14px; font-weight: 600; }
+.match-sub { font-size: 12.5px; color: var(--ink-2); }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; }
+ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; max-width: 72ch; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 720px) { .two { grid-template-columns: 1fr; } h1 { font-size: 25px; } }
+code { font-family: var(--font-mono); font-size: 0.92em; }
+</style>
+
+<style>body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="eyebrow">창원 안심길 · 분석 검증 · 2026-09-29</div>
+  <h1>취약지역 분석의 외부 검증과 안심경로 효과</h1>
+  <p class="muted">Colab에서 도출한 최종 취약점수(범죄주의구간 고위험 적색 영역 × 안전 인프라 결핍)를 분석에 쓰지 않은 독립 자료인 한국도로교통공단 보행 사고다발지역과 비교하고, 시민 앱 ‘창원 안심길’의 경로 엔진으로 연령대별 출발·도착 300쌍을 시뮬레이션해 안심경로의 거리 비용과 안전 효과를 측정했습니다.</p>
+</header>
+
+<section>
+  <h2>한눈에 보기</h2>
+  <div class="tiles" id="tiles"></div>
+</section>
+
+<section>
+  <div class="eyebrow">1 · 외부 데이터 검증</div>
+  <h2>취약지역으로 분석된 곳에 실제 보행 사고가 몰려 있다</h2>
+  <p class="muted">사고다발지역(반경 약 83m) 안에 들어가는 100m 격자와 나머지 격자에서 고위험 적색 영역이 있는 격자의 비율을 비교했습니다. 대상별 사고다발 자료(보행노인·보행어린이)를 각 생활권과 맞대었습니다.</p>
+  <div class="match">
+    <div class="match-item"><span class="match-num">81%</span><span class="match-lab">보행노인 사고다발지 일치율</span><span class="match-sub">52곳 중 42곳이 노인 고위험 적색 영역과 겹침</span></div>
+    <div class="match-item"><span class="match-num">7.5배</span><span class="match-lab">사고다발지 안 격자의 적색 영역 비율</span><span class="match-sub">75% vs 그 외 격자 10%</span></div>
+    <div class="match-item"><span class="match-num">60%</span><span class="match-lab">보행어린이 사고다발지 일치율</span><span class="match-sub">5곳 중 3곳이 어린이 고위험 적색 영역과 겹침</span></div>
+  </div>
+  <div class="panel">
+    <div class="legend"><span><i class="sw" style="background:var(--s2)"></i>사고다발지역 안 격자</span><span><i class="sw" style="background:var(--neutral-bar)"></i>그 외 격자</span></div>
+    <div class="chart" id="chart-valid"></div>
+    <p class="small">격자 순열검정(3,000회): 노인 p&lt;0.001, 어린이 p≈0.001. 어린이 사고다발지는 5곳이라 경향으로 해석하며, 두 지표 모두 유동인구가 많은 곳에 모이는 특성이 있어 인과가 아닌 공간적 일치로 봅니다.</p>
+  </div>
+  <div class="panel">
+    <h3>어린이와 노인은 위험한 장소가 다르다</h3>
+    <div class="legend"><span><i class="sw" style="background:var(--s1)"></i>노인만 해당</span><span><i class="sw" style="background:var(--s3)"></i>공통</span><span><i class="sw" style="background:var(--s2)"></i>어린이만 해당</span></div>
+    <div class="chart" id="chart-overlap"></div>
+    <p class="small">두 생활권이 겹치는 7,313개 격자 중 고위험 적색 영역 격자 1,776개의 구성입니다. 두 대상의 적색 영역 비율 순위상관은 0.13이고, 어린이 사고다발지 5곳은 전 연령 다발지와 한 곳도 겹치지 않습니다. 연령대 선택이 필요한 근거입니다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">2 · 거리 비용과 안전 효과</div>
+  <h2>1km에 20m 더 걸으면 무엇이 좋아지나</h2>
+  <p class="muted">각 점은 최단 경로 대비 균형(원) 또는 안심우선(사각) 경로의 평균 변화이고, 세로 막대는 95% 신뢰구간입니다. 위쪽일수록 안전해진 것이고 오른쪽일수록 더 돌아간 것입니다. 색은 안심경로 위험도 산식에서 최종 취약점수에 준 가중치(현재 0.35, 민감도 분석 0.55·0.70)입니다.</p>
+  <div class="panel">
+    <div class="controls">
+      <div><span class="ctl-label">연령대</span><div class="seg" id="seg-group"></div></div>
+      <div><span class="ctl-label">지표</span><div class="seg" id="seg-metric"></div></div>
+      <div><span class="ctl-label">출발·도착</span><div class="seg" id="seg-scope"></div></div>
+    </div>
+    <div class="legend" id="legend-sc"></div>
+    <div class="chart" id="chart-sc"></div>
+    <p class="small" id="sc-note"></p>
+  </div>
+  <div class="panel">
+    <h3>전체 수치 <span class="small" id="table-cap"></span></h3>
+    <div class="table-wrap"><table id="tbl"></table></div>
+    <p class="small">값은 최단 경로 대비 차이(%p)이고, 초록은 안전한 방향, 주황은 반대 방향으로 통계적으로 유의한 변화입니다. 괄호 안은 95% 부트스트랩 신뢰구간입니다.</p>
+  </div>
+</section>
+
+<section>
+  <div class="callout">
+    <h2>핵심 포인트</h2>
+    <ul id="findings"></ul>
+  </div>
+</section>
+
+<section>
+  <h2>분석 방법</h2>
+  <ul class="muted">
+    <li>경로 계산은 시민 앱의 격자 기반 경로 엔진(27×27 노드)으로 수행했습니다. 실제 보도 형상과 차이가 있을 수 있어 절대값보다 경로 유형·가중치 간 상대 비교로 해석합니다.</li>
+    <li>출발·도착 쌍: 연령대마다 생활권 격자 사이 400~1,500m 무작위 50쌍과, 사고다발지점을 사이에 둔 50쌍(총 300쌍, 설정 3개 × 경로 3종). 경로를 10m 간격으로 다시 나눠 지표를 측정했습니다.</li>
+    <li>사고 자료: 한국도로교통공단 보행자 사고다발지역(창원 44건 → 26곳), 보행노인·보행어린이 사고다발지역 API(2016~2025, 60건 → 52곳, 5건 → 5곳). 60m 이내 중복 지점은 하나로 합쳤습니다.</li>
+    <li>외부 검증은 사고다발지점 반경 약 83m 안의 100m 생활권 격자와 그 외 격자를 비교하는 방식이며, 격자 순열검정으로 유의성을 확인했습니다.</li>
+  </ul>
+</section>
+</div>
+
+<script>
+const SIM = [{"scope":"all","group":"child","config":"현재 0.50/0.35/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":979.561,"cctv_cov":51.024,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":47.537,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.044,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":8.237,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"child","config":"현재 0.50/0.35/0.15","variant":"balanced","n":100,"dist_pct":0.226,"dist_ci":[0.1,0.364],"dist_m":981.718,"cctv_cov":57.799,"cctv_cov_d":6.775,"cctv_cov_ci":[4.596,9.13],"light_cov":54.1,"light_cov_d":6.563,"light_cov_ci":[4.642,8.752],"wms_red_share":7.656,"wms_red_share_d":-0.387,"wms_red_share_ci":[-2.042,1.162],"hot_share":9.798,"hot_share_d":1.561,"hot_share_ci":[0.613,2.624]},{"scope":"all","group":"child","config":"현재 0.50/0.35/0.15","variant":"safe","n":100,"dist_pct":1.64,"dist_ci":[1.118,2.232],"dist_m":995.594,"cctv_cov":60.118,"cctv_cov_d":9.094,"cctv_cov_ci":[6.716,11.64],"light_cov":56.536,"light_cov_d":8.998,"light_cov_ci":[6.569,11.621],"wms_red_share":7.927,"wms_red_share_d":-0.116,"wms_red_share_ci":[-1.882,1.541],"hot_share":8.528,"hot_share_d":0.291,"hot_share_ci":[-1.148,1.615]},{"scope":"all","group":"child","config":"대안A 0.30/0.55/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":979.561,"cctv_cov":51.024,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":47.537,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.044,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":8.237,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"child","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":100,"dist_pct":0.104,"dist_ci":[0.029,0.202],"dist_m":980.81,"cctv_cov":56.808,"cctv_cov_d":5.784,"cctv_cov_ci":[3.801,7.98],"light_cov":53.354,"light_cov_d":5.817,"light_cov_ci":[3.954,7.861],"wms_red_share":7.55,"wms_red_share_d":-0.493,"wms_red_share_ci":[-2.073,0.985],"hot_share":9.888,"hot_share_d":1.651,"hot_share_ci":[0.593,2.665]},{"scope":"all","group":"child","config":"대안A 0.30/0.55/0.15","variant":"safe","n":100,"dist_pct":1.011,"dist_ci":[0.606,1.47],"dist_m":988.804,"cctv_cov":58.732,"cctv_cov_d":7.708,"cctv_cov_ci":[5.546,9.943],"light_cov":55.134,"light_cov_d":7.596,"light_cov_ci":[5.506,9.949],"wms_red_share":7.464,"wms_red_share_d":-0.58,"wms_red_share_ci":[-2.292,1.073],"hot_share":8.827,"hot_share_d":0.589,"hot_share_ci":[-0.683,1.941]},{"scope":"all","group":"child","config":"대안B 0.15/0.70/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":979.561,"cctv_cov":51.024,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":47.537,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.044,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":8.237,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"child","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":100,"dist_pct":0.036,"dist_ci":[0.0,0.096],"dist_m":979.948,"cctv_cov":55.86,"cctv_cov_d":4.836,"cctv_cov_ci":[2.871,7.116],"light_cov":52.547,"light_cov_d":5.01,"light_cov_ci":[3.078,7.023],"wms_red_share":7.343,"wms_red_share_d":-0.701,"wms_red_share_ci":[-2.211,0.777],"hot_share":9.922,"hot_share_d":1.684,"hot_share_ci":[0.714,2.747]},{"scope":"all","group":"child","config":"대안B 0.15/0.70/0.15","variant":"safe","n":100,"dist_pct":0.422,"dist_ci":[0.187,0.712],"dist_m":983.316,"cctv_cov":57.319,"cctv_cov_d":6.295,"cctv_cov_ci":[4.226,8.549],"light_cov":53.078,"light_cov_d":5.541,"light_cov_ci":[3.638,7.663],"wms_red_share":7.342,"wms_red_share_d":-0.702,"wms_red_share_ci":[-2.435,0.869],"hot_share":9.714,"hot_share_d":1.476,"hot_share_ci":[0.38,2.531]},{"scope":"all","group":"senior","config":"현재 0.50/0.35/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":961.2,"cctv_cov":49.682,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.906,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":31.957,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":10.045,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"senior","config":"현재 0.50/0.35/0.15","variant":"balanced","n":100,"dist_pct":0.208,"dist_ci":[0.082,0.363],"dist_m":963.114,"cctv_cov":53.331,"cctv_cov_d":3.649,"cctv_cov_ci":[2.031,5.422],"light_cov":58.799,"light_cov_d":4.893,"light_cov_ci":[3.382,6.386],"wms_red_share":32.867,"wms_red_share_d":0.911,"wms_red_share_ci":[-0.787,2.69],"hot_share":12.025,"hot_share_d":1.979,"hot_share_ci":[0.611,3.529]},{"scope":"all","group":"senior","config":"현재 0.50/0.35/0.15","variant":"safe","n":100,"dist_pct":1.797,"dist_ci":[1.213,2.418],"dist_m":979.157,"cctv_cov":56.675,"cctv_cov_d":6.993,"cctv_cov_ci":[4.849,9.283],"light_cov":61.886,"light_cov_d":7.98,"light_cov_ci":[5.925,10.173],"wms_red_share":34.331,"wms_red_share_d":2.374,"wms_red_share_ci":[0.164,4.65],"hot_share":10.596,"hot_share_d":0.551,"hot_share_ci":[-1.205,2.329]},{"scope":"all","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":961.2,"cctv_cov":49.682,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.906,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":31.957,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":10.045,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":100,"dist_pct":0.148,"dist_ci":[0.042,0.271],"dist_m":962.479,"cctv_cov":52.961,"cctv_cov_d":3.279,"cctv_cov_ci":[1.624,5.01],"light_cov":58.574,"light_cov_d":4.668,"light_cov_ci":[3.22,6.18],"wms_red_share":33.069,"wms_red_share_d":1.112,"wms_red_share_ci":[-0.685,2.898],"hot_share":11.657,"hot_share_d":1.611,"hot_share_ci":[0.121,3.187]},{"scope":"all","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"safe","n":100,"dist_pct":1.388,"dist_ci":[0.884,1.977],"dist_m":974.689,"cctv_cov":55.026,"cctv_cov_d":5.344,"cctv_cov_ci":[3.552,7.188],"light_cov":60.604,"light_cov_d":6.698,"light_cov_ci":[4.66,8.93],"wms_red_share":32.915,"wms_red_share_d":0.958,"wms_red_share_ci":[-1.336,2.995],"hot_share":9.966,"hot_share_d":-0.079,"hot_share_ci":[-1.728,1.652]},{"scope":"all","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":961.2,"cctv_cov":49.682,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.906,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":31.957,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":10.045,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":100,"dist_pct":0.194,"dist_ci":[0.071,0.34],"dist_m":962.923,"cctv_cov":52.195,"cctv_cov_d":2.513,"cctv_cov_ci":[0.684,4.339],"light_cov":57.917,"light_cov_d":4.012,"light_cov_ci":[2.616,5.527],"wms_red_share":32.4,"wms_red_share_d":0.443,"wms_red_share_ci":[-1.239,2.09],"hot_share":10.997,"hot_share_d":0.952,"hot_share_ci":[-0.462,2.28]},{"scope":"all","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"safe","n":100,"dist_pct":1.015,"dist_ci":[0.551,1.582],"dist_m":970.94,"cctv_cov":53.788,"cctv_cov_d":4.105,"cctv_cov_ci":[2.006,6.257],"light_cov":58.299,"light_cov_d":4.393,"light_cov_ci":[2.84,6.02],"wms_red_share":31.557,"wms_red_share_d":-0.4,"wms_red_share_ci":[-2.3,1.377],"hot_share":9.746,"hot_share_d":-0.299,"hot_share_ci":[-1.72,1.062]},{"scope":"all","group":"adult","config":"현재 0.50/0.35/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":938.375,"cctv_cov":47.514,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.592,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":40.428,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":12.169,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"adult","config":"현재 0.50/0.35/0.15","variant":"balanced","n":100,"dist_pct":0.248,"dist_ci":[0.073,0.482],"dist_m":941.195,"cctv_cov":55.138,"cctv_cov_d":7.624,"cctv_cov_ci":[5.282,10.263],"light_cov":60.545,"light_cov_d":6.953,"light_cov_ci":[5.019,9.086],"wms_red_share":41.954,"wms_red_share_d":1.525,"wms_red_share_ci":[-0.402,3.552],"hot_share":13.244,"hot_share_d":1.075,"hot_share_ci":[-0.158,2.353]},{"scope":"all","group":"adult","config":"현재 0.50/0.35/0.15","variant":"safe","n":100,"dist_pct":1.206,"dist_ci":[0.766,1.699],"dist_m":950.285,"cctv_cov":56.726,"cctv_cov_d":9.212,"cctv_cov_ci":[6.751,12.04],"light_cov":61.67,"light_cov_d":8.078,"light_cov_ci":[6.022,10.304],"wms_red_share":41.731,"wms_red_share_d":1.302,"wms_red_share_ci":[-0.717,3.283],"hot_share":11.423,"hot_share_d":-0.747,"hot_share_ci":[-2.41,0.836]},{"scope":"all","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":938.375,"cctv_cov":47.514,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.592,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":40.428,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":12.169,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":100,"dist_pct":0.129,"dist_ci":[0.013,0.285],"dist_m":939.872,"cctv_cov":54.454,"cctv_cov_d":6.941,"cctv_cov_ci":[4.678,9.497],"light_cov":59.698,"light_cov_d":6.106,"light_cov_ci":[4.243,8.178],"wms_red_share":40.923,"wms_red_share_d":0.495,"wms_red_share_ci":[-1.48,2.492],"hot_share":13.16,"hot_share_d":0.991,"hot_share_ci":[-0.537,2.653]},{"scope":"all","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"safe","n":100,"dist_pct":1.012,"dist_ci":[0.605,1.45],"dist_m":948.537,"cctv_cov":55.696,"cctv_cov_d":8.182,"cctv_cov_ci":[5.87,10.79],"light_cov":60.949,"light_cov_d":7.357,"light_cov_ci":[5.477,9.5],"wms_red_share":40.872,"wms_red_share_d":0.444,"wms_red_share_ci":[-1.482,2.219],"hot_share":10.956,"hot_share_d":-1.213,"hot_share_ci":[-2.693,0.19]},{"scope":"all","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"fast","n":100,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":938.375,"cctv_cov":47.514,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":53.592,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":40.428,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":12.169,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"all","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":100,"dist_pct":0.026,"dist_ci":[0.0,0.065],"dist_m":938.682,"cctv_cov":53.327,"cctv_cov_d":5.813,"cctv_cov_ci":[3.325,8.333],"light_cov":58.204,"light_cov_d":4.612,"light_cov_ci":[2.805,6.468],"wms_red_share":40.193,"wms_red_share_d":-0.235,"wms_red_share_ci":[-2.117,1.713],"hot_share":13.149,"hot_share_d":0.98,"hot_share_ci":[-0.572,2.652]},{"scope":"all","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"safe","n":100,"dist_pct":1.244,"dist_ci":[0.755,1.805],"dist_m":950.746,"cctv_cov":54.545,"cctv_cov_d":7.032,"cctv_cov_ci":[4.701,9.455],"light_cov":59.362,"light_cov_d":5.77,"light_cov_ci":[3.884,7.88],"wms_red_share":40.286,"wms_red_share_d":-0.143,"wms_red_share_ci":[-2.003,1.761],"hot_share":10.535,"hot_share_d":-1.635,"hot_share_ci":[-3.458,-0.029]},{"scope":"random","group":"child","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":1040.494,"cctv_cov":45.345,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":42.365,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":7.218,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":1.114,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"child","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.203,"dist_ci":[0.051,0.406],"dist_m":1042.664,"cctv_cov":50.84,"cctv_cov_d":5.495,"cctv_cov_ci":[2.632,8.594],"light_cov":49.472,"light_cov_d":7.107,"light_cov_ci":[4.081,10.508],"wms_red_share":6.066,"wms_red_share_d":-1.152,"wms_red_share_ci":[-3.221,0.533],"hot_share":0.893,"hot_share_d":-0.22,"hot_share_ci":[-0.963,0.296]},{"scope":"random","group":"child","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":1.358,"dist_ci":[0.732,2.117],"dist_m":1055.518,"cctv_cov":52.531,"cctv_cov_d":7.186,"cctv_cov_ci":[4.158,10.541],"light_cov":52.058,"light_cov_d":9.694,"light_cov_ci":[6.236,13.488],"wms_red_share":5.952,"wms_red_share_d":-1.266,"wms_red_share_ci":[-3.581,0.696],"hot_share":0.893,"hot_share_d":-0.22,"hot_share_ci":[-0.957,0.278]},{"scope":"random","group":"child","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":1040.494,"cctv_cov":45.345,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":42.365,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":7.218,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":1.114,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"child","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.14,"dist_ci":[0.026,0.286],"dist_m":1042.268,"cctv_cov":50.21,"cctv_cov_d":4.865,"cctv_cov_ci":[2.201,7.732],"light_cov":48.933,"light_cov_d":6.568,"light_cov_ci":[3.569,10.05],"wms_red_share":5.933,"wms_red_share_d":-1.285,"wms_red_share_ci":[-3.325,0.41],"hot_share":0.735,"hot_share_d":-0.378,"hot_share_ci":[-1.258,0.271]},{"scope":"random","group":"child","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":0.786,"dist_ci":[0.389,1.238],"dist_m":1048.392,"cctv_cov":51.398,"cctv_cov_d":6.053,"cctv_cov_ci":[3.106,9.464],"light_cov":50.132,"light_cov_d":7.768,"light_cov_ci":[4.657,11.322],"wms_red_share":5.278,"wms_red_share_d":-1.94,"wms_red_share_ci":[-4.092,-0.049],"hot_share":0.735,"hot_share_d":-0.378,"hot_share_ci":[-1.248,0.271]},{"scope":"random","group":"child","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":1040.494,"cctv_cov":45.345,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":42.365,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":7.218,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":1.114,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"child","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.026,"dist_ci":[0.0,0.077],"dist_m":1040.766,"cctv_cov":48.959,"cctv_cov_d":3.615,"cctv_cov_ci":[0.993,6.494],"light_cov":47.534,"light_cov_d":5.169,"light_cov_ci":[2.123,8.434],"wms_red_share":5.977,"wms_red_share_d":-1.241,"wms_red_share_ci":[-3.165,0.375],"hot_share":0.767,"hot_share_d":-0.346,"hot_share_ci":[-1.227,0.271]},{"scope":"random","group":"child","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":0.49,"dist_ci":[0.178,0.858],"dist_m":1045.098,"cctv_cov":50.837,"cctv_cov_d":5.493,"cctv_cov_ci":[2.587,8.577],"light_cov":48.123,"light_cov_d":5.758,"light_cov_ci":[2.602,9.27],"wms_red_share":5.784,"wms_red_share_d":-1.433,"wms_red_share_ci":[-3.471,0.341],"hot_share":0.621,"hot_share_d":-0.492,"hot_share_ci":[-1.394,0.171]},{"scope":"random","group":"senior","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":994.028,"cctv_cov":32.463,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":33.667,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":9.209,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":0.0,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"senior","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.001],"dist_m":994.032,"cctv_cov":35.473,"cctv_cov_d":3.01,"cctv_cov_ci":[1.264,4.837],"light_cov":38.589,"light_cov_d":4.922,"light_cov_ci":[3.086,6.932],"wms_red_share":9.803,"wms_red_share_d":0.593,"wms_red_share_ci":[-0.924,2.305],"hot_share":0.161,"hot_share_d":0.161,"hot_share_ci":[0.0,0.484]},{"scope":"random","group":"senior","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":1.075,"dist_ci":[0.515,1.737],"dist_m":1006.932,"cctv_cov":37.441,"cctv_cov_d":4.978,"cctv_cov_ci":[2.897,7.373],"light_cov":42.512,"light_cov_d":8.846,"light_cov_ci":[5.553,12.585],"wms_red_share":11.36,"wms_red_share_d":2.151,"wms_red_share_ci":[0.051,4.617],"hot_share":0.311,"hot_share_d":0.311,"hot_share_ci":[0.0,0.784]},{"scope":"random","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":994.028,"cctv_cov":32.463,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":33.667,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":9.209,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":0.0,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.001],"dist_m":994.032,"cctv_cov":35.38,"cctv_cov_d":2.917,"cctv_cov_ci":[1.199,4.774],"light_cov":38.463,"light_cov_d":4.796,"light_cov_ci":[2.859,6.926],"wms_red_share":9.771,"wms_red_share_d":0.561,"wms_red_share_ci":[-0.846,2.297],"hot_share":0.161,"hot_share_d":0.161,"hot_share_ci":[0.0,0.484]},{"scope":"random","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":0.518,"dist_ci":[0.162,1.013],"dist_m":1000.216,"cctv_cov":36.225,"cctv_cov_d":3.762,"cctv_cov_ci":[2.067,5.583],"light_cov":40.849,"light_cov_d":7.182,"light_cov_ci":[4.012,10.938],"wms_red_share":9.847,"wms_red_share_d":0.638,"wms_red_share_ci":[-0.904,2.349],"hot_share":0.161,"hot_share_d":0.161,"hot_share_ci":[0.0,0.484]},{"scope":"random","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":994.028,"cctv_cov":32.463,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":33.667,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":9.209,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":0.0,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.001],"dist_m":994.032,"cctv_cov":34.025,"cctv_cov_d":1.563,"cctv_cov_ci":[-0.85,3.747],"light_cov":37.694,"light_cov_d":4.028,"light_cov_ci":[2.135,6.098],"wms_red_share":9.418,"wms_red_share_d":0.208,"wms_red_share_ci":[-1.11,1.513],"hot_share":0.161,"hot_share_d":0.161,"hot_share_ci":[0.0,0.484]},{"scope":"random","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":0.083,"dist_ci":[0.0,0.223],"dist_m":995.074,"cctv_cov":34.108,"cctv_cov_d":1.646,"cctv_cov_ci":[-0.716,3.817],"light_cov":37.949,"light_cov_d":4.282,"light_cov_ci":[2.417,6.338],"wms_red_share":9.418,"wms_red_share_d":0.208,"wms_red_share_ci":[-1.097,1.558],"hot_share":0.161,"hot_share_d":0.161,"hot_share_ci":[0.0,0.484]},{"scope":"random","group":"adult","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":909.92,"cctv_cov":36.96,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":40.358,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":23.262,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":2.081,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"adult","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.267,"dist_ci":[0.001,0.681],"dist_m":913.032,"cctv_cov":42.8,"cctv_cov_d":5.84,"cctv_cov_ci":[3.037,8.986],"light_cov":46.899,"light_cov_d":6.541,"light_cov_ci":[3.701,9.617],"wms_red_share":23.378,"wms_red_share_d":0.116,"wms_red_share_ci":[-1.994,2.382],"hot_share":1.63,"hot_share_d":-0.45,"hot_share_ci":[-1.317,0.088]},{"scope":"random","group":"adult","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":0.769,"dist_ci":[0.361,1.309],"dist_m":918.578,"cctv_cov":43.75,"cctv_cov_d":6.79,"cctv_cov_ci":[3.77,10.021],"light_cov":48.428,"light_cov_d":8.071,"light_cov_ci":[5.288,11.263],"wms_red_share":23.525,"wms_red_share_d":0.263,"wms_red_share_ci":[-2.326,2.973],"hot_share":1.374,"hot_share_d":-0.707,"hot_share_ci":[-1.64,0.009]},{"scope":"random","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":909.92,"cctv_cov":36.96,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":40.358,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":23.262,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":2.081,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.119,"dist_ci":[0.0,0.355],"dist_m":911.354,"cctv_cov":42.276,"cctv_cov_d":5.316,"cctv_cov_ci":[2.697,8.31],"light_cov":46.692,"light_cov_d":6.334,"light_cov_ci":[3.694,9.252],"wms_red_share":22.663,"wms_red_share_d":-0.599,"wms_red_share_ci":[-2.908,1.715],"hot_share":1.331,"hot_share_d":-0.75,"hot_share_ci":[-1.657,-0.07]},{"scope":"random","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":0.473,"dist_ci":[0.137,0.937],"dist_m":915.59,"cctv_cov":43.032,"cctv_cov_d":6.072,"cctv_cov_ci":[3.249,9.311],"light_cov":47.831,"light_cov_d":7.474,"light_cov_ci":[4.686,10.568],"wms_red_share":22.783,"wms_red_share_d":-0.48,"wms_red_share_ci":[-2.914,1.878],"hot_share":1.348,"hot_share_d":-0.733,"hot_share_ci":[-1.628,-0.053]},{"scope":"random","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":909.92,"cctv_cov":36.96,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":40.358,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":23.262,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":2.081,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"random","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.001,"dist_ci":[0.0,0.002],"dist_m":909.928,"cctv_cov":40.578,"cctv_cov_d":3.617,"cctv_cov_ci":[0.409,6.578],"light_cov":44.941,"light_cov_d":4.584,"light_cov_ci":[1.885,7.602],"wms_red_share":21.8,"wms_red_share_d":-1.463,"wms_red_share_ci":[-3.993,1.187],"hot_share":1.331,"hot_share_d":-0.75,"hot_share_ci":[-1.677,-0.07]},{"scope":"random","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":0.48,"dist_ci":[0.147,0.917],"dist_m":915.528,"cctv_cov":42.468,"cctv_cov_d":5.507,"cctv_cov_ci":[2.871,8.545],"light_cov":46.074,"light_cov_d":5.717,"light_cov_ci":[2.764,8.876],"wms_red_share":22.614,"wms_red_share_d":-0.648,"wms_red_share_ci":[-3.177,2.165],"hot_share":1.331,"hot_share_d":-0.75,"hot_share_ci":[-1.652,-0.07]},{"scope":"hotspot","group":"child","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":918.628,"cctv_cov":56.703,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":52.71,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.869,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":15.361,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"child","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.249,"dist_ci":[0.079,0.462],"dist_m":920.772,"cctv_cov":64.757,"cctv_cov_d":8.055,"cctv_cov_ci":[5.001,11.294],"light_cov":58.728,"light_cov_d":6.018,"light_cov_ci":[3.642,8.799],"wms_red_share":9.247,"wms_red_share_d":0.377,"wms_red_share_ci":[-2.031,2.833],"hot_share":18.703,"hot_share_d":3.342,"hot_share_ci":[1.534,5.106]},{"scope":"hotspot","group":"child","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":1.921,"dist_ci":[1.083,2.842],"dist_m":935.67,"cctv_cov":67.705,"cctv_cov_d":11.002,"cctv_cov_ci":[7.654,14.482],"light_cov":61.013,"light_cov_d":8.303,"light_cov_ci":[5.31,11.894],"wms_red_share":9.903,"wms_red_share_d":1.034,"wms_red_share_ci":[-1.497,3.521],"hot_share":16.163,"hot_share_d":0.802,"hot_share_ci":[-2.027,3.444]},{"scope":"hotspot","group":"child","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":918.628,"cctv_cov":56.703,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":52.71,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.869,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":15.361,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"child","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.069,"dist_ci":[0.0,0.184],"dist_m":919.352,"cctv_cov":63.406,"cctv_cov_d":6.703,"cctv_cov_ci":[3.808,9.85],"light_cov":57.775,"light_cov_d":5.065,"light_cov_ci":[2.989,7.417],"wms_red_share":9.167,"wms_red_share_d":0.298,"wms_red_share_ci":[-2.066,2.596],"hot_share":19.041,"hot_share_d":3.68,"hot_share_ci":[1.933,5.423]},{"scope":"hotspot","group":"child","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":1.237,"dist_ci":[0.583,2.095],"dist_m":929.216,"cctv_cov":66.066,"cctv_cov_d":9.363,"cctv_cov_ci":[6.341,12.736],"light_cov":60.135,"light_cov_d":7.425,"light_cov_ci":[4.531,10.721],"wms_red_share":9.65,"wms_red_share_d":0.781,"wms_red_share_ci":[-1.81,3.31],"hot_share":16.918,"hot_share_d":1.557,"hot_share_ci":[-0.964,3.979]},{"scope":"hotspot","group":"child","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":918.628,"cctv_cov":56.703,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":52.71,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":8.869,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":15.361,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"child","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.047,"dist_ci":[0.0,0.141],"dist_m":919.13,"cctv_cov":62.76,"cctv_cov_d":6.057,"cctv_cov_ci":[3.184,9.079],"light_cov":57.561,"light_cov_d":4.851,"light_cov_ci":[2.67,7.112],"wms_red_share":8.708,"wms_red_share_d":-0.161,"wms_red_share_ci":[-2.601,2.239],"hot_share":19.076,"hot_share_d":3.715,"hot_share_ci":[2.0,5.462]},{"scope":"hotspot","group":"child","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":0.354,"dist_ci":[0.066,0.796],"dist_m":921.534,"cctv_cov":63.8,"cctv_cov_d":7.098,"cctv_cov_ci":[4.041,10.252],"light_cov":58.034,"light_cov_d":5.324,"light_cov_ci":[3.17,7.698],"wms_red_share":8.9,"wms_red_share_d":0.03,"wms_red_share_ci":[-2.506,2.52],"hot_share":18.807,"hot_share_d":3.445,"hot_share_ci":[1.666,5.372]},{"scope":"hotspot","group":"senior","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":928.372,"cctv_cov":66.902,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":74.145,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":54.704,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":20.09,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"senior","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.415,"dist_ci":[0.159,0.695],"dist_m":932.196,"cctv_cov":71.19,"cctv_cov_d":4.288,"cctv_cov_ci":[1.678,7.167],"light_cov":79.009,"light_cov_d":4.864,"light_cov_ci":[2.712,7.254],"wms_red_share":55.932,"wms_red_share_d":1.228,"wms_red_share_ci":[-1.74,4.248],"hot_share":23.888,"hot_share_d":3.797,"hot_share_ci":[1.123,6.625]},{"scope":"hotspot","group":"senior","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":2.52,"dist_ci":[1.593,3.526],"dist_m":951.382,"cctv_cov":75.909,"cctv_cov_d":9.007,"cctv_cov_ci":[5.453,12.745],"light_cov":81.26,"light_cov_d":7.115,"light_cov_ci":[4.481,9.833],"wms_red_share":57.302,"wms_red_share_d":2.598,"wms_red_share_ci":[-1.5,6.813],"hot_share":20.88,"hot_share_d":0.79,"hot_share_ci":[-2.705,4.267]},{"scope":"hotspot","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":928.372,"cctv_cov":66.902,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":74.145,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":54.704,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":20.09,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.296,"dist_ci":[0.083,0.545],"dist_m":930.926,"cctv_cov":70.542,"cctv_cov_d":3.641,"cctv_cov_ci":[0.945,6.607],"light_cov":78.685,"light_cov_d":4.541,"light_cov_ci":[2.471,6.792],"wms_red_share":56.367,"wms_red_share_d":1.663,"wms_red_share_ci":[-1.658,4.744],"hot_share":23.152,"hot_share_d":3.061,"hot_share_ci":[0.254,5.93]},{"scope":"hotspot","group":"senior","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":2.257,"dist_ci":[1.363,3.237],"dist_m":949.162,"cctv_cov":73.827,"cctv_cov_d":6.925,"cctv_cov_ci":[3.723,10.235],"light_cov":80.359,"light_cov_d":6.214,"light_cov_ci":[3.778,8.639],"wms_red_share":55.983,"wms_red_share_d":1.279,"wms_red_share_ci":[-2.503,4.98],"hot_share":19.77,"hot_share_d":-0.32,"hot_share_ci":[-3.827,3.058]},{"scope":"hotspot","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":928.372,"cctv_cov":66.902,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":74.145,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":54.704,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":20.09,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.387,"dist_ci":[0.146,0.663],"dist_m":931.814,"cctv_cov":70.365,"cctv_cov_d":3.464,"cctv_cov_ci":[0.677,6.512],"light_cov":78.14,"light_cov_d":3.995,"light_cov_ci":[1.984,6.207],"wms_red_share":55.382,"wms_red_share_d":0.678,"wms_red_share_ci":[-2.468,3.586],"hot_share":21.832,"hot_share_d":1.742,"hot_share_ci":[-1.014,4.42]},{"scope":"hotspot","group":"senior","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":1.946,"dist_ci":[1.085,2.945],"dist_m":946.806,"cctv_cov":73.467,"cctv_cov_d":6.565,"cctv_cov_ci":[3.276,10.073],"light_cov":78.648,"light_cov_d":4.503,"light_cov_ci":[1.986,7.112],"wms_red_share":53.696,"wms_red_share_d":-1.008,"wms_red_share_ci":[-4.499,2.382],"hot_share":19.33,"hot_share_d":-0.76,"hot_share_ci":[-3.446,1.958]},{"scope":"hotspot","group":"adult","config":"현재 0.50/0.35/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":966.83,"cctv_cov":58.067,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":66.826,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":57.595,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":22.258,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"adult","config":"현재 0.50/0.35/0.15","variant":"balanced","n":50,"dist_pct":0.229,"dist_ci":[0.052,0.438],"dist_m":969.358,"cctv_cov":67.475,"cctv_cov_d":9.408,"cctv_cov_ci":[5.947,13.393],"light_cov":74.19,"light_cov_d":7.364,"light_cov_ci":[4.694,10.507],"wms_red_share":60.529,"wms_red_share_d":2.935,"wms_red_share_ci":[0.005,6.165],"hot_share":24.858,"hot_share_d":2.6,"hot_share_ci":[0.294,4.922]},{"scope":"hotspot","group":"adult","config":"현재 0.50/0.35/0.15","variant":"safe","n":50,"dist_pct":1.643,"dist_ci":[0.935,2.458],"dist_m":981.992,"cctv_cov":69.701,"cctv_cov_d":11.634,"cctv_cov_ci":[7.879,15.742],"light_cov":74.913,"light_cov_d":8.086,"light_cov_ci":[5.27,11.251],"wms_red_share":59.936,"wms_red_share_d":2.341,"wms_red_share_ci":[-0.765,5.572],"hot_share":21.471,"hot_share_d":-0.786,"hot_share_ci":[-3.902,2.254]},{"scope":"hotspot","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":966.83,"cctv_cov":58.067,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":66.826,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":57.595,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":22.258,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"balanced","n":50,"dist_pct":0.139,"dist_ci":[0.001,0.313],"dist_m":968.39,"cctv_cov":66.633,"cctv_cov_d":8.565,"cctv_cov_ci":[4.917,12.433],"light_cov":72.705,"light_cov_d":5.878,"light_cov_ci":[3.439,8.852],"wms_red_share":59.183,"wms_red_share_d":1.588,"wms_red_share_ci":[-1.415,4.625],"hot_share":24.989,"hot_share_d":2.731,"hot_share_ci":[-0.103,5.953]},{"scope":"hotspot","group":"adult","config":"대안A 0.30/0.55/0.15","variant":"safe","n":50,"dist_pct":1.551,"dist_ci":[0.854,2.326],"dist_m":981.484,"cctv_cov":68.36,"cctv_cov_d":10.293,"cctv_cov_ci":[6.533,14.305],"light_cov":74.067,"light_cov_d":7.24,"light_cov_ci":[4.686,10.113],"wms_red_share":58.962,"wms_red_share_d":1.367,"wms_red_share_ci":[-1.749,4.194],"hot_share":20.564,"hot_share_d":-1.694,"hot_share_ci":[-4.564,0.971]},{"scope":"hotspot","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"fast","n":50,"dist_pct":0.0,"dist_ci":[0.0,0.0],"dist_m":966.83,"cctv_cov":58.067,"cctv_cov_d":0.0,"cctv_cov_ci":[0.0,0.0],"light_cov":66.826,"light_cov_d":0.0,"light_cov_ci":[0.0,0.0],"wms_red_share":57.595,"wms_red_share_d":0.0,"wms_red_share_ci":[0.0,0.0],"hot_share":22.258,"hot_share_d":0.0,"hot_share_ci":[0.0,0.0]},{"scope":"hotspot","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"balanced","n":50,"dist_pct":0.051,"dist_ci":[0.0,0.128],"dist_m":967.436,"cctv_cov":66.076,"cctv_cov_d":8.008,"cctv_cov_ci":[4.468,11.938],"light_cov":71.467,"light_cov_d":4.64,"light_cov_ci":[2.427,7.201],"wms_red_share":58.587,"wms_red_share_d":0.992,"wms_red_share_ci":[-1.916,3.792],"hot_share":24.966,"hot_share_d":2.709,"hot_share_ci":[-0.043,5.883]},{"scope":"hotspot","group":"adult","config":"대안B 0.15/0.70/0.15","variant":"safe","n":50,"dist_pct":2.009,"dist_ci":[1.123,2.962],"dist_m":985.964,"cctv_cov":66.623,"cctv_cov_d":8.556,"cctv_cov_ci":[5.119,12.594],"light_cov":72.65,"light_cov_d":5.823,"light_cov_ci":[3.432,8.605],"wms_red_share":57.958,"wms_red_share_d":0.363,"wms_red_share_ci":[-2.288,2.944],"hot_share":19.738,"hot_share_d":-2.52,"hot_share_ci":[-6.185,0.668]}];
+const CONFIGS = [...new Set(SIM.map(r => r.config))];
+const CFG_COLOR = ["var(--s1)", "var(--s2)", "var(--s3)"];
+const CFG_LABEL = c => ["현재 (취약점수 0.35)", "취약점수 0.55", "취약점수 0.70"][CONFIGS.indexOf(c)];
+const GROUPS = [["senior", "노인"], ["child", "어린이"], ["adult", "성인"]];
+const METRICS = [
+  ["hot_share", "사고다발 구간", -1],
+  ["wms_red_share", "고위험 적색 영역 구간", -1],
+  ["cctv_cov", "CCTV 100m 구간", 1],
+  ["light_cov", "보안등 50m 구간", 1],
+];
+const SCOPES = [["all", "전체 300쌍"], ["hotspot", "다발지 경유 150쌍"], ["random", "무작위 150쌍"]];
+const state = { group: "senior", metric: "cctv_cov", scope: "all" };
+try { const s = JSON.parse(localStorage.getItem("ansim-report-v3") || "{}"); Object.assign(state, s); } catch (e) {}
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}, p) => { const e = document.createElementNS(NS, t); for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; };
+const fmt = (v, d = 1) => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
+const find = (scope, g, c, v) => SIM.find(r => r.scope === scope && r.group === g && r.config === c && r.variant === v);
+
+function tipFor(container) {
+  let t = container.querySelector(".tip");
+  if (!t) { t = document.createElement("div"); t.className = "tip"; t.hidden = true; container.appendChild(t); }
+  return {
+    show(html, evt) {
+      t.innerHTML = html; t.hidden = false;
+      const r = container.getBoundingClientRect();
+      let x = evt.clientX - r.left + container.scrollLeft + 14, y = evt.clientY - r.top + 14;
+      if (x + 260 > container.scrollLeft + r.width) x -= 280;
+      t.style.left = x + "px"; t.style.top = y + "px";
+    },
+    hide() { t.hidden = true; },
+  };
+}
+
+/* ---------- 타일 ---------- */
+(function tiles() {
+  const cur = CONFIGS[0];
+  const rows = GROUPS.map(([g]) => find("all", g, cur, "safe"));
+  const avg = k => rows.reduce((s, r) => s + r[k], 0) / rows.length;
+  const flag = `<div class="tile"><span class="label">보행노인 사고다발지 일치율</span><span class="value">81%</span><span class="note">52곳 중 42곳이 고위험 적색 영역과 겹침</span></div>`;
+  const html = [
+    ["안심경로 거리 증가", fmt(avg("dist_pct")) + "%", "세 연령대 평균, 1km에 약 15m"],
+    ["CCTV 100m 이내 구간", fmt(avg("cctv_cov_d")) + "%p", "최단 경로 대비"],
+    ["보안등 50m 이내 구간", fmt(avg("light_cov_d")) + "%p", "최단 경로 대비"],
+  ].map(([l, v, n]) => `<div class="tile"><span class="label">${l}</span><span class="value">${v}</span><span class="note">${n}</span></div>`).join("");
+  document.getElementById("tiles").innerHTML = flag + html;
+})();
+
+/* ---------- 1. 검증 막대 ---------- */
+(function validChart() {
+  const data = [
+    ["노인 생활권 × 보행노인 사고다발지 (52곳)", 75, 10, "평균 최종 취약점수 0.061 vs 0.006"],
+    ["어린이 생활권 × 보행어린이 사고다발지 (5곳)", 50, 5, "평균 최종 취약점수 0.067 vs 0.004"],
+  ];
+  const box = document.getElementById("chart-valid"), tip = tipFor(box);
+  const W = 860, L = 290, R = 60, rowH = 64, top = 12, H = top + rowH * data.length + 28;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "사고다발지역 안과 밖의 적색영역 격자 비율" }, box);
+  const x = v => L + (W - L - R) * v / 100;
+  [0, 25, 50, 75, 100].forEach(t => {
+    el("line", { x1: x(t), x2: x(t), y1: top - 4, y2: H - 24, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    el("text", { x: x(t), y: H - 8, "text-anchor": "middle" }, svg).textContent = t + "%";
+  });
+  data.forEach(([label, a, b, note], i) => {
+    const y0 = top + i * rowH;
+    el("text", { x: 0, y: y0 + 22 }, svg).textContent = label;
+    el("text", { x: 0, y: y0 + 40, style: "font-size:11px;fill:var(--ink-3)" }, svg).textContent = note;
+    [[a, "var(--s2)", "사고다발지역 안"], [b, "var(--neutral-bar)", "그 외"]].forEach(([v, c, nm], j) => {
+      const y = y0 + 8 + j * 22, w = Math.max(2, x(v) - L);
+      const p = el("path", { d: `M${L},${y} h${w - 4} a4,4 0 0 1 4,4 v10 a4,4 0 0 1 -4,4 h${-(w - 4)} z`, fill: c }, svg);
+      const hit = el("rect", { x: L, y: y - 3, width: Math.max(w, 30), height: 24, fill: "transparent" }, svg);
+      el("text", { x: L + w + 6, y: y + 13, class: "val" }, svg).textContent = v + "%";
+      hit.addEventListener("pointermove", e => tip.show(`<b>${label}</b><br>${nm} 격자 중 적색영역: ${v}%`, e));
+      hit.addEventListener("pointerleave", () => tip.hide());
+    });
+  });
+})();
+
+
+
+/* ---------- 연령 겹침 ---------- */
+(function overlapChart() {
+  const parts = [["노인만 해당", 1325, "var(--s1)"], ["공통", 182, "var(--s3)"], ["어린이만 해당", 269, "var(--s2)"]];
+  const total = parts.reduce((s, p) => s + p[1], 0);
+  const box = document.getElementById("chart-overlap"), tip = tipFor(box);
+  const W = 860, H = 70, L = 0, R = 0;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "어린이와 노인 적색영역 겹침" }, box);
+  let x0 = L;
+  parts.forEach(([nm, v, c], i) => {
+    const w = (W - L - R) * v / total - (i < parts.length - 1 ? 2 : 0);
+    el("rect", { x: x0, y: 8, width: w, height: 26, fill: c, rx: i === 0 || i === parts.length - 1 ? 4 : 0 }, svg);
+    const t = el("text", { x: x0 + (i === 2 ? w : 0), y: 54, "text-anchor": i === 2 ? "end" : "start" }, svg);
+    t.innerHTML = `<tspan class="val">${v.toLocaleString()}</tspan> ${nm}`;
+    const hit = el("rect", { x: x0, y: 4, width: Math.max(w, 20), height: 34, fill: "transparent" }, svg);
+    hit.addEventListener("pointermove", e => tip.show(`${nm}: ${v.toLocaleString()}개 격자 (${(v / total * 100).toFixed(0)}%)`, e));
+    hit.addEventListener("pointerleave", () => tip.hide());
+    x0 += w + 2;
+  });
+})();
+
+/* ---------- 2. 트레이드오프 산점도 ---------- */
+function seg(id, items, key) {
+  const box = document.getElementById(id);
+  box.innerHTML = items.map(([k, l]) => `<button type="button" id="${id}-${k}" data-k="${k}" aria-pressed="${state[key] === k}">${l}</button>`).join("");
+  box.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    state[key] = b.dataset.k;
+    box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    try { localStorage.setItem("ansim-report-v3", JSON.stringify(state)); } catch (err) {}
+    renderScatter(); renderTable();
+  });
+}
+seg("seg-group", GROUPS, "group");
+seg("seg-metric", METRICS.map(m => [m[0], m[1]]), "metric");
+seg("seg-scope", SCOPES, "scope");
+document.getElementById("legend-sc").innerHTML =
+  CONFIGS.map((c, i) => `<span><i class="sw circle" style="background:${CFG_COLOR[i]}"></i>${CFG_LABEL(c)}</span>`).join("") +
+  `<span class="small">원 = 균형 · 사각 = 안심우선</span>`;
+
+function renderScatter() {
+  const box = document.getElementById("chart-sc"); box.innerHTML = ""; const tip = tipFor(box);
+  const [mk, mname, sign] = METRICS.find(m => m[0] === state.metric);
+  const pts = [];
+  CONFIGS.forEach((c, ci) => ["balanced", "safe"].forEach(v => {
+    const r = find(state.scope, state.group, c, v);
+    const ci95 = r[mk + "_ci"].map(z => z * sign).sort((a, b) => a - b);
+    pts.push({ c, ci, v, x: r.dist_pct, y: r[mk + "_d"] * sign, lo: ci95[0], hi: ci95[1], r });
+  }));
+  const W = 860, H = 396, L = 64, R = 24, T = 36, B = 48;
+  const ymax = Math.max(2, ...pts.map(p => p.hi)), ymin = Math.min(-2, ...pts.map(p => p.lo));
+  const ys = niceRange(ymin, ymax), xs = niceRange(0, Math.max(2, ...pts.map(p => p.x)));
+  const X = v => L + (W - L - R) * (v - xs[0]) / (xs[1] - xs[0]);
+  const Y = v => T + (H - T - B) * (ys[1] - v) / (ys[1] - ys[0]);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `거리 증가 대비 ${mname} 개선` }, box);
+  ticks(ys).forEach(t => { el("line", { x1: L, x2: W - R, y1: Y(t), y2: Y(t), stroke: t === 0 ? "var(--ink-3)" : "var(--grid)" }, svg); el("text", { x: L - 8, y: Y(t) + 4, "text-anchor": "end" }, svg).textContent = (t > 0 ? "+" : "") + t; });
+  ticks(xs).forEach(t => { el("line", { x1: X(t), x2: X(t), y1: T, y2: H - B, stroke: "var(--grid)" }, svg); el("text", { x: X(t), y: H - B + 18, "text-anchor": "middle" }, svg).textContent = "+" + t + "%"; });
+  el("text", { x: (L + W - R) / 2, y: H - 8, "text-anchor": "middle" }, svg).textContent = "최단 대비 거리 증가";
+  el("text", { x: L - 8, y: 14, "text-anchor": "start", style: "font-size:11px" }, svg).textContent = "↑ 안전 개선 (%p)";
+  el("text", { x: L + 6, y: Y(ys[0]) - 6, style: "font-size:11px;fill:var(--ink-3)" }, svg).textContent = "0 = 최단 경로와 같음";
+  pts.forEach(p => {
+    const col = CFG_COLOR[p.ci], cx = X(p.x);
+    el("line", { x1: cx, x2: cx, y1: Y(p.lo), y2: Y(p.hi), stroke: col, "stroke-width": 2, "stroke-linecap": "round", opacity: 0.55 }, svg);
+    const m = p.v === "safe"
+      ? el("rect", { x: cx - 6, y: Y(p.y) - 6, width: 12, height: 12, rx: 2, fill: col, stroke: "var(--surface)", "stroke-width": 2 }, svg)
+      : el("circle", { cx, cy: Y(p.y), r: 6, fill: col, stroke: "var(--surface)", "stroke-width": 2 }, svg);
+    const hit = el("circle", { cx, cy: Y(p.y), r: 14, fill: "transparent" }, svg);
+    const sig = p.lo > 0 ? "안전 방향으로 유의" : p.hi < 0 ? "반대 방향으로 유의" : "차이 유의하지 않음";
+    hit.addEventListener("pointermove", e => tip.show(`<b>${CFG_LABEL(p.c)} · ${p.v === "safe" ? "안심우선" : "균형"}</b><br>거리 ${fmt(p.x)}% (평균 ${Math.round(p.r.dist_m)}m)<br>${mname} 개선 ${fmt(p.y, 2)}%p<br>95% CI [${fmt(p.lo, 2)}, ${fmt(p.hi, 2)}] · ${sig}<br>n=${p.r.n}`, e));
+    hit.addEventListener("pointerleave", () => tip.hide());
+  });
+  const gname = GROUPS.find(g => g[0] === state.group)[1];
+  document.getElementById("sc-note").textContent = `${gname} · ${SCOPES.find(s => s[0] === state.scope)[1]} · ${mname}: 사고다발·적색 구간은 줄어든 만큼, CCTV·보안등은 늘어난 만큼을 위쪽으로 표시합니다.`;
+}
+function niceRange(a, b) { const s = step((b - a) / 5); return [Math.floor(a / s) * s, Math.ceil(b / s) * s]; }
+function step(r) { const p = Math.pow(10, Math.floor(Math.log10(r))); const n = r / p; return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p; }
+function ticks([a, b]) { const s = step((b - a) / 5), out = []; for (let v = a; v <= b + 1e-9; v += s) out.push(+v.toFixed(6)); return out; }
+
+function renderTable() {
+  const gname = GROUPS.find(g => g[0] === state.group)[1];
+  document.getElementById("table-cap").textContent = `· ${gname} · ${SCOPES.find(s => s[0] === state.scope)[1]}`;
+  const head = `<tr><th>가중치</th><th>경로</th><th>거리</th>${METRICS.map(m => `<th>${m[1]}</th>`).join("")}</tr>`;
+  const body = CONFIGS.flatMap(c => ["balanced", "safe"].map(v => {
+    const r = find(state.scope, state.group, c, v);
+    const cells = METRICS.map(([k, , s]) => {
+      const d = r[k + "_d"], ci = r[k + "_ci"];
+      const good = d * s > 0, sigc = (ci[0] > 0 || ci[1] < 0);
+      return `<td class="${sigc ? (good ? "pos" : "neg") : ""}">${fmt(d, 2)} <span class="small">(${fmt(ci[0], 1)}, ${fmt(ci[1], 1)})</span></td>`;
+    }).join("");
+    return `<tr><td>${CFG_LABEL(c)}</td><td>${v === "safe" ? "안심우선" : "균형"}</td><td>${fmt(r.dist_pct, 2)}%</td>${cells}</tr>`;
+  })).join("");
+  document.getElementById("tbl").innerHTML = head + body;
+}
+
+/* ---------- 해석 ---------- */
+(function findings() {
+  const g = (grp, c, v = "safe", s = "all") => find(s, grp, CONFIGS[c], v);
+  const s0 = g("senior", 0), a0 = g("adult", 0), c0 = g("child", 0);
+  const range = k => { const v = [s0, a0, c0].map(r => r[k]); return `${fmt(Math.min(...v))}~${Math.max(...v).toFixed(1)}`; };
+  const items = [
+    `<b>외부 자료와 81% 일치:</b> 창원시 보행노인 교통사고 다발지 52곳 중 42곳(81%)이 분석으로 도출한 노인 고위험 적색 영역과 겹칩니다. 다발지 안 격자는 그 외 격자보다 적색 영역일 비율이 7.5배(75% vs 10%) 높고, 평균 최종 취약점수도 약 10배 높습니다. 보행어린이 다발지도 5곳 중 3곳(60%)이 겹쳐 같은 방향을 보입니다.`,
+    `<b>연령대별로 위험 장소가 다름:</b> 적색 영역 격자 중 어린이·노인 공통은 10%뿐이고, 어린이 사고다발지는 전 연령 다발지와 한 곳도 겹치지 않습니다. 앱에서 연령대를 선택하게 하는 근거입니다.`,
+    `<b>작은 거리 비용, 큰 인프라 노출:</b> 안심경로는 거리를 ${range("dist_pct")}%(1km에 약 12~18m) 늘리는 대신 CCTV 100m 이내 구간을 ${range("cctv_cov_d")}%p, 보안등 50m 이내 구간을 ${range("light_cov_d")}%p 늘립니다.`,
+    `<b>균형 경로:</b> 거리는 최단과 거의 같으면서(+0.2%) CCTV·보안등 구간이 3.6~7.6%p 늘어, 멀리 돌아가기 싫은 사용자에게 맞는 선택지입니다.`,
+    `<b>연령 맞춤형 고도화:</b> 위험도 산식의 취약점수 가중치를 0.70으로 높이면 고령자의 적색 영역 구간이 ${fmt(g("senior", 2).wms_red_share_d)}%p, 성인의 사고다발 구간이 ${fmt(g("adult", 2).hot_share_d)}%p로 최단보다 줄어듭니다. 어린이는 현재 가중치가 더 적합해, 연령대별 가중치를 따로 두는 방향으로 발전시킬 수 있습니다.`,
+  ];
+  document.getElementById("findings").innerHTML = items.map(i => `<li>${i}</li>`).join("");
+})();
+
+renderScatter(); renderTable();
+</script>
+
+</body>
+</html>
