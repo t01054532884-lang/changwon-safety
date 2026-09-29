@@ -284,11 +284,51 @@ def _safety_label(avg_risk: float) -> str:
         return "위험"
     return "매우위험"
  
- 
+def _remove_backtracks(path: list[tuple[float, float]], close_m: float = 15.0,
+                       min_loop_m: float = 30.0, max_loop_m: float = 800.0) -> list[tuple[float, float]]:
+    """2026-09-29 추가: 경유지를 넣어 Tmap에 다시 요청하면, 경유지가 큰길에서 조금 떨어져 있을 때
+    "경유지까지 들어갔다가 같은 길로 되돌아 나오는" 막다른 가지(또는 작은 고리)가 생긴다.
+    경로를 따라가다가 나중에 거의 같은 자리(close_m 이내)로 다시 돌아오는 구간이 있으면,
+    그 사이(길이 min_loop_m~max_loop_m)를 잘라내서 되돌아가는 부분을 없앤다."""
+    if len(path) < 4:
+        return path
+    lat0 = path[0][0]
+    kx = 111_320.0 * math.cos(math.radians(lat0))
+    ky = 110_540.0
+    xy = np.array([(lo * kx, la * ky) for la, lo in path])
+    seg = np.hypot(np.diff(xy[:, 0]), np.diff(xy[:, 1]))
+    cum = np.concatenate([[0.0], np.cumsum(seg)])
+    n = len(path)
+    keep = [0]
+    i = 0
+    while i < n - 1:
+        j = i + 1
+        if i + 2 < n:
+            d = np.hypot(xy[i + 2:, 0] - xy[i, 0], xy[i + 2:, 1] - xy[i, 1])
+            loop = cum[i + 2:] - cum[i]
+            hit = np.nonzero((d <= close_m) & (loop >= min_loop_m) & (loop <= max_loop_m))[0]
+            if hit.size:
+                j = i + 2 + int(hit[-1])  # 가장 멀리 돌아온 지점까지 한 번에 건너뜀
+        keep.append(j)
+        i = j
+    return [path[k] for k in keep]
+
+
 def _tmap_route_result(key: str, label: str, tmap_result: dict, age_group: str) -> dict:
-    path = tmap_result["path"]
+    raw_path = tmap_result["path"]
+    path = _remove_backtracks(raw_path)
     distance_m = tmap_result["distance_m"] if tmap_result["distance_m"] is not None else None
     duration_s = tmap_result["duration_s"]
+    if len(path) < len(raw_path):
+        # 되돌아가는 구간을 잘라낸 만큼 거리·시간도 줄여준다
+        def _len(pts):
+            return sum(haversine_m(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1]) for i in range(len(pts) - 1))
+        raw_len, new_len = _len(raw_path), _len(path)
+        ratio = new_len / raw_len if raw_len > 0 else 1.0
+        if distance_m is not None:
+            distance_m *= ratio
+        if duration_s:
+            duration_s *= ratio
     if distance_m is None:
         # Tmap이 총거리를 안 줬으면 좌표들로 근사 계산
         distance_m = sum(
