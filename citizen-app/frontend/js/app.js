@@ -61,6 +61,9 @@ function loadProfile() {
 // 덮어쓰는 구조). 이제는 이미 저장된 프로필이 있으면 온보딩 화면 자체를 건너뛰고
 // 바로 앱으로 들어간다 — 연령대/성별을 나중에 고치고 싶으면 헤더의 프로필 버튼으로
 // 언제든 다시 고를 수 있다(initProfileEdit).
+// 2026-09-29: 프로필이 저장돼 있어도 위치 허용 화면은 앱을 열 때마다 먼저 보여준다
+// (브라우저별로 저장소가 달라 위치 화면이 떴다 안 떴다 한다는 피드백). 저장된 프로필이
+// 있으면 위치 화면 다음의 연령대·성별 단계만 건너뛰고 바로 앱으로 들어간다.
 function enterApp() {
   document.getElementById("onboarding")?.remove();
   document.getElementById("app").hidden = false;
@@ -68,9 +71,8 @@ function enterApp() {
   initApp();
 }
 
-function initOnboarding() {
-  const steps = ["location", "age", "gender"];
-  let stepIndex = 0;
+function initOnboarding({ hasProfile = false } = {}) {
+  let locationDone = false; // 버튼을 두 번 눌러도 initApp()이 두 번 실행되지 않도록
 
   function showStep(name) {
     document.querySelectorAll(".ob-step").forEach(el => {
@@ -83,21 +85,29 @@ function initOnboarding() {
     enterApp();
   }
 
-  document.getElementById("btn-allow-location").addEventListener("click", () => {
+  function afterLocationStep() {
+    if (locationDone) return;
+    locationDone = true;
+    if (hasProfile) enterApp();
+    else showStep("age");
+  }
+
+  document.getElementById("btn-allow-location").addEventListener("click", (e) => {
+    e.currentTarget.disabled = true;
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => {
           state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          showStep("age");
+          afterLocationStep();
         },
-        () => { showStep("age"); },
+        () => { afterLocationStep(); },
         { enableHighAccuracy: true, timeout: 6000 }
       );
     } else {
-      showStep("age");
+      afterLocationStep();
     }
   });
-  document.getElementById("btn-skip-location").addEventListener("click", () => showStep("age"));
+  document.getElementById("btn-skip-location").addEventListener("click", afterLocationStep);
 
   document.getElementById("age-choices").addEventListener("click", (e) => {
     const card = e.target.closest(".choice-card");
@@ -1588,11 +1598,8 @@ async function initApp() {
 
 document.addEventListener("DOMContentLoaded", () => {
   loadProfile();
-  if (state.profile.ageGroup) {
-    enterApp(); // 이미 온보딩을 마친 적이 있으면 다시 거치지 않고 바로 앱으로
-  } else {
-    initOnboarding();
-  }
+  // 위치 허용 화면은 항상 먼저 보여주고, 프로필이 이미 있으면 그 뒤 단계만 건너뛴다
+  initOnboarding({ hasProfile: Boolean(state.profile.ageGroup) });
 
   if (navigator.serviceWorker) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
