@@ -822,6 +822,9 @@ function searchLocalDestinations(query, limit = 8) {
   const ageTag = state.profile.ageGroup === "child" ? "child" : state.profile.ageGroup === "senior" ? "senior" : null;
   return state.destinations
     .map(p => {
+      // 2026-09-29: 역·구청 같은 "landmark" 15곳은 지도 연동 전에 넣은 임시 근사 좌표라
+      // (예: 창원역이 창원시청 근처로 찍힘) 목록 검색에서 빼고, 실제 좌표를 주는 Tmap 검색 결과를 쓴다.
+      if (p.category === "landmark") return null;
       const name = p.name.toLowerCase();
       if (!tokens.every(t => name.includes(t))) return null;
       const baseRank = name.startsWith(tokens[0]) ? 0 : 1; // 첫 단어로 시작하는 이름을 더 우선
