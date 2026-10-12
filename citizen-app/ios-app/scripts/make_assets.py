@@ -29,10 +29,9 @@ def shield(draw, cx, cy, size, fg, bg):
 
 
 def make_icon():
-    S = 4096
-    im = Image.new("RGB", (S, S), BLUE)
-    shield(ImageDraw.Draw(im), S / 2, S / 2, S, WHITE, BLUE)
-    im.resize((1024, 1024), Image.LANCZOS).save(OUT / "icon-1024.png")
+    # 2026-10-12: 방패+체크 단색 아이콘 → 산책길·가로등·방패 핀 아이콘(icon_art.py)
+    import icon_art
+    icon_art.make(OUT / "icon-1024.png")
 
 
 def make_splash():
