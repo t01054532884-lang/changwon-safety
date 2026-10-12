@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>창원 안심길 고객지원</title>
+<style>
+  :root { --ink: #0f172a; --muted: #475569; --line: #e2e8f0; --primary: #1d4ed8; --bg: #f8fafc; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
+  main { max-width: 720px; margin: 0 auto; padding: 28px 18px 64px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; }
+  p, li { color: var(--muted); }
+  details { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+  summary { font-weight: 600; cursor: pointer; color: var(--ink); }
+  details p { margin: 8px 0 0; }
+  .alert { background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 14px; color: #7f1d1d; }
+  .alert p { color: #7f1d1d; margin: 0; }
+  a { color: var(--primary); }
+  .back { display: inline-block; margin-bottom: 16px; font-weight: 600; text-decoration: none; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="index.html" onclick="if (history.length > 1) { history.back(); return false; }">← 앱으로 돌아가기</a>
+  <h1>고객지원</h1>
+  <p>창원 안심길은 창원시 CCTV·보안등·공공 Wi-Fi 등 공공데이터를 참고해 주변 안전시설과 추천 보행 경로를 보여주는 서비스입니다. 창원시 공식 앱이 아닙니다.</p>
+
+  <div class="alert"><p><strong>긴급 상황이면 바로 112(경찰) 또는 119(소방)에 신고하세요.</strong> 이 앱의 위험신고는 긴급 신고가 아니며 출동으로 이어지지 않습니다.</p></div>
+
+  <h2>자주 묻는 질문</h2>
+  <details>
+    <summary>위치 권한을 다시 켜고 싶어요</summary>
+    <p>iPhone의 설정 &gt; 개인정보 보호 및 보안 &gt; 위치 서비스 &gt; 창원 안심길에서 “앱을 사용하는 동안”을 선택해 주세요.</p>
+  </details>
+  <details>
+    <summary>창원 밖에서는 어떻게 쓰나요?</summary>
+    <p>서비스의 안전시설 데이터는 창원시 지역만 담고 있습니다. 창원 밖에 있으면 화면 위쪽에 “창원 둘러보기” 버튼이 나타나며, 누르면 창원 시내 예시 위치로 기능을 둘러볼 수 있습니다.</p>
+  </details>
+  <details>
+    <summary>추천 경로는 안전을 보장하나요?</summary>
+    <p>추천 경로는 CCTV·보안등 등 안전시설 데이터를 참고해 계산한 것으로, 실제 안전을 보장하지 않습니다. 현장의 신호·교통·공사 상황을 항상 함께 확인해 주세요.</p>
+  </details>
+  <details>
+    <summary>위험신고는 어디로 전달되나요?</summary>
+    <p>서비스 운영자가 확인해 안전 취약 지점 파악과 개선 자료로 활용합니다. 경찰이나 지자체에 자동으로 접수되지 않습니다.</p>
+  </details>
+  <details>
+    <summary>처음 실행할 때 로딩이 길어요</summary>
+    <p>서버가 한동안 쓰이지 않으면 다시 준비하는 데 1~2분 정도 걸릴 수 있습니다. 로딩 화면이 끝날 때까지 잠시 기다려 주세요.</p>
+  </details>
+
+  <h2>문의</h2>
+  <p>오류 제보, 기능 제안, 신고 삭제 요청은 아래 이메일로 보내 주세요.<br>이메일: <a href="mailto:[문의 이메일]">[문의 이메일]</a></p>
+  <p><a href="privacy.html">개인정보처리방침 보기</a></p>
+</main>
+</body>
+</html>

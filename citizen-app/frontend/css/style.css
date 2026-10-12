@@ -457,3 +457,16 @@ button, input, select, textarea {
 .nav-icon { font-size: 20px; }
 .nav-item.is-active { color: var(--color-primary); }
 .nav-item-report.is-active { color: var(--color-danger); }
+
+/* ===================== 앱스토어 준비(2026-10-12): 고지·긴급 안내 ===================== */
+.ob-legal { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--color-text-muted); text-align: center; }
+.emergency-notice { display: flex; flex-direction: column; gap: 4px; margin: 0 0 14px; padding: 12px 14px; border-radius: 12px; background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; font-size: 13px; line-height: 1.5; }
+.emergency-notice strong { font-size: 14px; }
+.emergency-actions { display: flex; gap: 8px; margin-top: 6px; }
+.emergency-call { flex: 1; text-align: center; padding: 8px 0; border-radius: 8px; background: #dc2626; color: #fff; font-weight: 700; text-decoration: none; }
+.app-info { margin: 28px 0 12px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; line-height: 1.6; color: var(--color-text-muted); }
+.app-info p { margin: 0 0 8px; }
+.app-info nav { display: flex; gap: 8px; align-items: center; }
+.app-info a { color: var(--color-primary); text-decoration: none; font-weight: 600; }
+/* iOS 앱/홈 화면 앱에서 상단 노치·상태표시줄 영역만큼 헤더를 내린다(일반 브라우저에서는 0) */
+.app-header { padding-top: calc(14px + env(safe-area-inset-top, 0px)); }

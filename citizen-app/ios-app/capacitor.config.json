@@ -1,0 +1,22 @@
+{
+  "appId": "com.ooez.changwonansimgil",
+  "appName": "창원 안심길",
+  "webDir": "www",
+  "server": {
+    "url": "https://changwon-ansimgil.onrender.com/index.html",
+    "errorPath": "error.html",
+    "allowNavigation": ["changwon-ansimgil.onrender.com"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#1e3a8a"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 60000,
+      "launchAutoHide": true,
+      "backgroundColor": "#1e3a8a",
+      "showSpinner": false
+    }
+  }
+}

@@ -97,7 +97,7 @@ function initOnboarding({ hasProfile = false } = {}) {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         pos => {
-          state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          applyRealLocation(pos.coords.latitude, pos.coords.longitude);
           afterLocationStep();
         },
         () => { afterLocationStep(); },
@@ -218,7 +218,7 @@ function initLocationPermissionSheet() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        applyRealLocation(pos.coords.latitude, pos.coords.longitude);
         refreshLiveLocationUI();
         const action = pendingLocationAction;
         closeLocationPermissionSheet();
@@ -301,11 +301,54 @@ function initShareLocation() {
 // 보였다("바로바로 안 따라온다"는 제보). 이제 이 버튼은 지금 보고 있는 탭과 무관하게
 // 항상 즉시 홈 탭 데이터를 다시 계산해두고(안전요소 3종은 스로틀도 강제로 건너뜀),
 // 사용자가 홈 탭으로 돌아왔을 때 바로 새 위치 기준으로 보이게 한다.
+// 2026-10-12: 앱스토어 출시 준비 — 이 버튼은 이제 "창원 둘러보기" 데모 버튼이다.
+// 창원 시민에게는 보이지 않고, 실제 위치가 창원시 경계 밖이거나 위치를 받을 수 없을 때만
+// 나타난다(앱 심사관처럼 창원 밖에서 앱을 여는 사람도 기능을 체험할 수 있도록). 누르면
+// 데모 모드가 켜지고, 그동안에는 실제 GPS 갱신이 예시 위치를 덮어쓰지 않는다.
+let changwonBoundary = null;
+let demoGraceOver = false;
+
+function pointInRing(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function isInChangwon(lat, lng) {
+  if (!changwonBoundary) return true; // 경계를 아직 못 불러왔으면 창원 안으로 간주(버튼 숨김)
+  const polys = changwonBoundary.type === "Polygon" ? [changwonBoundary.coordinates] : changwonBoundary.coordinates;
+  return polys.some(poly => pointInRing(lng, lat, poly[0]) && !poly.slice(1).some(h => pointInRing(lng, lat, h)));
+}
+
+function applyRealLocation(lat, lng) {
+  state.realLocation = { lat, lng };
+  if (!state.demoMode) state.location = { lat, lng };
+  updateDemoButton();
+}
+
+function updateDemoButton() {
+  const btn = document.getElementById("btn-admin-random-location");
+  if (!btn) return;
+  const real = state.realLocation;
+  const outside = real ? !isInChangwon(real.lat, real.lng) : demoGraceOver;
+  btn.hidden = !(state.demoMode || outside);
+}
+
 function initAdminRandomLocation() {
   const btn = document.getElementById("btn-admin-random-location");
   if (!btn) return;
-  const originalLabel = btn.textContent;
   let resetTimer = null;
+
+  fetch("data/changwon_boundary.geojson")
+    .then(r => r.json())
+    .then(gj => { changwonBoundary = gj.features[0].geometry; updateDemoButton(); })
+    .catch(() => {});
+  // 위치를 5초 안에 못 받으면(권한 거부 등) 데모 버튼을 보여준다
+  setTimeout(() => { demoGraceOver = true; updateDemoButton(); }, 5000);
+  updateDemoButton();
 
   btn.addEventListener("click", async () => {
     if (resetTimer) clearTimeout(resetTimer);
@@ -315,6 +358,7 @@ function initAdminRandomLocation() {
       const res = await fetch("/api/random-location");
       if (!res.ok) throw new Error("HTTP " + res.status);
       const data = await res.json();
+      state.demoMode = true;
       state.location = { lat: data.lat, lng: data.lng };
       // 실시간 위치 갱신(watchPosition)과 달리 이건 순간이동이라, 지도가 새 위치를
       // 따라가지 못하고 마커만 화면 밖 어딘가에서 움직이는 것처럼 보일 수 있다 —
@@ -326,15 +370,15 @@ function initAdminRandomLocation() {
       // 할 뿐 부작용은 없다).
       renderRecommendedPlaces();
       renderSafetyTriangles(true);
-      console.log("[admin-random-location] 새 테스트 위치:", data.lat, data.lng);
-      btn.textContent = "✅ 이동됨";
+      btn.textContent = "✅ 예시 위치로 이동";
     } catch (e) {
       console.error("[admin-random-location] 위치 뽑기 실패:", e);
       btn.textContent = "⚠️ 실패";
     } finally {
       resetTimer = setTimeout(() => {
-        btn.textContent = originalLabel;
+        btn.textContent = state.demoMode ? "🗺️ 다른 예시 위치" : "🗺️ 창원 둘러보기";
         btn.disabled = false;
+        updateDemoButton();
       }, 1600);
     }
   });
@@ -734,8 +778,8 @@ function startLocationWatch() {
   if (locationWatchId != null) return; // 중복 등록 방지
   locationWatchId = navigator.geolocation.watchPosition(
     (pos) => {
-      state.location = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      refreshLiveLocationUI();
+      applyRealLocation(pos.coords.latitude, pos.coords.longitude);
+      if (!state.demoMode) refreshLiveLocationUI();
     },
     () => { /* 위치 갱신 실패 시 마지막으로 알던 위치를 그대로 유지 */ },
     { enableHighAccuracy: true, maximumAge: 4000, timeout: 12000 }
@@ -1595,6 +1639,41 @@ async function initApp() {
   initSaveTab();
   startLocationWatch(); // 이후로는 위치가 바뀔 때마다 두 지도의 내 위치 아이콘과 신고 위치 텍스트를 실시간으로 갱신
 }
+
+// ---------- iOS 앱(Capacitor) 연동 ----------
+// 2026-10-12: 앱스토어용 iOS 앱은 이 웹앱을 그대로 띄운다. 앱 안에서 열렸을 때만
+// (1) 위치를 iOS 네이티브 위치 권한으로 받고(웹뷰 기본 위치 팝업이 매번 다시 뜨는 문제 방지),
+// (2) 앱 시작 로딩 화면(스플래시)을 웹앱이 다 뜬 뒤에 닫는다. 일반 브라우저에서는 아무 일도 하지 않는다.
+(function useNativeBridgeIfAvailable() {
+  const cap = window.Capacitor;
+  if (!cap || !cap.isNativePlatform || !cap.isNativePlatform() || !cap.Plugins) return;
+  const Geo = cap.Plugins.Geolocation;
+  if (Geo && navigator.geolocation) {
+    const toPos = p => ({ coords: p.coords, timestamp: p.timestamp });
+    const toErr = e => ({ code: 1, message: String((e && e.message) || e) });
+    const watchIds = new Map();
+    let seq = 0;
+    navigator.geolocation.getCurrentPosition = (ok, fail, opts) => {
+      Geo.getCurrentPosition(opts || {}).then(p => ok(toPos(p))).catch(e => fail && fail(toErr(e)));
+    };
+    navigator.geolocation.watchPosition = (ok, fail, opts) => {
+      const id = ++seq;
+      Geo.watchPosition(opts || {}, (p, err) => {
+        if (err) { if (fail) fail(toErr(err)); return; }
+        if (p) ok(toPos(p));
+      }).then(nativeId => watchIds.set(id, nativeId));
+      return id;
+    };
+    navigator.geolocation.clearWatch = (id) => {
+      const nativeId = watchIds.get(id);
+      if (nativeId) Geo.clearWatch({ id: nativeId });
+      watchIds.delete(id);
+    };
+  }
+  window.addEventListener("load", () => {
+    if (cap.Plugins.SplashScreen) cap.Plugins.SplashScreen.hide();
+  });
+})();
 
 document.addEventListener("DOMContentLoaded", () => {
   loadProfile();

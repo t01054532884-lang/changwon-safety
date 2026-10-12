@@ -1,7 +1,7 @@
 {
   "name": "창원 안심길",
   "short_name": "안심길",
-  "description": "창원시 안전 인프라 분석을 바탕으로 안전한 경로와 주변 안전도를 안내하는 시민용 앱",
+  "description": "창원시 안전시설 공공데이터를 참고해 추천 보행 경로와 주변 안전시설을 안내하는 서비스(창원시 공식 앱 아님)",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

@@ -1,0 +1,48 @@
+# 창원 안심길 iOS 앱 클라우드 빌드 (Codemagic)
+# Windows에서도 Mac 없이 빌드해 App Store Connect(TestFlight)까지 자동 업로드한다.
+# 처음 설정 방법은 citizen-app/ios-app/APP_STORE_GUIDE.md 참고.
+workflows:
+  ios-appstore:
+    name: 창원 안심길 iOS → TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      # Codemagic 팀 설정 > Integrations > Developer Portal에 등록한 App Store Connect API 키 이름
+      app_store_connect: ansimgil_asc
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.ooez.changwonansimgil
+      vars:
+        APP_DIR: citizen-app/ios-app
+      node: 20
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: npm 패키지 설치
+        script: cd $APP_DIR && npm install
+      - name: iOS 프로젝트 생성·동기화
+        script: |
+          cd $APP_DIR
+          if [ ! -d ios ]; then npx cap add ios; fi
+          npx cap sync ios
+      - name: Info.plist·아이콘·시작 화면 설정
+        script: bash $APP_DIR/scripts/configure-ios.sh
+      - name: 코드 서명 설정
+        script: xcode-project use-profiles
+      - name: 버전·빌드 번호
+        script: |
+          cd $APP_DIR/ios/App
+          agvtool new-marketing-version 1.0.0
+          agvtool new-version -all $BUILD_NUMBER
+      - name: ipa 빌드
+        script: |
+          cd $APP_DIR
+          xcode-project build-ipa --workspace ios/App/App.xcworkspace --scheme App
+    artifacts:
+      - citizen-app/ios-app/build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
