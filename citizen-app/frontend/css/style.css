@@ -32,10 +32,18 @@ html, body {
   color: var(--color-text);
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   -webkit-tap-highlight-color: transparent;
+  /* 2026-10-12: iOS 앱에서 옆으로 밀면 화면 전체가 밀리던 문제 — 가로 넘침·튕김 막기 */
+  overflow-x: hidden;
+  overscroll-behavior: none;
 }
 
 button, input, select, textarea {
   font-family: inherit;
+}
+
+/* iOS는 16px보다 작은 입력칸을 누르면 화면을 자동 확대한다 */
+input, select, textarea {
+  font-size: max(16px, 1em);
 }
 
 /* ===================== 온보딩 ===================== */
@@ -373,7 +381,7 @@ button, input, select, textarea {
 .route-form { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .route-field { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--color-text-muted); font-weight: 600; position: relative; }
 .route-field input {
-  border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 14px; font-size: 14.5px; color: var(--color-text);
+  border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 14px; font-size: 16px; color: var(--color-text);
 }
 .route-field-autocomplete { position: relative; }
 .route-start-row { display: flex; align-items: center; gap: 8px; }
@@ -425,7 +433,7 @@ button, input, select, textarea {
 .report-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; }
 .report-field em { color: var(--color-danger); font-weight: 700; font-size: 11px; margin-left: 4px; }
 .report-field select, .report-field textarea, .report-field input[type="file"] {
-  border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 14px; font-size: 14px; font-weight: 400;
+  border: 1.5px solid var(--color-border); border-radius: 12px; padding: 12px 14px; font-size: 16px; font-weight: 400;
 }
 .report-image-preview { margin-top: 8px; max-width: 100%; border-radius: 12px; max-height: 160px; object-fit: cover; }
 .report-note { font-size: 11.5px; color: var(--color-text-muted); text-align: center; margin: 0; }

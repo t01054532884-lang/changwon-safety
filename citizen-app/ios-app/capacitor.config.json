@@ -5,11 +5,14 @@
   "server": {
     "url": "https://changwon-ansimgil.onrender.com/index.html",
     "errorPath": "error.html",
-    "allowNavigation": ["changwon-ansimgil.onrender.com"]
+    "allowNavigation": [
+      "changwon-ansimgil.onrender.com"
+    ]
   },
   "ios": {
     "contentInset": "never",
-    "backgroundColor": "#1e3a8a"
+    "backgroundColor": "#1e3a8a",
+    "scrollEnabled": false
   },
   "plugins": {
     "SplashScreen": {
