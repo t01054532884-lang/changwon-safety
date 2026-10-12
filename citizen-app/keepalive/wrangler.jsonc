@@ -1,0 +1,8 @@
+// 창원 안심길 Render 서버 깨우기 (Cloudflare Workers 무료, cron 10분)
+{
+  "name": "ansimgil-keepalive",
+  "main": "worker.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "triggers": { "crons": ["*/10 * * * *"] }
+}

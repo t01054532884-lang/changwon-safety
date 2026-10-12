@@ -1,0 +1,72 @@
+# 창원 안심길 iOS 빌드 → TestFlight (손으로 실행: GitHub → Actions → ios → Run workflow)
+# 공개 저장소라 macOS 실행 시간 무료. 맥·인증서 없이 애플 클라우드 서명으로 올린다.
+# 필요한 비밀 값(Settings → Secrets and variables → Actions):
+#   ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_P8(.p8 파일 내용 전체) — App Store Connect API 팀 키, 역할 Admin(클라우드 서명에 필요)
+# 빌드 번호 = 실행 번호 + 100 (올릴 때마다 달라야 함). 앱 버전은 아래 MARKETING_VERSION
+name: ios
+
+on:
+  workflow_dispatch:
+
+env:
+  TEAM_ID: DMZS853A8Y
+  MARKETING_VERSION: 1.0.0
+
+jobs:
+  testflight:
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: citizen-app/ios-app
+    steps:
+      - uses: actions/checkout@v4
+      # App Store 업로드는 최신 SDK(Xcode 26 이상)로 빌드해야 함
+      - name: Xcode 고르기
+        run: |
+          XC=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XC" ]; then echo "::error::Xcode 26을 찾지 못함. runs-on을 macos-26으로 바꿔 보기"; ls -d /Applications/Xcode*; exit 1; fi
+          sudo xcode-select -s "$XC" && xcodebuild -version
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm install
+      - name: iOS 프로젝트 생성·동기화
+        run: |
+          if [ ! -d ios ]; then npx cap add ios; fi
+          npx cap sync ios
+      - name: Info.plist·아이콘·시작 화면 설정
+        run: bash scripts/configure-ios.sh
+      - name: 아카이브 → 클라우드 서명 → TestFlight 업로드
+        env:
+          KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -o pipefail
+          for v in KEY_ID ISSUER_ID KEY_P8; do [ -n "${!v}" ] || { echo "::error::비밀 값 없음: $v"; exit 1; }; done
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$KEY_ID.p8"
+          printf '%s\n' "$KEY_P8" > "$KEY_PATH"
+          BUILD=$(( ${{ github.run_number }} + 100 ))
+          if [ -d ios/App/App.xcworkspace ]; then SRC="-workspace ios/App/App.xcworkspace"; else SRC="-project ios/App/App.xcodeproj"; fi
+          ARCHIVE="$RUNNER_TEMP/App.xcarchive"
+          xcodebuild $SRC -scheme App -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
+            DEVELOPMENT_TEAM="$TEAM_ID" MARKETING_VERSION="$MARKETING_VERSION" CURRENT_PROJECT_VERSION="$BUILD" \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            archive | tail -30
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY_PATH" -authenticationKeyID "$KEY_ID" -authenticationKeyIssuerID "$ISSUER_ID"
+          rm -f "$KEY_PATH"
+          echo "업로드 완료: 빌드 $BUILD — App Store Connect 처리(10~30분) 후 TestFlight에 나타남"
