@@ -21,6 +21,7 @@ from __future__ import annotations
  
 import heapq
 import math
+from concurrent.futures import ThreadPoolExecutor
  
 import numpy as np
  
@@ -368,21 +369,29 @@ def _tmap_compute_routes(start_lat, start_lng, end_lat, end_lng, age_group: str)
     if straight_m < 5:
         raise RouteError("출발지와 도착지가 너무 가깝습니다.")
  
-    base = tmap_client.fetch_pedestrian_route(start_lat, start_lng, end_lat, end_lng)
-    fast = _tmap_route_result("fast", "최단", base, age_group)
- 
     candidates = []
     try:
         waypoints = _candidate_waypoints(start_lat, start_lng, end_lat, end_lng, age_group)
     except Exception:
         waypoints = []
- 
-    for wp in waypoints:
+
+    # 최단 경로와 경유지 후보별 Tmap 호출은 서로 독립이라 동시에 보낸다. 순차 호출하면
+    # Tmap 응답이 느린 날엔 호출 수(최대 6)만큼 대기 시간이 쌓여 경로 검색이 수십 초 걸렸다.
+    def fetch_via(wp):
         try:
-            r = tmap_client.fetch_pedestrian_route(start_lat, start_lng, end_lat, end_lng, pass_list=[wp])
+            return tmap_client.fetch_pedestrian_route(start_lat, start_lng, end_lat, end_lng, pass_list=[wp])
         except tmap_client.TmapError:
-            continue
-        candidates.append(_tmap_route_result("candidate", "후보", r, age_group))
+            return None
+
+    with ThreadPoolExecutor(max_workers=len(waypoints) + 1) as pool:
+        base_future = pool.submit(tmap_client.fetch_pedestrian_route, start_lat, start_lng, end_lat, end_lng)
+        via_results = list(pool.map(fetch_via, waypoints))
+        base = base_future.result()  # 실패 시 TmapError → compute_routes가 격자 폴백으로 처리
+
+    fast = _tmap_route_result("fast", "최단", base, age_group)
+    for r in via_results:
+        if r is not None:
+            candidates.append(_tmap_route_result("candidate", "후보", r, age_group))
  
     def pick_variant(key: str, label: str, max_distance_ratio: float, fallback: dict,
                      detour_penalty: float) -> dict:
